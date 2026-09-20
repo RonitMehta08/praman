@@ -1,0 +1,640 @@
+# CIS Cisco ASA 9.x Benchmark v1.1.0 — canonical mappings
+#
+# The ASA is the most useful vendor in this set for showing what the canonical
+# layer buys, because its CLI is Cisco-shaped and its semantics are not. `aaa
+# authentication ssh console LOCAL` has no IOS equivalent; timeouts are per-service
+# rather than per-line; `no service password-recovery` is a global; and the
+# firewall half of the benchmark has no counterpart on a router at all. None of
+# that appears below.
+#
+# Conventions inherited from cisco_ios_15_v4_1_1.yaml. Two worth restating because
+# they were both violated in a first draft and both produced *wrong verdicts*
+# rather than missing ones:
+#
+#   * **Timeouts are seconds.** The ASA states `ssh timeout` and `console timeout`
+#     in minutes; the pack now normalises both with `minutes_seconds`, so the
+#     thresholds here are 300, not 5. Before that fix an ASA with a one-hour idle
+#     timeout recorded 60 and passed a five-minute ceiling.
+#   * **A rule may not assert a path the pack never emits.** With
+#     `on_missing: fail` that is not a gap, it is a false accusation. Every path
+#     below was read off an actual parse of asa_dmz_firewall.conf.
+#
+# The benchmark's sections 2 and 3 are largely per-interface firewall posture
+# ("for untrusted interfaces"), which needs a zone-trust graph the canonical model
+# does not carry — the security-level of an interface is recorded, but which zone
+# an operator considers untrusted is a policy input, not a fact. Those controls are
+# left `notchecked` rather than guessed at.
+
+rules:
+
+  # ══ 1.1 Passwords ══════════════════════════════════════════════════════
+
+  - id: cis-asa-1.1.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.1.2}
+    severity_override: high
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      An enable password must exist, and what the canonical model records is the
+      *hash type* it was stored under — which is the stronger evidence, because it
+      simultaneously proves the password is set and that it was not stored
+      reversibly.
+    condition: {type: presence, path: mgmt.enable_secret.hash_type, must_be_present: true}
+
+  - id: cis-asa-1.1.4
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.1.4}
+    severity_override: high
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Password recovery lets anyone with console access and a reboot take the
+      device without a credential. It is on by default, so the compliant state is
+      an explicit `no service password-recovery`, and the pack records the default
+      — which is why this is `eq false` rather than a presence check.
+    condition:
+      type: fact_check
+      path: service.password_recovery
+      operator: eq
+      expected: false
+      on_missing: fail
+
+  - id: cis-asa-1.1.5
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.1.5}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      A password policy in force with a length floor and at least one character
+      class required. `complexity` on the ASA is one fact per `password-policy
+      minimum-<class>` directive, and the recorded value is the directive line
+      itself rather than its number — the pack files it that way because DISA
+      rates each class as a separate control and a bare integer cannot say which
+      class it came from. This benchmark only asks whether classes are enforced
+      at all, so the leaf matches a trailing non-zero count on every recorded
+      directive: `minimum-uppercase 0` is the ASA's way of switching a class off.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: mgmt.password_policy.name, must_be_present: true}
+        - {type: fact_check, path: mgmt.password_policy.min_length, operator: gte, expected: 8, on_missing: fail}
+        - type: fact_check
+          path: mgmt.password_policy.complexity
+          operator: regex_match
+          expected: '\s+[1-9]\d*$'
+          quantifier: all
+          on_missing: fail
+
+  # ══ 1.2 Device identity and availability ═══════════════════════════════
+
+  - id: cis-asa-1.2.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.2.1}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      A domain name is a prerequisite for generating an RSA key pair and for any
+      certificate the device presents, so its absence blocks the crypto controls
+      further down rather than being cosmetic.
+    condition: {type: presence, path: mgmt.domain_name, must_be_present: true}
+
+  - id: cis-asa-1.2.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.2.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      The hostname is what ties a syslog line or a report back to a device.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: device.hostname, must_be_present: true}
+        - {type: fact_check, path: device.hostname, operator: regex_not_match, expected: '(?i)\A(ciscoasa|asa)\Z', on_missing: fail}
+
+  - id: cis-asa-1.2.3
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.2.3}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Failover is availability rather than confidentiality, hence low severity: a
+      single ASA is a budget decision, not a misconfiguration. The canonical
+      evidence is a configured redundancy role.
+    condition: {type: presence, path: ha.redundancy, must_be_present: true}
+
+  # ══ 1.4 AAA ════════════════════════════════════════════════════════════
+
+  - id: cis-asa-1.4.1.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.4.1.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Three attempts against the local database before lockout, which is what
+      turns an online guess from unlimited into a handful of tries.
+    condition:
+      type: fact_check
+      path: aaa.authentication_attempts
+      operator: lte
+      expected: 3
+      on_missing: fail
+
+  - id: cis-asa-1.4.2.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.4.2.1}
+    severity_override: high
+    applies_to:
+      vendors: [cisco_asa]
+      os_families: [asa]
+      requires_paths: [aaa.server.group]
+    mapping_rationale: >
+      A configured server group speaking TACACS+ or RADIUS. requires_paths scopes
+      the rule: an ASA with no external AAA is running on local accounts, which is
+      a different control's problem, not a silent pass of this one.
+    condition:
+      type: fact_check
+      path: aaa.server.protocol
+      operator: in
+      expected: [tacacs+, tacacs, radius]
+      quantifier: any
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-asa-1.4.3.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.4.3.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Privilege escalation must be authenticated against the AAA server rather
+      than a shared enable password.
+    condition: {type: presence, path: aaa.authentication_enable, must_be_present: true}
+
+  - id: cis-asa-1.4.3.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.4.3.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      ASDM and the REST interface both authenticate through the HTTP console
+      method list; without it the device falls back to the enable password.
+    condition: {type: presence, path: mgmt.http.auth, must_be_present: true}
+
+  - id: cis-asa-1.4.3.4
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.4.3.4}
+    severity_override: high
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      SSH is the primary administrative channel, so its method list is the one
+      control in this group whose absence is directly exploitable.
+    condition: {type: presence, path: aaa.authentication_login, must_be_present: true}
+
+  - id: cis-asa-1.4.4.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.4.4.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Command authorisation is what makes a read-only operator actually read-only;
+      without it every authenticated administrator is effectively privilege 15.
+    condition: {type: presence, path: aaa.authorization_commands, must_be_present: true}
+
+  - id: cis-asa-1.4.4.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.4.4.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Exec authorisation decides whether a user reaches a shell at all, which is
+      the coarser half of the same pair as 1.4.4.1.
+    condition:
+      type: fact_check
+      path: aaa.authorization_exec
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-asa-1.4.5.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.4.5.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Command accounting is the audit trail of what an administrator actually did.
+      Its absence is what makes an insider action unreconstructable after the
+      fact, which is why the benchmark separates it from authorisation.
+    condition: {type: presence, path: aaa.accounting_commands, must_be_present: true}
+
+  - id: cis-asa-1.4.5.3
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.4.5.3}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Exec accounting records the session boundaries — who connected and when —
+      which is what lets command accounting be attributed to a login.
+    condition: {type: presence, path: aaa.accounting_exec, must_be_present: true}
+
+  # ══ 1.5 Banners ════════════════════════════════════════════════════════
+
+  - id: cis-asa-1.5.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.5.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      The exec banner is shown on entering privileged mode.
+    condition:
+      type: fact_check
+      path: mgmt.exec_banner
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-asa-1.5.3
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.5.3}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      The login banner is the pre-authentication legal notice — the one of these
+      four that an unauthorised-access prosecution actually turns on.
+    condition: {type: presence, path: mgmt.login_banner, must_be_present: true}
+
+  - id: cis-asa-1.5.4
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.5.4}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      The message-of-the-day banner, shown after authentication.
+    condition: {type: presence, path: mgmt.motd_banner, must_be_present: true}
+
+  # ══ 1.6 SSH ════════════════════════════════════════════════════════════
+
+  - id: cis-asa-1.6.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.6.1}
+    severity_override: high
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      On the ASA an SSH source restriction is not an ACL applied to a line but a
+      `ssh <network> <mask> <interface>` statement, and it is the difference
+      between an administrative daemon reachable from a management subnet and one
+      reachable from the Internet.
+    condition: {type: presence, path: mgmt.ssh.acl, must_be_present: true}
+
+  - id: cis-asa-1.6.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.6.2}
+    severity_override: high
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      SSHv1 has known integrity failures and must not be offered; version 2 is the
+      floor.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.version
+      operator: gte
+      expected: 2
+      on_missing: fail
+
+  - id: cis-asa-1.6.5
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.6.5}
+    severity_override: high
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Telnet carries the administrative password in cleartext. The ASA has it off
+      until a `telnet <net> <mask> <if>` statement appears, and the pack records
+      that default, so a decided `false` is available rather than missing evidence.
+    condition:
+      type: fact_check
+      path: mgmt.telnet.enabled
+      operator: eq
+      expected: false
+      on_missing: fail
+
+  # ══ 1.7 HTTPS management ═══════════════════════════════════════════════
+
+  - id: cis-asa-1.7.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.7.1}
+    severity_override: high
+    applies_to:
+      vendors: [cisco_asa]
+      os_families: [asa]
+      requires_paths: [mgmt.http.server_enabled]
+    mapping_rationale: >
+      Same reasoning as the SSH restriction, applied to ASDM. Scoped by
+      requires_paths so an ASA with the HTTP server off is not applicable rather
+      than passing on a technicality.
+    condition: {type: presence, path: mgmt.http.acl, must_be_present: true}
+
+  - id: cis-asa-1.7.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.7.2}
+    severity_override: high
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      TLS 1.2 is the floor. Stated as "not one of the deprecated versions" rather
+      than as a pattern matching the good ones, because that is the assertion the
+      control actually makes and it stays correct when TLS 1.3 appears in the
+      value.
+    condition:
+      type: fact_check
+      path: mgmt.http.tls_version
+      operator: not_in
+      expected: [tlsv1, 'tlsv1.0', 'tlsv1.1', sslv3, dtlsv1]
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-asa-1.7.3
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.7.3}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      The ASA states its TLS cipher policy as a named strength class rather than a
+      suite list, so the canonical evidence is that class. `high` and an explicit
+      AES-GCM-256 suite both satisfy the control; `low`, `medium` and `all` do not,
+      and `all` is the shipped default.
+    condition:
+      type: fact_check
+      path: crypto.cipher_suite
+      operator: contains
+      expected: high
+      quantifier: any
+      case_sensitive: false
+      on_missing: fail
+
+  # ══ 1.8 Idle timeouts ══════════════════════════════════════════════════
+
+  - id: cis-asa-1.8.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.8.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Five minutes, in seconds — see the file header on units. `gt 0` is
+      load-bearing: the ASA accepts 0 for "never", so a bare `lte 300` would pass
+      the least secure setting the platform offers.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: line.console.exec_timeout, operator: lte, expected: 300, on_missing: fail}
+        - {type: fact_check, path: line.console.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-asa-1.8.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.8.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      The same ceiling on the SSH channel, where an abandoned session is more
+      exposed because the attacker need not be in the building.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.ssh.timeout, operator: lte, expected: 300, on_missing: fail}
+        - {type: fact_check, path: mgmt.ssh.timeout, operator: gt, expected: 0, on_missing: fail}
+
+  # ══ 1.9 Time ═══════════════════════════════════════════════════════════
+
+  - id: cis-asa-1.9.1.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.9.1.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Unauthenticated NTP lets an on-path attacker move the clock, which backdates
+      log entries and can revive an expired certificate.
+    condition:
+      type: fact_check
+      path: time.ntp.authentication
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: cis-asa-1.9.1.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.9.1.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Authentication enabled with no trusted key configured is a no-op, so the
+      key and its trust are checked as one control.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: time.ntp.key_id, must_be_present: true}
+        - {type: presence, path: time.ntp.trusted_keys, must_be_present: true}
+
+  - id: cis-asa-1.9.1.3
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.9.1.3}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      At least one server to synchronise against; a free-running clock invalidates
+      every timestamp and certificate lifetime on the device.
+    condition: {type: count, path: time.ntp.server, operator: gte, expected: 1}
+
+  - id: cis-asa-1.9.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.9.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      An explicit timezone makes a local timestamp interpretable off-box.
+    condition: {type: presence, path: time.timezone, must_be_present: true}
+
+  # ══ 1.10 Logging ═══════════════════════════════════════════════════════
+
+  - id: cis-asa-1.10.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.10.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Logging enabled is the base of every other control in this section; without
+      it the rest have nothing to transmit.
+    condition:
+      type: fact_check
+      path: logging.enable
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: cis-asa-1.10.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.10.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Console logging is a denial-of-service surface on the ASA rather than a
+      confidentiality one: at high message rates the process blocks on the console
+      and takes the CLI with it. The benchmark's position is that it stays off.
+    condition:
+      type: fact_check
+      path: logging.console
+      operator: eq
+      expected: false
+      on_missing: fail
+
+  - id: cis-asa-1.10.3
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.10.3}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      At least one off-box collector. On-box logs are the first thing an attacker
+      with administrative access clears.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 1}
+
+  - id: cis-asa-1.10.4
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.10.4}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      A device ID in each message is what makes a shared syslog collector's
+      contents attributable once the source address is NATed or the device is one
+      of a failover pair.
+    condition: {type: presence, path: logging.origin_id, must_be_present: true}
+
+  - id: cis-asa-1.10.6
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.10.6}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Timestamps are what make two devices' logs correlatable.
+    condition:
+      type: fact_check
+      path: logging.timestamps
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-asa-1.10.7
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.10.7}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      512 KiB of buffer is the benchmark's floor — enough that a burst of events
+      is not lost before the collector acknowledges it.
+    condition:
+      type: fact_check
+      path: logging.buffered_size
+      operator: gte
+      expected: 524288
+      on_missing: fail
+
+  # ══ 1.11 SNMP ══════════════════════════════════════════════════════════
+
+  - id: cis-asa-1.11.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.11.1}
+    severity_override: high
+    applies_to:
+      vendors: [cisco_asa]
+      os_families: [asa]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      A v3 group at `priv` security, which is the only level that encrypts the
+      payload rather than merely authenticating the request.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: snmp.version, operator: contains, expected: '3', quantifier: any, on_missing: fail}
+        - {type: fact_check, path: snmp.group_security, operator: eq, expected: priv, case_sensitive: false, on_missing: fail}
+
+  - id: cis-asa-1.11.2
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.11.2}
+    severity_override: high
+    applies_to:
+      vendors: [cisco_asa]
+      os_families: [asa]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      SHA rather than MD5 for the authentication digest. Stated as "not MD5"
+      because the SHA-2 family members are all acceptable and enumerating them
+      would leave the rule to be revised each time the platform adds one.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: snmp.user, must_be_present: true}
+        - {type: fact_check, path: snmp.v3_auth, operator: regex_not_match, expected: "(?i)^md5\\b", on_missing: fail}
+
+  - id: cis-asa-1.11.3
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.11.3}
+    severity_override: high
+    applies_to:
+      vendors: [cisco_asa]
+      os_families: [asa]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      The host statement must name version 3, and — the half that matters — no
+      v1/v2c community may be present. Checking only for v3 would pass an ASA that
+      also answers a cleartext community, which is the common real-world state.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: snmp.host, must_be_present: true}
+        - {type: presence, path: snmp.community, must_be_present: false}
+
+  - id: cis-asa-1.11.4
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.11.4}
+    severity_override: low
+    applies_to:
+      vendors: [cisco_asa]
+      os_families: [asa]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      Traps are the push half of SNMP; polling alone means an interface failure
+      waits for the next poll interval to be noticed.
+    condition: {type: presence, path: snmp.traps, must_be_present: true}
+
+  - id: cis-asa-1.11.5
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: 1.11.5}
+    severity_override: high
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      `public` and `private` are the strings every scanner tries first. The
+      quantifier is `all`, so an ASA with a strong community *and* `public` still
+      fails; `on_missing: pass` is correct here and is the one place in this file
+      it appears — no community at all is the strongest possible satisfaction of a
+      control about the community not being the default.
+    condition:
+      type: fact_check
+      path: snmp.community
+      operator: not_in
+      expected: [public, private, cisco, admin]
+      quantifier: all
+      case_sensitive: false
+      on_missing: pass
+
+  # ══ 2 Routing protocol authentication ══════════════════════════════════
+
+  - id: cis-asa-2.3
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: '2.3'}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      DNS Guard drops unsolicited DNS responses, closing the cache-poisoning
+      window that opens when the ASA is doing DNS inspection. The canonical
+      evidence is the DNS inspection policy being in the traffic path.
+    condition: {type: presence, path: service.dns, must_be_present: true}
+
+  # ══ 3 Threat posture ═══════════════════════════════════════════════════
+
+  - id: cis-asa-3.1
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: '3.1'}
+    severity_override: low
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      A resolver must be configured for any FQDN network object to resolve and for
+      the device's own update and certificate checks.
+    condition: {type: presence, path: service.dns, must_be_present: true}
+
+  - id: cis-asa-3.7
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: '3.7'}
+    severity_override: medium
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Unicast reverse-path forwarding drops packets whose source address could not
+      have arrived on that interface, which is the cheapest available defence
+      against spoofed-source traffic. The benchmark scopes it to untrusted
+      interfaces; the canonical model records which interfaces have it, so what is
+      asserted here is that it is in use at all — the per-interface half needs a
+      zone-trust input the configuration does not carry, and claiming it would be
+      the guess this file avoids elsewhere.
+    condition: {type: presence, path: routing.urpf, must_be_present: true}
+
+  - id: cis-asa-3.12
+    catalog: {catalog_id: cis_cisco_asa_9_x_v1_1_0, control_id: '3.12'}
+    severity_override: medium
+    applies_to:
+      vendors: [cisco_asa]
+      os_families: [asa]
+      requires_paths: [acl.name]
+    mapping_rationale: >
+      An explicit deny at the end of an access list is what makes the list's
+      intent auditable and what gets the denied traffic logged — the ASA's
+      implicit deny is silent. The canonical evidence is a deny action present
+      among the list's entries.
+    condition:
+      type: fact_check
+      path: acl.entry.action
+      operator: contains
+      expected: deny
+      quantifier: any
+      case_sensitive: false
+      on_missing: fail

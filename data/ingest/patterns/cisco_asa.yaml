@@ -1,0 +1,1456 @@
+# Cisco ASA pattern pack.
+#
+# The ASA is a firewall that borrowed IOS's command shell, and every place the two
+# diverge is a place a shared pattern pack would silently produce the wrong answer:
+#
+# 1. **Interfaces have two names.** `GigabitEthernet0/0` is the hardware and
+#    `nameif outside` is the security zone. Every ACL, NAT rule, syslog target and
+#    SSH permit refers to the zone, never to the hardware — so `nameif` is recorded
+#    as `firewall.zone` and is the join key for the whole configuration.
+# 2. **`security-level` is a policy, not a label.** Traffic from a higher level to a
+#    lower one is permitted by default and the reverse is denied. It is the implicit
+#    default action of the firewall, which is why it lands on
+#    `firewall.policy.default_action` rather than on some descriptive path.
+# 3. **ACLs are flat.** `access-list NAME extended permit …` is one self-contained
+#    line per entry; there is no `ip access-list` block to descend into, so the ACL
+#    name, action, protocol and full text all come from a single match.
+# 4. **The `:` header is the only device inventory.** `: Hardware:` and
+#    `: Serial Number:` are written by `show running-config` on every ASA and are
+#    the sole source of `device.hardware` and `device.serials` for the platform.
+#    They begin with `:`, not `!`, so `comment_prefixes` lists only `!` — adding
+#    `:` would strip the inventory before the pattern list ever ran.
+# 5. **Deny is the platform default, not an assumption.** An ASA with no `ssh`
+#    permit line accepts no SSH at all, and one with no `http server enable` runs no
+#    ASDM listener. That lets the `defaults:` block at the end make stronger claims
+#    than an IOS pack can: for the ASA, silence really is a closed port.
+#
+# The Modular Policy Framework (`class-map` / `policy-map` / `service-policy`), the
+# IKEv2 and IPsec proposals, and the VPN tunnel- and group-policies are all parsed
+# with top-level patterns rather than nested blocks. In each of those three areas a
+# block's own children want the path its anchor would occupy — `policy-map` beside
+# `class`, `ipsec-proposal` beside `set ikev2 ipsec-proposal`, `tunnel-group` beside
+# `ikev2 remote-authentication` — and a leaf sharing a block anchor's canonical path
+# is the one structural hazard this codebase avoids by convention, because it breaks
+# per-instance rule evaluation. The compliance questions asked of those three areas
+# ("is inspection on", "which DH group", "is split tunnelling permitted") are
+# answered by the statements themselves rather than by which container they sit in,
+# so flattening costs nothing here.
+
+vendor: cisco_asa
+os_family: asa
+parser_id: cisco_asa_patterns@1
+description: >
+  Cisco ASA 9.x configuration as produced by `show running-config`. Covers the CIS
+  Cisco ASA benchmark surface and the DISA Cisco ASA NDM / ALG / VPN STIG check
+  surfaces.
+
+comment_prefixes:
+  - "!"
+
+case_insensitive: true
+
+detect:
+  min_hits: 3
+  markers:
+    # ── Shape: only an ASA is written this way ─────────────────────────
+    - "asa version"
+    - ": hardware:"
+    - "cryptochecksum:"
+    - "\nnameif "
+    - "\n nameif "
+    - "security-level "
+    - "\naccess-group "
+    - "\nnames\n"
+    - "same-security-traffic"
+    - "class-map inspection_default"
+    - "policy-map global_policy"
+    - "service-policy global_policy global"
+    - "threat-detection"
+    - "\nssh version 2"
+    - "\naaa-server "
+    - "password-policy "
+    - "\nfailover lan unit"
+    - "management-only"
+    - "extended permit"
+  # `nameif` and `security-level` are the ASA's zone model and appear on every
+  # configured interface of every ASA. No other platform in the corpus uses either
+  # word, so together they are decisive.
+  strong_markers:
+    - "nameif "
+    - "security-level "
+  strong_bonus: 12
+  anti_markers:
+    - "boot-start-marker"             # cisco_ios / cisco_xe
+    - "\nfeature "                    # cisco_nxos
+    - "host-name"                     # juniper_junos
+    - "config system global"          # fortinet
+    - "set deviceconfig"              # paloalto_panos
+    - "management api http-commands"  # arista_eos
+  filename_hints:
+    - "asa"
+    - "firewall"
+    - "fw-"
+    - "pix"
+
+ignore:
+  - '^!'
+  - '^\s*$'
+  - '^end\s*$'
+  - '^exit\s*$'
+  # The `:` header lines that describe the *file* rather than the device.
+  # `: Hardware:` and `: Serial Number:` are parsed below, because those two name
+  # the chassis; these name the capture.
+  - '^:\s*$'
+  - '^: Saved'
+  - '^: Written by'
+  - '^: Device Manager'
+  - '^: end\s*$'
+  - '^cryptochecksum:'
+  # `names` enables name-to-address aliasing for the whole file; the aliases
+  # themselves are the `name` lines and are inventory, not posture.
+  - '^names\s*$'
+  - '^name\s+[\d.]+\s+\S+'
+  # Terminal presentation and telemetry opt-outs. Neither is read by any control in
+  # the four frameworks.
+  - '^terminal width\b'
+  - '^pager lines\b'
+  - '^prompt\b'
+  - '^object-group-search\b'
+  - '^no call-home reporting anonymous\s*$'
+  - '^call-home\s*$'
+  - '^\s*profile CiscoTAC-1\b'
+  - '^\s*no active\s*$'
+  - '^\s*destination address\b'
+  - '^\s*destination transport-method\b'
+  - '^\s*subscribe-to-alert-group\b'
+  # AAA-server behaviour tuning: how many parallel accounting streams to open, how
+  # many unanswered requests mark a server dead, and when to probe a dead server
+  # again. Availability engineering, not access control. `max-failed-attempts`
+  # is the one worth naming: it is neither the user lockout threshold (that is
+  # `aaa local authentication attempts max-fail`, parsed into
+  # `aaa.authentication_attempts`) nor a session ceiling — see the note on
+  # `asa_quota_management_session`, where it used to be filed and where it
+  # invented a session limit the device did not have. It has no consumer in any
+  # of the four frameworks, so it is ignored rather than filed somewhere close.
+  - '^\s*accounting-mode\s+\S+\s*$'
+  - '^\s*max-failed-attempts\s+\d+\s*$'
+  - '^\s*reactivation-mode\s+\S+\s*$'
+  # ARP and TCP plumbing constants. `arp timeout` is a cache lifetime and
+  # `sysopt connection tcpmss` is an MSS clamp; both are performance tuning.
+  - '^arp timeout\b'
+  - '^sysopt connection tcpmss\b'
+  - '^sysopt noproxyarp\b'
+  # `dns server-group` is a bare container: every fact is in its `name-server` and
+  # `domain-name` children, which are captured.
+  - '^dns server-group\b'
+  - '^\s*dns-group\b'
+  # Security-association rekey intervals. PRAMAN's canonical vocabulary has no
+  # SA-lifetime path, and filing a rekey interval under `crypto.ipsec.mode` or
+  # `crypto.cipher_suite` would put an integer where a rule expects a mode or a
+  # cipher name — a misreport is worse than a gap, so these are skipped explicitly
+  # rather than mismapped. Adding the path later is a vocabulary change, not a code
+  # change, and this comment is the note to whoever makes it.
+  - '^\s*lifetime seconds\s+\d+\s*$'
+  - '^crypto map \S+ \d+ set security-association lifetime\b'
+  # The tunnel peer address is topology: which appliance we build an SA with does
+  # not change whether that SA is well-configured, and PRAMAN derives topology from
+  # interface addresses rather than from crypto-map peers.
+  - '^crypto map \S+ \d+ set peer\b'
+
+patterns:
+
+  # ── Device identity ───────────────────────────────────────────────────
+  # These are the whole of an ASA's self-description, and three of them are in the
+  # `:` header that `show running-config` prepends.
+
+  - id: asa_version
+    regex: '^ASA Version\s+(?P<value>\S+)'
+    path: device.os_version
+    value: str
+
+  - id: asa_hardware
+    regex: '^: Hardware:\s+(?P<value>[\w-]+)'
+    path: device.hardware
+    value: str
+    note: >
+      The only place an ASA running-config states its own chassis model. It begins
+      with `:` rather than `!`, which is precisely why `comment_prefixes` lists only
+      `!`: comment stripping runs before the pattern list, so declaring `:` a
+      comment would discard the platform's entire hardware inventory — and CM-8
+      asset accountability is exactly what that inventory answers.
+
+  - id: asa_serial
+    regex: '^: Serial Number:\s+(?P<value>\S+)'
+    path: device.serials
+    value: str
+
+  - id: asa_hostname
+    regex: '^hostname\s+(?P<value>\S+)\s*$'
+    path: device.hostname
+    value: str
+
+  - id: asa_domain_name
+    regex: '^domain-name\s+(?P<value>\S+)\s*$'
+    path: mgmt.domain_name
+    value: str
+
+  - id: asa_boot_system
+    regex: '^boot system\s+(?P<value>\S+)'
+    emits:
+      - {path: device.boot_system, value: str}
+      - {path: image.file, value: str}
+
+  - id: asa_config_register
+    regex: '^config-register\s+(?P<value>\S+)\s*$'
+    path: device.config_register
+    value: str
+
+  # ── Credentials ───────────────────────────────────────────────────────
+
+  - id: asa_enable_password_pbkdf2
+    regex: '^enable password\s+\S+\s+pbkdf2\s*$'
+    path: mgmt.enable_secret.hash_type
+    value: const
+    literal: pbkdf2
+    note: >
+      PBKDF2 is the only enable-password form on 9.6 and later that is neither
+      reversible nor a bare MD5. The hash itself is never emitted — only its form,
+      which is the whole of what IA-5(1) asks about a stored credential.
+
+  - id: asa_enable_password_encrypted
+    regex: '^enable password\s+\S+\s+encrypted\s*$'
+    path: mgmt.enable_secret.hash_type
+    value: const
+    literal: md5
+    note: >
+      `encrypted` on an ASA means unsalted MD5, not encryption. It is a finding on
+      every release that supports `pbkdf2`, which is every supported release.
+
+  - id: asa_enable_password_plain
+    regex: '^enable password\s+\S+\s*$'
+    path: mgmt.enable_password.present
+    value: true
+
+  - id: asa_username_privilege_hashed
+    regex: '^username\s+(?P<name>\S+)\s+password\s+\S+\s+(?P<hash>pbkdf2|encrypted|nt-encrypted)\s+privilege\s+(?P<value>\d+)'
+    emits:
+      - {path: mgmt.local_user.privilege, value: int, group: value}
+      - {path: mgmt.local_user.name, value: str, group: name}
+      - {path: mgmt.local_user.hash_type, value: lower, group: hash}
+      - {path: mgmt.local_user.secret, value: true}
+    note: >
+      `pbkdf2`, `encrypted` and `nt-encrypted` are the ASA's three storage
+      formats for a local password and only the first is a modern KDF. They are
+      the same quantity IOS writes as a type digit and Junos as `format
+      sha512`, so they share `mgmt.local_user.hash_type` with those; the
+      separate `mgmt.local_user.secret_type` they used to occupy held four
+      different quantities across four packs and was read by no rule.
+
+  - id: asa_username_privilege
+    regex: '^username\s+(?P<name>\S+)\s+password\s+\S+\s+privilege\s+(?P<value>\d+)'
+    emits:
+      - {path: mgmt.local_user.privilege, value: int, group: value}
+      - {path: mgmt.local_user.name, value: str, group: name}
+      - {path: mgmt.local_user.secret, value: true}
+
+  - id: asa_username_no_privilege
+    regex: '^username\s+(?P<value>\S+)\s+password\s'
+    emits:
+      - {path: mgmt.local_user.name, value: str}
+      - {path: mgmt.local_user.secret, value: true}
+    note: >
+      An ASA account with no explicit `privilege` runs at level 2, which cannot
+      enter configuration mode. It is recorded so the account is counted, but
+      without a privilege fact — for this platform the absence is what a rule reads.
+
+  - id: asa_password_policy_min_length
+    regex: '^password-policy minimum-length\s+(?P<value>\d+)\s*$'
+    path: mgmt.password_policy.min_length
+    value: int
+
+  - id: asa_password_policy_lifetime
+    regex: '^password-policy lifetime\s+(?P<value>\d+)\s*$'
+    path: mgmt.password_policy.lifetime
+    value: int
+
+  - id: asa_password_policy_minimum_changes
+    regex: '^password-policy minimum-changes\s+(?P<value>\d+)\s*$'
+    path: mgmt.password_policy.history
+    value: int
+
+  - id: asa_password_policy_class
+    regex: '^password-policy minimum-(?:lowercase|uppercase|numeric|special)\s+\d+\s*$'
+    path: mgmt.password_policy.complexity
+    value: line
+    note: >
+      Four separate ASA commands — lowercase, uppercase, numeric, special — all
+      landing at one path, one fact per class. The value is the *directive line*
+      rather than the number, which is the same choice cisco_ios.yaml makes for
+      the `aaa common-criteria policy` composition commands, and for the same
+      reason: DISA rates each class as its own control (CASA-ND-000520 through
+      000570), so a rule has to be able to tell "minimum-uppercase 2" from
+      "minimum-special 1". Filed as bare integers the four facts were
+      indistinguishable, and the only condition writable over them was a count —
+      which reports a finding against the two classes a partially configured
+      device *does* enforce. A CIS rule that only asks whether any class is
+      enforced still can, by matching a trailing non-zero digit.
+
+  - id: asa_password_policy_authenticate
+    regex: '^password-policy authenticate enable\s*$'
+    path: mgmt.password_policy.name
+    value: true
+    note: >
+      Forces a user to supply the old password before setting a new one. Without it
+      an attacker holding a live session can rotate the credential without ever
+      knowing it, which converts session theft into permanent account takeover.
+
+  - id: asa_no_password_recovery
+    regex: '^no service password-recovery\s*$'
+    path: service.password_recovery
+    value: false
+
+  - id: asa_aaa_local_max_fail
+    regex: '^aaa local authentication attempts max-fail\s+(?P<value>\d+)\s*$'
+    path: aaa.authentication_attempts
+    value: int
+
+  # ── AAA ───────────────────────────────────────────────────────────────
+
+  - id: asa_aaa_server_protocol
+    regex: '^aaa-server\s+(?P<name>\S+)\s+protocol\s+(?P<value>\S+)\s*$'
+    emits:
+      - {path: aaa.server.protocol, value: lower, group: value}
+      - {path: aaa.server.name, value: str, group: name}
+
+  - id: asa_quota_management_session
+    regex: '^quota management-session\s+(?P<value>\d+)\s*$'
+    path: aaa.max_sessions
+    value: int
+    note: >
+      The ASA's only global ceiling on concurrent management sessions, and the
+      one directive CASA-ND-000010 asks for. Deliberately *not* sourced from
+      `max-failed-attempts`, which appears in the same region of a configuration
+      and looks like a session limit: that keyword is the aaa-server
+      dead-detection retry count, and filing it here made a device with two
+      RADIUS hosts and no session quota report a session limit it does not have.
+      The ASA's default is 5 sessions and is not written to the configuration,
+      so a rule reading this path must treat absence as the finding rather than
+      as five.
+
+  - id: asa_aaa_authentication_ssh
+    regex: '^aaa authentication ssh console\s+(?P<value>.+?)\s*$'
+    path: aaa.authentication_login
+    value: str
+
+  - id: asa_aaa_authentication_serial
+    regex: '^aaa authentication serial console\s+(?P<value>.+?)\s*$'
+    path: line.console.login_auth
+    value: str
+
+  - id: asa_aaa_authentication_enable
+    regex: '^aaa authentication enable console\s+(?P<value>.+?)\s*$'
+    path: aaa.authentication_enable
+    value: str
+
+  - id: asa_aaa_authentication_http
+    regex: '^aaa authentication http console\s+(?P<value>.+?)\s*$'
+    path: mgmt.http.auth
+    value: str
+
+  - id: asa_aaa_authentication_secure_http
+    regex: '^aaa authentication secure-http-client\s*$'
+    path: aaa.authentication_order
+    value: true
+
+  - id: asa_aaa_authorization_command
+    regex: '^aaa authorization command\s+(?P<value>.+?)\s*$'
+    path: aaa.authorization_commands
+    value: str
+
+  - id: asa_aaa_authorization_exec
+    regex: '^aaa authorization exec authentication-server\s*$'
+    path: aaa.authorization_exec
+    value: true
+
+  - id: asa_aaa_accounting_command
+    regex: '^aaa accounting command\s+(?P<value>.+?)\s*$'
+    path: aaa.accounting_commands
+    value: str
+
+  - id: asa_aaa_accounting_console
+    regex: '^aaa accounting (?:ssh|serial|enable|telnet) console\s+(?P<value>.+?)\s*$'
+    path: aaa.accounting_exec
+    value: str
+
+  # ── Management plane ──────────────────────────────────────────────────
+
+  - id: asa_ssh_version
+    regex: '^ssh version\s+(?P<value>\d)\s*$'
+    path: mgmt.ssh.version
+    value: int
+
+  - id: asa_ssh_key_exchange
+    regex: '^ssh key-exchange group\s+(?P<value>\S+)\s*$'
+    path: mgmt.ssh.kex
+    value: lower
+
+  - id: asa_ssh_cipher_encryption
+    regex: '^ssh cipher encryption\s+(?P<value>.+?)\s*$'
+    path: mgmt.ssh.cipher
+    value: str
+
+  - id: asa_ssh_cipher_integrity
+    regex: '^ssh cipher integrity\s+(?P<value>.+?)\s*$'
+    path: mgmt.ssh.mac
+    value: str
+
+  - id: asa_ssh_timeout
+    regex: '^ssh timeout\s+(?P<minutes>\d+)\s*$'
+    path: mgmt.ssh.timeout
+    value: minutes_seconds
+    note: >
+      `ssh timeout` is stated in minutes on the ASA and the canonical path is in
+      seconds — the FortiGate pack already normalises `admintimeout` the same way,
+      and a path shared across vendors has to carry one unit or no portable rule can
+      compare it. Emitting the raw operand made an ASA configured for a one-hour
+      idle timeout record 60, which then passed a 300-second ceiling.
+
+  - id: asa_ssh_stricthostkeycheck
+    regex: '^ssh stricthostkeycheck\s*$'
+    path: mgmt.ssh.pubkey_chain
+    value: true
+
+  - id: asa_ssh_acl
+    regex: '^ssh\s+(?P<value>[\d.]+\s+[\d.]+)\s+\S+\s*$'
+    path: mgmt.ssh.acl
+    value: str
+    note: >
+      The ASA has no `access-class` on a VTY. `ssh <net> <mask> <zone>` *is* the
+      management ACL, and an ASA with no such line accepts no SSH at all rather than
+      accepting it from everywhere — the opposite of IOS, and the reason this pack
+      cannot reuse IOS's line-based reasoning.
+
+  - id: asa_no_http_server
+    regex: '^no http server enable\s*$'
+    path: mgmt.http.server_enabled
+    value: false
+
+  - id: asa_http_server_enable
+    regex: '^http server enable(?:\s+\d+)?\s*$'
+    emits:
+      - {path: mgmt.http.server_enabled, value: true}
+      - {path: mgmt.http.secure_server_enabled, value: true}
+    note: >
+      `http server enable` on an ASA starts an HTTPS listener for ASDM, never a
+      cleartext one. Both canonical paths are emitted so a rule written against
+      IOS's `ip http secure-server` reads this correctly without knowing which
+      platform produced it.
+
+  - id: asa_http_idle_timeout
+    regex: '^http server idle-timeout\s+(?P<minutes>\d+)\s*$'
+    path: mgmt.http.idle_timeout
+    value: minutes_seconds
+    note: >
+      Minutes on the ASA, seconds at the canonical path — see `asa_ssh_timeout`.
+      CASA-ND-000690 names three timeouts and this is the third: an ASA managed
+      through ASDM holds an idle HTTPS session open for 20 minutes by default,
+      and that default is not written to the configuration, so a rule reading
+      this path has to treat absence as unset rather than as twenty minutes.
+
+  - id: asa_http_acl
+    regex: '^http\s+(?P<value>[\d.]+\s+[\d.]+)\s+\S+\s*$'
+    path: mgmt.http.acl
+    value: str
+
+  - id: asa_console_timeout
+    regex: '^console timeout\s+(?P<minutes>\d+)\s*$'
+    path: line.console.exec_timeout
+    value: minutes_seconds
+    note: >
+      Seconds, matching the IOS pack at the same path — see `asa_ssh_timeout`.
+
+  - id: asa_no_telnet
+    regex: '^no telnet\b'
+    path: mgmt.telnet.enabled
+    value: false
+
+  - id: asa_telnet_permit
+    regex: '^telnet\s+[\d.]+\s+[\d.]+\s+\S+\s*$'
+    path: mgmt.telnet.enabled
+    value: true
+
+  - id: asa_management_access
+    regex: '^management-access\s+(?P<value>\S+)\s*$'
+    path: mgmt.transport_preferred
+    value: str
+    note: >
+      Names the single zone through which the ASA will answer management traffic
+      arriving over a VPN. It is the closest the platform comes to declaring a
+      preferred management path, and an ASA that names an untrusted zone here has
+      published its own control plane.
+
+  - id: asa_ssl_server_version
+    regex: '^ssl server-version\s+(?P<value>\S+)'
+    emits:
+      - {path: crypto.tls.version, value: lower}
+      - {path: mgmt.http.tls_version, value: lower}
+
+  - id: asa_ssl_cipher
+    regex: '^ssl cipher\s+\S+\s+(?P<value>\S+)'
+    path: crypto.cipher_suite
+    value: str
+
+  - id: asa_ssl_trustpoint
+    regex: '^ssl trust-point\s+(?P<value>\S+)'
+    path: crypto.pki.enrollment
+    value: str
+    note: >
+      Binds an already-enrolled trustpoint to an interface, so it is evidence that
+      enrolment happened rather than a declaration of a new trustpoint — which is
+      why it is recorded on the enrolment path and not on `crypto.pki.trustpoint`,
+      a path owned by the `crypto ca trustpoint` block below.
+
+  - id: asa_fips_enable
+    regex: '^fips enable\s*$'
+    path: crypto.fips_mode
+    value: true
+
+  - id: asa_crypto_key_rsa
+    regex: '^crypto key generate rsa modulus\s+(?P<value>\d+)'
+    emits:
+      - {path: crypto.key.size, value: int}
+      - {path: crypto.key.type, value: const, literal: rsa}
+
+  - id: asa_crypto_key_ecdsa
+    regex: '^crypto key generate ecdsa elliptic-curve\s+(?P<value>\d+)'
+    emits:
+      - {path: crypto.key.size, value: int}
+      - {path: crypto.key.type, value: const, literal: ecdsa}
+
+  # ── IKE, IPsec and VPN, flattened ─────────────────────────────────────
+  # Top-level rather than nested: see the file header for why.
+
+  - id: asa_no_crypto_ikev1
+    regex: '^no crypto ikev1 enable\b'
+    path: crypto.ikev1.enabled
+    value: false
+
+  - id: asa_crypto_ikev1_enable
+    regex: '^crypto ikev1 enable\b'
+    path: crypto.ikev1.enabled
+    value: true
+
+  - id: asa_crypto_ikev2_enable
+    regex: '^crypto ikev2 enable\s+(?P<value>\S+)'
+    path: crypto.ikev2.proposal
+    value: str
+
+  - id: asa_crypto_ikev2_policy
+    regex: '^crypto ikev2 policy\s+(?P<value>\d+)\s*$'
+    path: crypto.isakmp.policy
+    value: int
+
+  - id: asa_ikev2_encryption
+    regex: '^\s*encryption\s+(?P<value>.+?)\s*$'
+    path: crypto.cipher_suite
+    value: str
+
+  - id: asa_ikev2_integrity
+    regex: '^\s*integrity\s+(?P<value>.+?)\s*$'
+    path: crypto.cipher_suite
+    value: str
+    note: >
+      Filed alongside the encryption algorithm rather than on a path of its own:
+      both are components of the negotiated suite, and the CIS check reads them
+      together ("AES-256 with SHA-384 or better"). Several facts at one path is what
+      a suite is.
+
+  - id: asa_ikev2_prf
+    regex: '^\s*prf\s+(?P<value>.+?)\s*$'
+    path: crypto.cipher_suite
+    value: str
+
+  - id: asa_ikev2_group
+    regex: '^\s*group\s+(?P<value>[\w-]+)\s*$'
+    path: crypto.ikev2.group
+    value: str
+
+  - id: asa_ipsec_proposal
+    regex: '^crypto ipsec ikev2 ipsec-proposal\s+(?P<value>\S+)\s*$'
+    path: crypto.ipsec.transform
+    value: str
+
+  - id: asa_esp_encryption
+    regex: '^\s*protocol esp encryption\s+(?P<value>.+?)\s*$'
+    path: vpn.tunnel.encryption
+    value: str
+
+  - id: asa_esp_integrity
+    regex: '^\s*protocol esp integrity\s+(?P<value>.+?)\s*$'
+    path: vpn.tunnel.auth
+    value: str
+
+  - id: asa_crypto_map_pfs
+    regex: '^crypto map \S+ \d+ set pfs\s+(?P<value>\S+)\s*$'
+    emits:
+      - {path: crypto.ipsec.pfs, value: lower}
+      - {path: vpn.pfs, value: lower}
+
+  - id: asa_crypto_map_proposal
+    regex: '^crypto map \S+ \d+ set ikev2 ipsec-proposal\s+(?P<value>.+?)\s*$'
+    path: crypto.ipsec.transform
+    value: str
+
+  - id: asa_crypto_map_match_address
+    regex: '^crypto map \S+ \d+ match address\s+(?P<value>\S+)\s*$'
+    path: acl.name
+    value: str
+
+  - id: asa_crypto_map_interface
+    regex: '^crypto map \S+ interface\s+\S+\s*$'
+    path: crypto.ipsec.mode
+    value: const
+    literal: tunnel
+    note: >
+      A crypto map bound to an interface is site-to-site IPsec, which the ASA runs
+      only in tunnel mode — transport mode is not offered on this platform. The
+      binding is therefore the mode declaration.
+
+  - id: asa_tunnel_group
+    regex: '^tunnel-group\s+(?P<value>\S+)\s+(?:type|general-attributes|ipsec-attributes|webvpn-attributes)'
+    path: vpn.tunnel.auth
+    value: str
+
+  - id: asa_tunnel_group_auth_server
+    regex: '^\s*authentication-server-group\s+(?P<value>\S+)\s*$'
+    path: aaa.server.group
+    value: str
+
+  - id: asa_default_group_policy
+    regex: '^\s*default-group-policy\s+(?P<value>\S+)\s*$'
+    path: vpn.split_tunnel
+    value: str
+    note: >
+      Names the group-policy every session in this tunnel-group inherits, and a
+      group-policy is where `split-tunnel-policy` lives. Recorded on the same path as
+      the policy itself so a rule can follow the reference: a tunnel-group pointing at
+      a policy that permits split tunnelling is the finding, and neither line states it
+      alone.
+
+  - id: asa_tunnel_group_ikev2_auth
+    regex: '^\s*ikev2 (?:local|remote)-authentication\s+(?P<value>.+?)\s*$'
+    path: vpn.tunnel.auth
+    value: str
+
+  - id: asa_tunnel_group_peer_id
+    regex: '^\s*peer-id-validate\s+(?P<value>\S+)\s*$'
+    path: vpn.tunnel.auth
+    value: str
+    note: >
+      Whether the ASA checks that the peer's asserted identity matches its
+      certificate. Set to `nocheck` it will complete a tunnel with anyone holding a
+      valid CA-signed certificate, which on a public CA is anyone at all.
+
+  - id: asa_isakmp_keepalive
+    regex: '^\s*isakmp keepalive threshold\s+(?P<value>\d+)'
+    path: vpn.dpd
+    value: int
+
+  - id: asa_group_policy
+    regex: '^group-policy\s+(?P<value>\S+)\s+(?:internal|attributes)\s*$'
+    path: vpn.split_tunnel
+    value: str
+
+  - id: asa_split_tunnel_policy
+    regex: '^\s*split-tunnel-policy\s+(?P<value>\S+)\s*$'
+    path: vpn.split_tunnel
+    value: lower
+    note: >
+      `tunnelall` forces every packet from the client through the ASA;
+      `tunnelspecified` and `excludespecified` leave the client simultaneously on
+      the corporate network and on whatever untrusted network it is sitting on,
+      which is the split-tunnelling condition AC-17(3) prohibits.
+
+  - id: asa_split_tunnel_network_list
+    regex: '^\s*split-tunnel-network-list value\s+(?P<value>\S+)\s*$'
+    path: acl.name
+    value: str
+
+  - id: asa_vpn_tunnel_protocol
+    regex: '^\s*vpn-tunnel-protocol\s+(?P<value>.+?)\s*$'
+    path: vpn.tunnel.encryption
+    value: str
+
+  - id: asa_vpn_idle_timeout
+    regex: '^\s*vpn-idle-timeout\s+(?P<value>\d+)\s*$'
+    path: firewall.session_timeout
+    value: int
+
+  - id: asa_vpn_session_timeout
+    regex: '^\s*vpn-session-timeout\s+(?P<value>\d+)\s*$'
+    path: firewall.session_timeout
+    value: int
+
+  # ── Logging ───────────────────────────────────────────────────────────
+
+  - id: asa_logging_enable
+    regex: '^logging enable\s*$'
+    path: logging.enable
+    value: true
+
+  - id: asa_logging_timestamp
+    regex: '^logging timestamp(?:\s+\S+)?\s*$'
+    path: logging.timestamps
+    value: true
+
+  - id: asa_logging_buffered
+    regex: '^logging buffered\s+(?P<value>\S+)\s*$'
+    path: logging.buffered
+    value: lower
+
+  - id: asa_logging_buffer_size
+    regex: '^logging buffer-size\s+(?P<value>\d+)\s*$'
+    path: logging.buffered_size
+    value: int
+
+  - id: asa_logging_trap
+    regex: '^logging trap\s+(?P<value>\S+)\s*$'
+    path: logging.trap_level
+    value: lower
+
+  - id: asa_logging_host_transport
+    regex: '^logging host\s+\S+\s+(?P<host>[\d.a-fA-F:]+)\s+(?P<value>tcp|udp)/(?P<port>\d+)'
+    emits:
+      - {path: logging.remote_syslog, value: str, group: host}
+      - {path: logging.host.transport, value: lower, group: value}
+      - {path: logging.host.port, value: int, group: port}
+      - {path: logging.enable, value: true}
+
+  - id: asa_logging_host
+    regex: '^logging host\s+\S+\s+(?P<value>[\d.a-fA-F:]+)'
+    emits:
+      - {path: logging.remote_syslog, value: str}
+      - {path: logging.enable, value: true}
+    note: >
+      Only a `logging host` line reaches this path. `logging flow-export-syslogs
+      enable` used to land here as well, which put the literal string `enable`
+      into the list of syslog destinations — and CASA-ND-001410 is a CAT I
+      control that *counts* them, so an ASA with that toggle and a single
+      collector counted two and passed a requirement it failed. The toggle is a
+      feature switch, not a destination, and there is no canonical path for it,
+      so it is no longer recorded rather than recorded in the wrong place.
+
+  - id: asa_logging_device_id
+    regex: '^logging device-id\s+(?P<value>\S+)'
+    path: logging.origin_id
+    value: lower
+
+  - id: asa_logging_facility
+    regex: '^logging facility\s+(?P<value>\d+)\s*$'
+    path: logging.facility
+    value: int
+
+  - id: asa_logging_permit_hostdown
+    regex: '^logging permit-hostdown\s*$'
+    path: logging.persistent
+    value: true
+    note: >
+      Without it, an ASA whose TCP syslog collector goes down stops passing traffic
+      entirely — a fail-closed behaviour that turns a logging outage into a network
+      outage. CIS asks for the flag; DISA asks for the opposite on high-assurance
+      deployments. PRAMAN records the setting and lets each framework decide, which
+      is exactly the kind of disagreement the multi-framework engine exists for.
+
+  - id: asa_no_logging_console
+    regex: '^no logging console\b'
+    path: logging.console
+    value: false
+
+  - id: asa_logging_console
+    regex: '^logging console\s+(?P<value>\S+)\s*$'
+    path: logging.console
+    value: lower
+
+  - id: asa_logging_monitor
+    regex: '^logging monitor\s+(?P<value>\S+)\s*$'
+    path: logging.monitor
+    value: lower
+
+  - id: asa_logging_asdm
+    regex: '^logging asdm\s+(?P<value>\S+)\s*$'
+    path: logging.userinfo
+    value: lower
+
+  - id: asa_no_logging_message
+    regex: '^no logging message\s+(?P<value>\d+)\s*$'
+    path: logging.count
+    value: int
+    note: >
+      Every suppressed syslog ID is a deliberate blind spot. Recording the ID rather
+      than a boolean lets an AU-12 rule check that nothing safety-relevant — 106100
+      ACL hits, 111008 configuration changes — has been silenced.
+
+  - id: asa_logging_message_level
+    regex: '^logging message\s+(?P<value>\d+)\s+level\s+\S+\s*$'
+    path: logging.discriminator
+    value: int
+
+  - id: asa_logging_rate_limit
+    regex: '^logging rate-limit\s+(?P<value>\d+)'
+    path: logging.count
+    value: int
+
+  # ── Time ──────────────────────────────────────────────────────────────
+
+  - id: asa_ntp_authenticate
+    regex: '^ntp authenticate\s*$'
+    path: time.ntp.authentication
+    value: true
+
+  - id: asa_ntp_authentication_key
+    regex: '^ntp authentication-key\s+(?P<id>\d+)\s+(?P<value>md5|sha1|sha256)\s'
+    emits:
+      - {path: time.ntp.key, value: lower, group: value}
+      - {path: time.ntp.key_id, value: int, group: id}
+    note: >
+      The *algorithm* at `time.ntp.key`, the key number at `time.ntp.key_id`.
+      This pattern used to file the key number at `time.ntp.key`, where the IOS
+      pack files the algorithm — so the one path a portable rule would read to
+      ask "is the NTP MAC FIPS-approved" answered with an integer on the ASA and
+      with `md5` on IOS. CASA-ND-001080 asks for FIPS-compliant algorithms and
+      the ASA, unlike IOS, can offer sha256, so the distinction is the whole
+      control rather than a tidiness point.
+
+  - id: asa_ntp_trusted_key
+    regex: '^ntp trusted-key\s+(?P<value>\d+)\s*$'
+    path: time.ntp.trusted_keys
+    value: int
+
+  - id: asa_ntp_server_key_source
+    regex: '^ntp server\s+(?P<value>[\d.a-fA-F:]+)\s+key\s+(?P<key>\d+)\s+source\s+(?P<src>\S+)'
+    emits:
+      - {path: time.ntp.server, value: str, group: value}
+      - {path: time.ntp.key_id, value: int, group: key}
+      - {path: time.ntp.source_interface, value: str, group: src}
+      - {path: time.ntp.authentication, value: true}
+      - {path: time.ntp, value: true}
+
+  - id: asa_ntp_server_key
+    regex: '^ntp server\s+(?P<value>[\d.a-fA-F:]+)\s+key\s+(?P<key>\d+)'
+    emits:
+      - {path: time.ntp.server, value: str, group: value}
+      - {path: time.ntp.key_id, value: int, group: key}
+      - {path: time.ntp.authentication, value: true}
+      - {path: time.ntp, value: true}
+
+  - id: asa_ntp_server
+    regex: '^ntp server\s+(?P<value>[\d.a-fA-F:]+)'
+    emits:
+      - {path: time.ntp.server, value: str}
+      - {path: time.ntp, value: true}
+    note: >
+      Listed after the keyed variants because `_match_line` stops at the first
+      match: an authenticated server line must reach the pattern that records its
+      key, not this one, which would report the peer as unauthenticated.
+
+  - id: asa_clock_timezone
+    regex: '^clock timezone\s+(?P<value>\S+)'
+    path: time.timezone
+    value: str
+
+  # ── SNMP ──────────────────────────────────────────────────────────────
+
+  - id: asa_snmp_group
+    regex: '^snmp-server group\s+(?P<value>\S+)\s+v3\s+(?P<sec>\S+)\s*$'
+    emits:
+      - {path: snmp.group, value: str, group: value}
+      - {path: snmp.group_security, value: lower, group: sec}
+      - {path: snmp.version, value: const, literal: "3"}
+
+  - id: asa_snmp_user
+    regex: '^snmp-server user\s+(?P<value>\S+)\s+\S+\s+v3.*?\bauth\s+(?P<auth>\S+)(?:.*\bpriv\s+(?P<priv>\S+))?'
+    emits:
+      - {path: snmp.user, value: str, group: value}
+      - {path: snmp.v3_auth, value: lower, group: auth}
+      - {path: snmp.v3_priv, value: lower, group: priv}
+      - {path: snmp.enabled, value: true}
+    note: >
+      The privacy clause is optional in the regex and required by the STIG:
+      CASA-ND-001050 asks only that the user authenticates with a FIPS HMAC,
+      while CASA-ND-001070 asks that the messages are also encrypted. Before the
+      `priv` group existed this pattern claimed every well-formed v3 user line
+      and emitted no privacy fact at all, so a device carrying
+      `auth sha256 ... priv aes 256` looked identical to one carrying auth
+      alone — and the encryption control had no evidence to read. The group is
+      absent, not empty, on an auth-only user, which is the distinction the
+      second control turns on.
+
+  - id: asa_snmp_user_priv_only
+    regex: '^snmp-server user\s+(?P<value>\S+)\s+\S+\s+v3.*?\bpriv\s+(?P<priv>\S+)'
+    emits:
+      - {path: snmp.user, value: str, group: value}
+      - {path: snmp.v3_priv, value: lower, group: priv}
+      - {path: snmp.enabled, value: true}
+    note: >
+      Reached only by a v3 user line that names a privacy algorithm and no
+      authentication one — a real and worse misconfiguration than it looks, since
+      the ASA silently downgrades such a user to noAuthNoPriv. The pattern above
+      claims every well-formed line first.
+
+  - id: asa_snmp_host_v3
+    regex: '^snmp-server host\s+\S+\s+(?P<value>[\d.a-fA-F:]+)\s+version\s+(?P<ver>\S+)'
+    emits:
+      - {path: snmp.host, value: str, group: value}
+      - {path: snmp.version, value: str, group: ver}
+      - {path: snmp.enabled, value: true}
+
+  - id: asa_snmp_host
+    regex: '^snmp-server host\s+\S+\s+(?P<value>[\d.a-fA-F:]+)'
+    emits:
+      - {path: snmp.host, value: str}
+      - {path: snmp.enabled, value: true}
+
+  - id: asa_snmp_community
+    regex: '^snmp-server community\s+(?P<value>\S+)'
+    emits:
+      - {path: snmp.community, value: str}
+      - {path: snmp.enabled, value: true}
+
+  - id: asa_snmp_location
+    regex: '^snmp-server location\s+(?P<value>.+?)\s*$'
+    path: snmp.location
+    value: str
+
+  - id: asa_snmp_contact
+    regex: '^snmp-server contact\s+(?P<value>.+?)\s*$'
+    path: snmp.contact
+    value: str
+
+  - id: asa_no_snmp_traps
+    regex: '^no snmp-server enable traps\s+(?P<value>.+?)\s*$'
+    path: snmp.notify_filter
+    value: str
+
+  - id: asa_snmp_traps
+    regex: '^snmp-server enable traps\s+(?P<value>.+?)\s*$'
+    path: snmp.traps
+    value: str
+
+  # ── Banners ───────────────────────────────────────────────────────────
+
+  - id: asa_banner_login
+    regex: '^banner login\s+(?P<value>.+?)\s*$'
+    emits:
+      - {path: mgmt.login_banner, value: true}
+      - {path: mgmt.banner.text, value: str}
+
+  - id: asa_banner_motd
+    regex: '^banner motd\s+(?P<value>.+?)\s*$'
+    path: mgmt.motd_banner
+    value: true
+
+  - id: asa_banner_asdm
+    regex: '^banner asdm\s+(?P<value>.+?)\s*$'
+    path: mgmt.exec_banner
+    value: true
+
+  - id: asa_banner_exec
+    regex: '^banner exec\s+(?P<value>.+?)\s*$'
+    path: mgmt.exec_banner
+    value: true
+
+  # ── Access control: flat, one line per entry ───────────────────────────
+
+  - id: asa_access_list_remark
+    regex: '^access-list\s+(?P<name>\S+)\s+remark\s+(?P<value>.+?)\s*$'
+    emits:
+      - {path: acl.remark, value: str, group: value}
+      - {path: acl.name, value: str, group: name}
+
+  - id: asa_access_list_extended
+    regex: '^access-list\s+(?P<name>\S+)\s+extended\s+(?P<action>permit|deny)\s+(?P<proto>\S+)\s+(?P<rest>.+?)\s*$'
+    emits:
+      - {path: acl.extended.entry, value: line}
+      - {path: acl.name, value: str, group: name}
+      - {path: acl.entry.action, value: lower, group: action}
+      - {path: acl.entry.protocol, value: lower, group: proto}
+    note: >
+      An ASA ACE is self-contained, so the ACL name, the action, the protocol and
+      the full rule text all come from one match. Splitting those into separate
+      patterns would not merely be verbose, it would be wrong: `_match_line` stops
+      at the first match, so only one of the four would ever fire. `value: line`
+      puts the verbatim entry in the evidence field, which is what an auditor reads.
+
+  - id: asa_access_list_standard
+    regex: '^access-list\s+(?P<name>\S+)\s+standard\s+(?P<action>permit|deny)\s+(?P<rest>.+?)\s*$'
+    emits:
+      - {path: acl.standard.entry, value: line}
+      - {path: acl.name, value: str, group: name}
+      - {path: acl.entry.action, value: lower, group: action}
+
+  - id: asa_access_list_webtype
+    regex: '^access-list\s+(?P<name>\S+)\s+webtype\s+(?P<action>permit|deny)\s+(?P<rest>.+?)\s*$'
+    emits:
+      - {path: acl.entry.action, value: lower, group: action}
+      - {path: acl.name, value: str, group: name}
+
+  - id: asa_access_group
+    regex: '^access-group\s+(?P<value>\S+)\s+(?P<dir>in|out)\s+interface\s+(?P<zone>\S+)'
+    emits:
+      - {path: interface.acl_in, value: str, group: value}
+      - {path: firewall.zone, value: str, group: zone}
+    note: >
+      Recorded as an inbound binding regardless of direction, because the question
+      every framework asks — is this zone filtered at all — is answered by the
+      existence of the binding. The verbatim line in the evidence field carries the
+      direction for an auditor who needs it.
+
+  - id: asa_icmp_rule
+    regex: '^icmp\s+(?P<value>permit|deny)\s+.+?\s+\S+\s*$'
+    path: firewall.rule.action
+    value: lower
+    note: >
+      The to-the-box ICMP filter, which is separate from every interface ACL: an
+      ASA with a hardened `access-list` and no `icmp deny` still answers pings and
+      timestamp requests addressed to itself.
+
+  - id: asa_nat_rule
+    regex: '^nat\s+\([^)]+\)\s+.+?\s*$'
+    path: firewall.nat.rule
+    value: line
+
+  - id: asa_same_security_traffic
+    regex: '^same-security-traffic permit\s+(?P<value>\S+)\s*$'
+    path: firewall.policy.default_action
+    value: lower
+    note: >
+      Overrides the ASA's implicit deny between interfaces of equal
+      `security-level`. It genuinely changes the firewall's default action, which is
+      why it shares that path with the per-interface `security-level` fact rather
+      than getting a descriptive path of its own.
+
+  - id: asa_mtu
+    regex: '^mtu\s+(?P<zone>\S+)\s+(?P<value>\d+)\s*$'
+    path: interface.mtu
+    value: int
+
+  - id: asa_no_arp_nonconnected
+    regex: '^no arp permit-nonconnected\s*$'
+    path: service.gratuitous_arp
+    value: false
+
+  - id: asa_route_default
+    regex: '^route\s+\S+\s+0\.0\.0\.0\s+0\.0\.0\.0\s+(?P<value>[\d.]+)'
+    path: routing.default_route
+    value: str
+
+  - id: asa_route_static
+    regex: '^route\s+\S+\s+(?P<value>[\d.]+\s+[\d.]+)\s+[\d.]+'
+    path: routing.static_route
+    value: str
+
+  - id: asa_ip_verify_reverse_path
+    regex: '^ip verify reverse-path interface\s+(?P<value>\S+)\s*$'
+    path: routing.urpf
+    value: str
+    note: >
+      The ASA's anti-spoofing check, and it is per-zone rather than global — an ASA
+      with it on `inside` but not on `outside` is unprotected exactly where it
+      matters, so the zone name is the value rather than a boolean.
+
+  - id: asa_dns_domain_lookup
+    regex: '^dns domain-lookup\s+(?P<value>\S+)\s*$'
+    path: service.dns
+    value: true
+
+  - id: asa_name_server
+    regex: '^\s*name-server\s+(?P<value>[\d.a-fA-F:]+)'
+    path: service.dns
+    value: str
+
+  # ── Modular Policy Framework, flattened ───────────────────────────────
+
+  - id: asa_class_map
+    regex: '^class-map\s+(?:type \S+\s+)?(?:match-any\s+|match-all\s+)?(?P<value>\S+)\s*$'
+    path: firewall.rule.action
+    value: str
+
+  - id: asa_match_default_inspection
+    regex: '^\s*match default-inspection-traffic\s*$'
+    path: firewall.inspection
+    value: true
+
+  - id: asa_match_access_list
+    regex: '^\s*match access-list\s+(?P<value>\S+)\s*$'
+    path: acl.name
+    value: str
+
+  - id: asa_match_port
+    regex: '^\s*match port\s+(?P<value>\S+)\s+eq\s+\S+\s*$'
+    path: acl.entry.protocol
+    value: lower
+
+  - id: asa_policy_map
+    regex: '^policy-map\s+(?:type \S+\s+)?(?P<value>\S+)\s*$'
+    path: control_plane.service_policy
+    value: str
+
+  - id: asa_policy_class
+    regex: '^\s*class\s+(?P<value>\S+)\s*$'
+    path: firewall.policy.log
+    value: str
+
+  - id: asa_inspect
+    regex: '^\s*inspect\s+(?P<value>\S+)'
+    path: firewall.ids_signature
+    value: str
+    note: >
+      Each `inspect` line turns on one application-layer engine. Recording the
+      engine name rather than a boolean is what lets a rule say "SIP and H.323
+      inspection are on and should not be" — the ALG STIG's actual position, since
+      those two engines rewrite payloads and have their own CVE history.
+
+  - id: asa_set_connection_timeout
+    regex: '^\s*set connection timeout\s+(?P<kind>\S+)\s+(?P<value>[\d:]+)'
+    path: firewall.session_timeout
+    value: str
+
+  - id: asa_set_connection_limit
+    regex: '^\s*set connection (?:conn-max|embryonic-conn-max)\s+(?P<value>\d+)'
+    path: firewall.session_timeout
+    value: int
+
+  - id: asa_service_policy
+    regex: '^service-policy\s+(?P<value>\S+)\s+(?:global|interface \S+)\s*$'
+    path: control_plane.service_policy
+    value: str
+
+  - id: asa_threat_detection_basic
+    regex: '^threat-detection basic-threat\s*$'
+    path: firewall.ids_signature
+    value: true
+
+  - id: asa_threat_detection_shun
+    regex: '^threat-detection scanning-threat shun'
+    path: firewall.rule.action
+    value: const
+    literal: shun
+
+  - id: asa_threat_detection_statistics
+    regex: '^threat-detection statistics(?:\s+\S+)?\s*$'
+    path: firewall.policy.log
+    value: line
+
+  # ── High availability ─────────────────────────────────────────────────
+
+  - id: asa_failover_unit
+    regex: '^failover lan unit\s+(?P<value>primary|secondary)\s*$'
+    path: ha.redundancy
+    value: lower
+
+  - id: asa_failover_key
+    regex: '^failover key\s'
+    path: ha.sync
+    value: true
+    note: >
+      Without a failover key the state-synchronisation link carries session tables,
+      xlates and — during a configuration replication — the peer's entire
+      running-config in the clear. It is the one ASA secret whose absence exposes
+      every other one.
+
+  - id: asa_failover_interface
+    regex: '^failover (?:lan interface|link)\s+(?P<value>\S+)\s+\S+\s*$'
+    path: ha.sync
+    value: str
+
+  - id: asa_failover_replication
+    regex: '^failover replication http\s*$'
+    path: ha.sync
+    value: const
+    literal: replication-http
+
+  - id: asa_failover_enable
+    regex: '^failover\s*$'
+    path: ha.redundancy
+    value: true
+
+blocks:
+
+  # ── Interfaces: hardware name outside, zone name inside ───────────────
+
+  - id: asa_interface
+    anchor_path: interface.name
+    regex: '^interface\s+(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    note: >
+      The anchor is the hardware name, because that is what the configuration
+      indexes by. Everything else in the file refers to the zone from `nameif`, so
+      the two travel together on one line span and a rule can join them without a
+      second lookup.
+    children:
+      - id: asa_if_nameif
+        regex: '^nameif\s+(?P<value>\S+)\s*$'
+        path: firewall.zone
+        value: str
+      - id: asa_if_security_level
+        regex: '^security-level\s+(?P<value>\d+)\s*$'
+        path: firewall.policy.default_action
+        value: int
+        note: >
+          Not a label. Traffic from a higher level to a lower one is permitted by
+          default and the reverse is denied, so this integer *is* the interface's
+          implicit default action — and an interface at level 100 facing the
+          Internet is the single most consequential misconfiguration an ASA admits.
+      - id: asa_if_description
+        regex: '^description\s+(?P<value>.+?)\s*$'
+        path: interface.description
+        value: str
+      - id: asa_if_ip_dhcp
+        regex: '^ip address dhcp(?:\s+setroute)?\s*$'
+        path: interface.ip_address
+        value: const
+        literal: dhcp
+      - id: asa_if_ip_address
+        regex: '^ip address\s+(?P<value>[\d.]+\s+[\d.]+)'
+        path: interface.ip_address
+        value: str
+      # Split into two, rather than `negated_bool`, so the emitted value matches
+      # the `no-shutdown` string this stanza's own `child_defaults` uses and the
+      # `shutdown`/`no-shutdown` constants every other pack emits. Read as a bool
+      # the polarity was also inverted — a shut interface came out `True`.
+      - id: asa_if_shutdown
+        regex: '^shutdown\s*$'
+        path: interface.admin_state
+        value: const
+        literal: shutdown
+      - id: asa_if_no_shutdown
+        regex: '^no shutdown\s*$'
+        path: interface.admin_state
+        value: const
+        literal: no-shutdown
+      - id: asa_if_vlan
+        regex: '^vlan\s+(?P<value>\d+)\s*$'
+        path: interface.access_vlan
+        value: int
+      - id: asa_if_speed
+        regex: '^speed\s+(?P<value>\S+)\s*$'
+        path: interface.speed
+        value: lower
+      - id: asa_if_duplex
+        regex: '^duplex\s+(?P<value>\S+)\s*$'
+        path: interface.duplex
+        value: lower
+      - id: asa_if_management_only
+        regex: '^management-only\s*$'
+        path: interface.acl_out
+        value: const
+        literal: management-only
+        note: >
+          An interface flagged `management-only` passes no through-traffic at all,
+          which is a stronger statement than any egress ACL could make — so it is
+          recorded on the egress-filter path as that literal rather than being
+          discarded for want of a dedicated one.
+      - id: asa_if_no_forward
+        regex: '^no forward interface\s+(?P<value>\S+)\s*$'
+        path: interface.acl_out
+        value: str
+      - id: asa_if_mtu
+        regex: '^mtu\s+(?P<value>\d+)\s*$'
+        path: interface.mtu
+        value: int
+    child_defaults:
+      - path: interface.admin_state
+        value: no-shutdown
+        reason: >
+          an ASA interface with no `shutdown` line is administratively up, and the
+          CM-2 unused-interface control needs a fact per interface rather than a gap
+          — the interface that is dangerous is the one nobody wrote a line about
+      - path: firewall.zone
+        value: ""
+        reason: >
+          an interface with no `nameif` cannot be referenced by any policy at all,
+          so recording the absence per interface is what lets a rule separate
+          "unconfigured" from "configured and dangerous"
+
+  # ── AAA server hosts ──────────────────────────────────────────────────
+
+  - id: asa_aaa_server_host
+    anchor_path: aaa.server.host
+    regex: '^aaa-server\s+\S+\s+\([^)]+\)\s+host\s+(?P<value>[\d.a-fA-F:]+)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: asa_aaa_host_key
+        regex: '^key\s+\S+\s*$'
+        path: aaa.server.key_encrypted
+        value: true
+      - id: asa_aaa_host_timeout
+        regex: '^timeout\s+(?P<value>\d+)\s*$'
+        path: aaa.server.timeout
+        value: int
+      - id: asa_aaa_host_retry
+        regex: '^retry-interval\s+(?P<value>\d+)\s*$'
+        path: aaa.server.timeout
+        value: int
+    child_defaults:
+      - path: aaa.server.key_encrypted
+        value: false
+        reason: >
+          a TACACS+ or RADIUS host with no `key` line exchanges credentials with no
+          shared secret, which is the IA-5(1) finding — and it has to be per host,
+          because one keyless server among three keyed ones is the whole of the gap
+
+  # ── Named objects and object groups ───────────────────────────────────
+
+  - id: asa_object
+    anchor_path: firewall.policy.name
+    regex: '^object(?:-group)?\s+(?:network|service|protocol|icmp-type|user)\s+(?P<value>\S+)'
+    anchor_value: str
+    mode: indent
+    note: >
+      One block for both `object` and `object-group` across all five object types.
+      They differ only in which children are legal, and the compliance question —
+      what addresses and ports does this named thing resolve to — is identical for
+      all of them. Every ACE in the file refers to these by name, so an object that
+      quietly resolves to `any` makes a tight-looking ACL permissive.
+    children:
+      - id: asa_obj_host
+        regex: '^host\s+(?P<value>[\d.a-fA-F:]+)\s*$'
+        path: acl.entry.destination
+        value: str
+      - id: asa_obj_subnet
+        regex: '^subnet\s+(?P<value>[\d.]+\s+[\d.]+)\s*$'
+        path: acl.entry.source
+        value: str
+      - id: asa_obj_range
+        regex: '^range\s+(?P<value>[\d.]+\s+[\d.]+)\s*$'
+        path: acl.entry.source
+        value: str
+      - id: asa_obj_fqdn
+        regex: '^fqdn\s+(?:v4\s+|v6\s+)?(?P<value>\S+)\s*$'
+        path: acl.entry.destination
+        value: str
+      - id: asa_obj_service
+        regex: '^service\s+(?P<value>.+?)\s*$'
+        path: acl.entry.protocol
+        value: str
+      - id: asa_obj_port_object
+        regex: '^port-object\s+(?P<value>.+?)\s*$'
+        path: acl.entry.destination
+        value: str
+      - id: asa_obj_network_object
+        regex: '^network-object\s+(?P<value>.+?)\s*$'
+        path: acl.entry.source
+        value: str
+      - id: asa_obj_group_object
+        regex: '^group-object\s+(?P<value>\S+)\s*$'
+        path: acl.entry.source
+        value: str
+      - id: asa_obj_protocol_object
+        regex: '^protocol-object\s+(?P<value>\S+)\s*$'
+        path: acl.entry.protocol
+        value: str
+      - id: asa_obj_icmp_object
+        regex: '^icmp-object\s+(?P<value>\S+)\s*$'
+        path: acl.entry.protocol
+        value: str
+      - id: asa_obj_description
+        regex: '^description\s+(?P<value>.+?)\s*$'
+        path: acl.remark
+        value: str
+      - id: asa_obj_nat
+        regex: '^nat\s+\([^)]+\)\s+.+?\s*$'
+        path: firewall.nat.rule
+        value: line
+
+  # ── PKI ───────────────────────────────────────────────────────────────
+
+  - id: asa_crypto_ca_trustpoint
+    anchor_path: crypto.pki.trustpoint
+    regex: '^crypto ca trustpoint\s+(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: asa_tp_enrollment
+        regex: '^enrollment\s+(?P<value>.+?)\s*$'
+        path: crypto.pki.enrollment
+        value: str
+      - id: asa_tp_keypair
+        regex: '^keypair\s+(?P<value>\S+)\s*$'
+        path: crypto.key.type
+        value: str
+      - id: asa_tp_subject_name
+        regex: '^subject-name\s+(?P<value>.+?)\s*$'
+        path: crypto.pki.enrollment
+        value: str
+      - id: asa_tp_crl_configure
+        regex: '^crl configure\s*$'
+        path: crypto.pki.enrollment
+        value: const
+        literal: crl
+      - id: asa_tp_validation_usage
+        regex: '^validation-usage\s+(?P<value>.+?)\s*$'
+        path: crypto.pki.enrollment
+        value: str
+      - id: asa_tp_no_protocol
+        regex: '^no protocol\s+(?P<value>\S+)\s*$'
+        path: crypto.pki.enrollment
+        value: str
+      - id: asa_tp_revocation_check
+        regex: '^revocation-check\s+(?P<value>.+?)\s*$'
+        path: crypto.pki.enrollment
+        value: str
+
+# An ASA is deny-by-default in more places than an IOS device is, so several of
+# these are stronger than their IOS equivalents: an ASA with no `ssh` permit line
+# accepts no SSH at all, and one with no `http server enable` runs no ASDM listener.
+defaults:
+  mgmt.telnet.enabled:
+    value: false
+    reason: >
+      no `telnet <net> <mask> <zone>` line; an ASA with no telnet permit accepts no
+      telnet session at all, so this is a statement about the device rather than a
+      guess about the operator
+  mgmt.http.server_enabled:
+    value: false
+    reason: no `http server enable` line, so the ASDM HTTPS listener is not running
+  service.password_recovery:
+    value: true
+    reason: >
+      password recovery is on unless `no service password-recovery` is configured,
+      which makes physical console access a path to full control of the appliance
+  mgmt.login_banner:
+    value: false
+    reason: >
+      no `banner login` line, so nothing is presented before authentication — the
+      AC-8 consent-to-monitor finding
+  crypto.fips_mode:
+    value: false
+    reason: no `fips enable` line
+  logging.enable:
+    value: false
+    reason: >
+      no `logging enable` line; on an ASA that switches off *all* syslog generation
+      rather than merely the remote destination, so its absence is total
+  snmp.enabled:
+    value: false
+    reason: no `snmp-server host`, `snmp-server community` or `snmp-server user` line
+  time.ntp.authentication:
+    value: false
+    reason: no `ntp authenticate` line, so time is accepted from whoever answers first
+  ha.redundancy:
+    value: false
+    reason: >
+      no `failover` line, so the appliance is a single point of failure for every
+      flow that traverses it
+  crypto.ikev1.enabled:
+    value: false
+    reason: >
+      no `crypto ikev1 enable` line; IKEv1 is off until a zone is named, so the
+      absence is the compliant state rather than an unknown
+  firewall.policy.default_action:
+    value: deny
+    reason: >
+      an ASA denies traffic from a lower `security-level` to a higher one unless an
+      ACL permits it — platform behaviour, not an assumption about intent

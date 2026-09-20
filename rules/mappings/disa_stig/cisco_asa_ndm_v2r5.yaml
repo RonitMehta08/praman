@@ -1,0 +1,945 @@
+# DISA STIG — Cisco ASA NDM v2r5 — canonical mappings
+#
+# 44 of this STIG's 47 controls. As in every pack here, a rule is a *mapping*,
+# never a control: the title, discussion, check text and official remediation an
+# auditor reads all come from the catalog built from DISA's own XCCDF (catalog_id
+# below). A rule supplies only the canonical-model condition that decides the
+# control, plus the rationale for why that condition stands in for it.
+#
+# The seven conventions in rules/mappings/disa_stig/cisco_ios_router_ndm_v3r8.yaml
+# hold here unchanged, including the three that are specific to DISA content: no
+# `severity_override` (the publisher's CAT rating wins), no `remediation_ref` (the
+# catalog's fix_text is the remediation), and `on_missing: pass` only where DISA
+# itself words the test as the absence of a command.
+#
+# Two things about this STIG shape the pack and are worth stating once:
+#
+#   * **Seventeen controls resolve to the same two directives.** CASA-ND-000090
+#     through 000320, 000910 and 001200 through 001250 each name a different class
+#     of event that must be audited — account creation, account removal, logon
+#     attempts, privileged activity, concurrent logons — and DISA's check text for
+#     every one of them is `logging enable` plus `logging buffered informational`,
+#     with a per-control note explaining what the ASA records at that level ("The
+#     ASA will log all EXEC-mode commands"). The ASA has no per-event-class audit
+#     switch to read, so seventeen rules share one condition. They are kept as
+#     seventeen rules rather than collapsed into one because they are seventeen
+#     separate findings with seventeen separate CCIs, and an auditor tracing
+#     AC-02(04) must find a result for it rather than a cross-reference. Each
+#     rationale below names the event class it stands for.
+#
+#   * **The buffered severity is a floor, not a value.** `logging buffered
+#     informational` is DISA's example; `debugging` records strictly more, and the
+#     ASA accepts the numeric forms `6` and `7` for the same two levels. All four
+#     are accepted. Anything less verbose — notifications, warnings, errors and
+#     above — does not carry EXEC-mode command records at all, so it is a finding.
+#
+# Three controls fail on the shipped fixture, test_configs/multivendor/
+# asa_dmz_firewall.conf, and all three failures are correct rather than rule
+# defects:
+#
+#   * **V-239902** — the fixture is an Indian enterprise firewall carrying an
+#     enterprise consent banner. This STIG requires the Standard Mandatory *DoD*
+#     Notice and Consent Banner verbatim, which that device does not present. The
+#     control is a real finding against it and is reported as one.
+#   * **V-239912** — the fixture carries three local accounts (admin, netops,
+#     auditor). DISA requires exactly one, used only as the account of last resort
+#     when the authentication server is unreachable. Three local accounts on a
+#     TACACS+-authenticated device is precisely the condition the control exists to
+#     catch.
+#   * **V-239919** — the fixture sets `password-policy minimum-changes 4`; DISA
+#     requires eight. Left at four deliberately, because a pack whose fixture
+#     satisfies every control it maps cannot demonstrate that any of its rules can
+#     fail.
+#
+# The three unmapped controls are recorded in docs/GAPS.md with the reason. They
+# render as `notchecked` — an explicit "no automated check exists", never a pass.
+
+rules:
+
+  # ══ Session control and management-plane access ═════════════════════════
+
+  - id: stig-asa-ndm-v239896
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239896}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      `quota management-session` is the ASA's only global ceiling on concurrent
+      management sessions and the one directive the check names. DISA's own note
+      is what makes `on_missing: fail` correct rather than harsh: "The default is
+      5 sessions, which would not be shown in the configuration unless the show
+      run all command is used." A missing directive is therefore an unlimited-by
+      -policy device, not a device at five, and absence is the finding.
+
+      The comparison is `gt 0` rather than a presence check because `quota
+      management-session 0` is the ASA's way of writing no limit at all: a
+      configuration carrying that line satisfies a presence test while enforcing
+      exactly what the control prohibits.
+
+      Not verified: that the configured number matches the organization-defined
+      one, which is not in the configuration file.
+    condition:
+      type: fact_check
+      path: aaa.max_sessions
+      operator: gt
+      expected: 0
+      on_missing: fail
+
+  - id: stig-asa-ndm-v239901
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239901}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      On the ASA a management-plane source restriction is not an ACL bound to a
+      line but the `ssh <network> <mask> <interface>` and `http <network> <mask>
+      <interface>` statements themselves, which is the form DISA's example shows.
+
+      Two halves. SSH must be restricted, and the restriction must name specific
+      address space: `ssh 0.0.0.0 0.0.0.0 outside` is a configured restriction
+      that restricts nothing, so a presence test alone would pass the one device
+      this control exists to catch. The default quantifier is `all`, so *every*
+      recorded permit must name a real network.
+
+      The HTTPS half is conditional because it has to be. `http server enable`
+      turns on the ASDM listener, and a device that never turns it on has no
+      management plane to restrict there — asserting an HTTPS source list against
+      it would be a finding about a service that is off.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: mgmt.ssh.acl, must_be_present: true}
+        - type: fact_check
+          path: mgmt.ssh.acl
+          operator: regex_not_match
+          expected: '^0\.0\.0\.0\s+0\.0\.0\.0'
+          on_missing: fail
+        - type: any_of
+          conditions:
+            - {type: fact_check, path: mgmt.http.server_enabled, operator: eq, expected: false, on_missing: fail}
+            - type: all_of
+              conditions:
+                - {type: presence, path: mgmt.http.acl, must_be_present: true}
+                - type: fact_check
+                  path: mgmt.http.acl
+                  operator: regex_not_match
+                  expected: '^0\.0\.0\.0\s+0\.0\.0\.0'
+                  on_missing: fail
+
+  - id: stig-asa-ndm-v239902
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239902}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      A login banner existing is not the control; the control is the *Standard
+      Mandatory DoD* banner, which the check text reproduces in full as a series
+      of `banner login` lines. A device greeting administrators with its own
+      acceptable-use notice has a banner and fails this requirement, so the text
+      is matched as well as its presence — the same treatment the Cisco IOS NDM
+      pack gives CISC-ND-000160, and for the same reason.
+
+      'U.S. Government' is the anchor phrase. Matching all nine paragraphs would
+      fail every real device over a line break, a trailing space or a curly
+      apostrophe; matching one phrase that appears in no other banner text is the
+      strongest test that does not fail on whitespace. `quantifier: any` because
+      the ASA records the banner as one fact per `banner login` line.
+
+      Not verified: that the remaining paragraphs are present and unaltered. An
+      operator who pasted the first sentence and truncated the rest passes this
+      rule, which is why the report prints DISA's full banner from the catalog's
+      fix text for comparison rather than paraphrasing it.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.login_banner, operator: eq, expected: true, on_missing: fail}
+        - type: fact_check
+          path: mgmt.banner.text
+          operator: regex_match
+          expected: 'U\.S\. Government'
+          quantifier: any
+          case_sensitive: false
+          on_missing: fail
+
+  - id: stig-asa-ndm-v239911
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239911}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      CAT I, and the check names exactly one service unconditionally: "the
+      following features such as telnet should never be enabled, while other
+      features should only be enabled if required for operations". Telnet is the
+      half a configuration file can decide; whether a given inspection engine or
+      management protocol is "required for operations" is a site decision that no
+      parser can read.
+
+      HTTPS is deliberately *not* treated as a finding here, on the check's own
+      instruction: "Note: The command http server enables https and is required
+      for ASDM." A rule that flagged `http server enable` would contradict the
+      publisher's own text — and it is worth saying explicitly, because on the
+      Cisco IOS STIGs `ip http server` *is* a finding, so the obvious cross-vendor
+      generalisation is wrong here.
+
+      On the ASA telnet is off until a `telnet <net> <mask> <zone>` permit exists,
+      and the pack records that default, so this reads `eq false` rather than
+      testing for the absence of a line.
+
+      Not verified: the site's own list of unnecessary ports, protocols and
+      services, which is an organizational input rather than a device fact.
+    condition:
+      type: fact_check
+      path: mgmt.telnet.enabled
+      operator: eq
+      expected: false
+      on_missing: fail
+
+  - id: stig-asa-ndm-v239912
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239912}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      The control is a *count*, not a presence check, and that is the whole
+      difference: "only one local account to be used as the account of last
+      resort". A device with six local accounts has an account of last resort and
+      still fails, because five of them are standing local credentials that
+      bypass the authentication server every day rather than only when it is
+      unreachable.
+
+      DISA's Step 2 is the other half — the fallback must actually be wired up,
+      or the single local account is unreachable and the device locks its
+      administrators out when the server dies. Both console paths are required
+      because the check lists both: `aaa authentication serial console
+      RADIUS_GROUP LOCAL` and `aaa authentication ssh console RADIUS_GROUP
+      LOCAL`. The ASA pack files the first at line.console.login_auth and the
+      second at aaa.authentication_login.
+
+      Not verified: that the local account's privilege level is high enough to
+      troubleshoot the authentication server, which DISA words as a judgement
+      ("a privilege level that will enable the administrator to troubleshoot")
+      rather than a value.
+    condition:
+      type: all_of
+      conditions:
+        - {type: count, path: mgmt.local_user.name, operator: eq, expected: 1}
+        - {type: presence, path: aaa.authentication_login, must_be_present: true}
+        - {type: presence, path: line.console.login_auth, must_be_present: true}
+
+  - id: stig-asa-ndm-v239920
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239920}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      CAT I, and the check names three timeouts rather than one: "all network
+      connections associated with a device management have an idle timeout value
+      set to five minutes or less", with `http server idle-timeout 5`, `ssh
+      timeout 5` and `console timeout 5` in the example. All three are tested,
+      because a device that times out SSH and holds an ASDM session open forever
+      has not satisfied the control.
+
+      Every threshold is 300, not 5. The ASA states all three timeouts in
+      minutes and the pack normalises them to seconds at ingestion, which is what
+      lets one canonical rule shape serve a platform that counts in minutes and
+      one that counts in seconds.
+
+      Each timeout is bounded on both sides. `lte 300` is the control; `gt 0` is
+      there because zero does not mean "immediately" on the ASA, it means never
+      time out — the exact opposite of the requirement, and a value that passes a
+      one-sided ceiling test.
+
+      The HTTPS branch is conditional for the same reason as CASA-ND-000140: an
+      idle timeout for a listener that is switched off is not a finding.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.ssh.timeout, operator: lte, expected: 300, on_missing: fail}
+        - {type: fact_check, path: mgmt.ssh.timeout, operator: gt, expected: 0, on_missing: fail}
+        - {type: fact_check, path: line.console.exec_timeout, operator: lte, expected: 300, on_missing: fail}
+        - {type: fact_check, path: line.console.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+        - type: any_of
+          conditions:
+            - {type: fact_check, path: mgmt.http.server_enabled, operator: eq, expected: false, on_missing: fail}
+            - type: all_of
+              conditions:
+                - {type: fact_check, path: mgmt.http.idle_timeout, operator: lte, expected: 300, on_missing: fail}
+                - {type: fact_check, path: mgmt.http.idle_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  # ══ Password policy ═════════════════════════════════════════════════════
+  #
+  # The ASA states its policy as one `password-policy minimum-<class>` directive
+  # per character class, and DISA rates each class as its own control — 000520
+  # through 000570. The pack therefore files the whole directive line at
+  # mgmt.password_policy.complexity rather than the bare number, because four
+  # integers at one path cannot tell an auditor which class a device is missing.
+  # Each rule below matches its own directive and requires a non-zero count:
+  # `password-policy minimum-uppercase 0` is how the ASA switches a class off.
+
+  - id: stig-asa-ndm-v239914
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239914}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      A single directive, quoted verbatim in the check: `password-policy
+      minimum-length 15`. `gte` rather than `eq` because a device demanding
+      twenty characters satisfies a fifteen-character floor, and reporting a
+      finding against it would be a rule defect rather than a device finding.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.min_length
+      operator: gte
+      expected: 15
+      on_missing: fail
+
+  - id: stig-asa-ndm-v239915
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239915}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      At least one uppercase character, which the check states as
+      `password-policy minimum-uppercase 1`. The regex anchors on the class name
+      so this control cannot be satisfied by a device that enforces lowercase and
+      numerics but no uppercase, and requires a leading non-zero digit so
+      `minimum-uppercase 0` reads as the disabled class it is. `quantifier: any`
+      because the four class directives arrive as four facts at one path and only
+      one of them is this control's evidence.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: regex_match
+      expected: '^password-policy minimum-uppercase\s+[1-9]'
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-asa-ndm-v239916
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239916}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      At least one lowercase character. Same shape as CASA-ND-000520, anchored on
+      `minimum-lowercase` — see the section note above for why the recorded fact
+      is the directive line rather than its number.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: regex_match
+      expected: '^password-policy minimum-lowercase\s+[1-9]'
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-asa-ndm-v239917
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239917}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      At least one numeric character. Same shape as CASA-ND-000520, anchored on
+      `minimum-numeric`.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: regex_match
+      expected: '^password-policy minimum-numeric\s+[1-9]'
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-asa-ndm-v239918
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239918}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      At least one special character. Same shape as CASA-ND-000520, anchored on
+      `minimum-special`.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: regex_match
+      expected: '^password-policy minimum-special\s+[1-9]'
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-asa-ndm-v239919
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239919}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      `password-policy minimum-changes 8` — how many character positions must
+      differ when a password is changed, which is what stops an administrator
+      rotating Summer2025! to Summer2026!. The ASA files this under
+      mgmt.password_policy.history because the directive is what the platform
+      offers in place of a remembered-password list: it constrains the new
+      password against the old one rather than against a stored history.
+
+      `gte` because a device demanding twelve changed positions satisfies a floor
+      of eight.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.history
+      operator: gte
+      expected: 8
+      on_missing: fail
+
+  # ══ Cryptography: SSH, SNMP and NTP ═════════════════════════════════════
+
+  - id: stig-asa-ndm-v239913
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239913}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Four directives, all four named in the check's two steps: `fips enable`,
+      `ssh version 2`, `ssh cipher encryption fips` and a Diffie-Hellman Group 14
+      key exchange. Replay resistance is not a switch on the ASA; it is the
+      property of that cipher and key-exchange set, which is why the check tests
+      the set rather than a feature.
+
+      The key-exchange leaf is written as *not Group 1* rather than as equality
+      with DISA's `dh-group14-sha1`, because a device configured with
+      `dh-group14-sha256` — a stronger exchange than the example, and what the
+      shipped fixture carries — would be reported as a finding by an equality
+      test. Rejecting the Group 1 exchange is what DISA's Group 14 requirement is
+      there to accomplish.
+
+      `ssh version 2` is tested even though DISA notes "The ASA only supports
+      SSHv2", because the directive is in the example and a configuration that
+      records version 1 is evidence about the device that should not be silently
+      discarded.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: crypto.fips_mode, operator: eq, expected: true, on_missing: fail}
+        - {type: fact_check, path: mgmt.ssh.version, operator: gte, expected: 2, on_missing: fail}
+        - {type: fact_check, path: mgmt.ssh.cipher, operator: eq, expected: fips, on_missing: fail}
+        - type: fact_check
+          path: mgmt.ssh.kex
+          operator: regex_not_match
+          expected: '^dh-group1-'
+          on_missing: fail
+
+  - id: stig-asa-ndm-v239930
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239930}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      CAT I. This is the one control in the family whose check text carries *two*
+      examples — an SSH example identical to CASA-ND-000470's, and an SNMP
+      example (`snmp-server group NETOPS v3 auth`, `... encrypted auth sha ...`).
+      Integrity protection for remote maintenance covers both channels, so both
+      are tested here, which is what distinguishes this rule from the two that
+      share its SSH half.
+
+      The SNMP half is gated on SNMP being in use. An ASA with no `snmp-server`
+      configuration has no SNMP maintenance channel whose integrity could be
+      unprotected, and the pack records that default — so the gate is a fact
+      about the device rather than an assumption about it.
+
+      Not verified: `ssh cipher integrity`, which sets the SSH MAC suite
+      separately from the cipher suite. DISA's example does not name it, and
+      asserting a directive the publisher did not ask for would turn a rule into
+      a control.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: crypto.fips_mode, operator: eq, expected: true, on_missing: fail}
+        - {type: fact_check, path: mgmt.ssh.version, operator: gte, expected: 2, on_missing: fail}
+        - {type: fact_check, path: mgmt.ssh.cipher, operator: eq, expected: fips, on_missing: fail}
+        - type: fact_check
+          path: mgmt.ssh.kex
+          operator: regex_not_match
+          expected: '^dh-group1-'
+          on_missing: fail
+        - type: any_of
+          conditions:
+            - {type: fact_check, path: snmp.enabled, operator: eq, expected: false, on_missing: fail}
+            - type: all_of
+              conditions:
+                - {type: fact_check, path: snmp.group_security, operator: in, expected: [auth, priv], on_missing: fail}
+                - type: fact_check
+                  path: snmp.v3_auth
+                  operator: regex_match
+                  expected: '^sha'
+                  on_missing: fail
+
+  - id: stig-asa-ndm-v239931
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239931}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      CAT I, and confidentiality rather than integrity — but DISA's check text for
+      it names the same four directives as CASA-ND-000470 and CASA-ND-001140's
+      SSH half: `fips enable`, `ssh version 2`, `ssh cipher encryption fips`, and
+      a Group 14 key exchange. The condition is deliberately the same as
+      CASA-ND-000470's rather than cross-referenced, because these are three
+      separate findings with three separate CCIs (IA-02(08) and MA-04(06)), and a
+      reviewer looking up MA-04(06) must find a result rather than a pointer.
+
+      The temptation is to make this rule stricter than the other two so it looks
+      like it earns its place. That would be a rule inventing a control: DISA
+      decided what evidence decides confidentiality here, and it is this set.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: crypto.fips_mode, operator: eq, expected: true, on_missing: fail}
+        - {type: fact_check, path: mgmt.ssh.version, operator: gte, expected: 2, on_missing: fail}
+        - {type: fact_check, path: mgmt.ssh.cipher, operator: eq, expected: fips, on_missing: fail}
+        - type: fact_check
+          path: mgmt.ssh.kex
+          operator: regex_not_match
+          expected: '^dh-group1-'
+          on_missing: fail
+
+  - id: stig-asa-ndm-v239927
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239927}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      SNMP messages authenticated with a FIPS-validated HMAC, which on the ASA is
+      two directives working together: a group at `v3 auth` or `v3 priv`
+      security level, and a user whose `auth` keyword names a SHA algorithm. Both
+      are required — a v3 user with a SHA key attached to a `v3 noauth` group
+      authenticates nothing.
+
+      `priv` satisfies the group half as well as `auth`, because the ASA's
+      security levels are cumulative: `priv` authenticates *and* encrypts. A rule
+      accepting only `auth` would report a finding against the more secure
+      configuration.
+
+      The algorithm test is `^sha` rather than equality with DISA's `sha`, because
+      the ASA also offers sha224 through sha512 and the shipped fixture uses
+      sha256. It rejects md5, which is the substitution this control exists to
+      prevent.
+
+      Gated on SNMP being configured at all: a device with no SNMP has no SNMP
+      messages to authenticate, and the pack records that default rather than
+      inferring it.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: snmp.enabled, operator: eq, expected: false, on_missing: fail}
+        - type: all_of
+          conditions:
+            - {type: fact_check, path: snmp.group_security, operator: in, expected: [auth, priv], on_missing: fail}
+            - type: fact_check
+              path: snmp.v3_auth
+              operator: regex_match
+              expected: '^sha'
+              on_missing: fail
+
+  - id: stig-asa-ndm-v239928
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239928}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Encryption, where CASA-ND-001050 asked for authentication: DISA's example
+      here is the same as that control's with `priv aes xxxxxxxxxxxx` appended to
+      the user line, and the group at `v3 priv` rather than `v3 auth`. So this
+      rule adds two leaves to that one — the group must be at the privacy level,
+      and the user's `priv` keyword must name AES.
+
+      The pack had to be fixed before this rule could exist. `asa_snmp_user`
+      previously claimed every well-formed v3 user line and emitted no privacy
+      fact at all, so a device carrying `auth sha256 ... priv aes 256` was
+      indistinguishable from one carrying auth alone and this control had no
+      evidence to read. The `priv` capture group is optional in the pattern and
+      required here, which is exactly the distinction between the two controls.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: snmp.enabled, operator: eq, expected: false, on_missing: fail}
+        - type: all_of
+          conditions:
+            - {type: fact_check, path: snmp.group_security, operator: eq, expected: priv, on_missing: fail}
+            - type: fact_check
+              path: snmp.v3_auth
+              operator: regex_match
+              expected: '^sha'
+              on_missing: fail
+            - type: fact_check
+              path: snmp.v3_priv
+              operator: regex_match
+              expected: '^aes'
+              on_missing: fail
+
+  - id: stig-asa-ndm-v239929
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239929}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Three directives from the check's example, and all three are load-bearing:
+      `ntp authenticate` switches authentication on, `ntp trusted-key 1` says
+      which key is accepted, and `ntp authentication-key 1 sha256` says what
+      algorithm protects it. A device with the first two and an md5 key
+      authenticates its time source with a MAC this control names as
+      non-compliant, so the algorithm is tested rather than assumed.
+
+      The pack had to be fixed before this rule could exist: `time.ntp.key` held
+      the key *number* on the ASA and the *algorithm* on Cisco IOS, so the one
+      path a portable rule would read answered with an integer on one platform
+      and with a name on the other. The number now lives at time.ntp.key_id.
+
+      `^sha` rather than equality with sha256, because the FIPS-compliant family
+      is what the control asks for and a device on sha512 satisfies it.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: time.ntp.authentication, operator: eq, expected: true, on_missing: fail}
+        - {type: presence, path: time.ntp.trusted_keys, must_be_present: true}
+        - type: fact_check
+          path: time.ntp.key
+          operator: regex_match
+          expected: '^sha'
+          on_missing: fail
+
+  - id: stig-asa-ndm-v239942
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239942}
+    applies_to:
+      vendors: [cisco_asa]
+      os_families: [asa]
+      requires_paths: [crypto.pki.trustpoint]
+    mapping_rationale: >
+      The check opens with its own not-applicable clause — "If PKI certificates
+      are not implemented on the ASA, this requirement is not applicable" — so
+      the applicability gate here is the publisher's, not an inference: no
+      trustpoint, no result, reported as `notapplicable` rather than as a pass.
+
+      What remains decidable from a configuration is the enrollment mode. `crypto
+      ca trustpoint ... enrollment self` produces a self-signed certificate,
+      which is definitively not obtained from a DoD or DoD-approved service
+      provider; `enrollment terminal` and `enrollment url` both name an external
+      authority. So the rule tests that the trustpoint does not issue its own
+      certificates.
+
+      Not verified: that the external CA is DoD or DoD-approved. DISA's Step 2 is
+      `show crypto ca certificates` and compares the issuer's CN, OU and O
+      against the approved list — none of which appears in a configuration file.
+      The report says so rather than implying the CA was checked.
+    condition:
+      type: fact_check
+      path: crypto.pki.enrollment
+      operator: regex_not_match
+      expected: '^self\b'
+      case_sensitive: false
+      on_missing: fail
+
+  # ══ Authentication servers ══════════════════════════════════════════════
+
+  - id: stig-asa-ndm-v239940
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239940}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      CAT I, and a count: "at least two authentication servers". One server is a
+      single point of failure whose loss forces every administrator onto the local
+      account of last resort, which is why DISA rates this as high rather than as
+      a resilience nicety.
+
+      DISA's Step 1 is the other half — the servers must actually be referenced
+      for login, for both in-band and console access, which the check shows as
+      `aaa authentication serial console RADIUS_GROUP LOCAL` and `aaa
+      authentication ssh console RADIUS_GROUP LOCAL`. Two defined hosts that no
+      authentication statement points at authenticate nobody.
+
+      Not verified: that the two hosts are distinct servers rather than two
+      addresses on one machine, which is not something a configuration can say.
+    condition:
+      type: all_of
+      conditions:
+        - {type: count, path: aaa.server.host, operator: gte, expected: 2}
+        - {type: presence, path: aaa.authentication_login, must_be_present: true}
+        - {type: presence, path: line.console.login_auth, must_be_present: true}
+
+  # ══ Audit generation ════════════════════════════════════════════════════
+  #
+  # The seventeen controls in this section and the two timestamp controls below
+  # share their evidence; see the header for why they are still seventeen rules.
+  # The shared condition is `logging enable` plus a buffered severity of
+  # informational or more verbose, which is what DISA's check text names for each
+  # of them.
+
+  - id: stig-asa-ndm-v239897
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239897}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Account creation (AC-02(04)). The ASA has no account-lifecycle audit
+      switch: DISA's evidence that account creation is audited is that EXEC-mode
+      commands are logged at informational, because `username ... password ...`
+      is an EXEC-mode command. So the condition is the shared audit pair.
+    condition: &audit_pair
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, on_missing: fail}
+        - type: fact_check
+          path: logging.buffered
+          operator: in
+          expected: [informational, debugging, "6", "7"]
+          on_missing: fail
+
+  - id: stig-asa-ndm-v239898
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239898}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Account modification (AC-02(04)). Same evidence as account creation: a
+      changed `username` line is an EXEC-mode command and is recorded with the
+      name of the administrator who entered it.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239899
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239899}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Account disabling (AC-02(04)). Same evidence; the ASA disables an account
+      by an EXEC-mode command like any other configuration change.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239900
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239900}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Account removal (AC-02(04)). Same evidence: `no username ...` is an
+      EXEC-mode command and is logged with the administrator's name.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239903
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239903}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Non-repudiation (AU-10) — protecting against a user falsely denying having
+      performed an action. DISA's note is what makes the shared audit pair
+      sufficient here: "The ASA will log all EXEC-mode commands that include the
+      name of the user. The ASA also logs the name of the user entering the
+      enable command." The identity in the record is the whole control.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239904
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239904}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Successful and unsuccessful attempts to access the audit log itself
+      (AU-12). Reading or clearing the log is an EXEC-mode command, so it is
+      covered by the same evidence.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239905
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239905}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      What type of event occurred (AU-03). The ASA's message ID and severity are
+      part of every record, so this control is decided by whether records are
+      produced at all and at a severity that includes command execution.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239907
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239907}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Where the event occurred (AU-03). The device identity in the record is what
+      answers this, and it is present whenever records are produced.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239908
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239908}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      The source of the event (AU-03). The ASA records the originating address
+      and the administrator's name in the same message, so the shared audit pair
+      is the evidence DISA cites.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239909
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239909}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      The outcome of the event (AU-03) — whether the command succeeded. Recorded
+      in the same message as the command, so the same evidence decides it.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239910
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239910}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Full-text recording of privileged commands (AU-03(01)), which is the
+      strongest form of the audit family: not that a command ran but what it
+      said. DISA's note states the platform behaviour directly — "The ASA will
+      log full-text recording of privileged commands" — so the pair of directives
+      that turns logging on is the whole check.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239921
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239921}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Execution of privileged functions (AC-06(09)). DISA's check adds "The
+      configuration example below will log all configuration changes", which on
+      the ASA is the same informational-level EXEC-mode logging.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239933
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239933}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Attempts to modify security objects (AU-12). Modifying an ACL, an object
+      group or a policy map is an EXEC-mode command; same evidence.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239934
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239934}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Attempts to delete security objects (AU-12). Same evidence as modification:
+      `no access-list ...` is logged in full at informational.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239935
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239935}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Successful and unsuccessful logon attempts (AU-12). DISA's note for the
+      neighbouring control confirms the platform records both, and the directive
+      pair that produces the records is the same.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239936
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239936}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Privileged activities and other system-level access (AU-12). Same evidence;
+      the `enable` command is recorded with the name of the administrator who
+      entered it.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239938
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239938}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Concurrent logons from different workstations (AU-12). The ASA records each
+      session's source address as it is established, so a reviewer can see two
+      live sessions for one account; the evidence that the records exist is the
+      shared audit pair.
+    condition: *audit_pair
+
+  - id: stig-asa-ndm-v239906
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239906}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      When the event occurred (AU-03), and the only control in the audit family
+      whose check text is a single different directive: "Verify that the ASA is
+      configured to include the date and time on all log records ... logging
+      timestamp. If time stamp is not configured, this is a finding." The ASA
+      omits the timestamp by default, which is why this is a separate control
+      from the ones above rather than a property of them.
+    condition:
+      type: fact_check
+      path: logging.timestamps
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: stig-asa-ndm-v239925
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239925}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Time stamps at one-second granularity (AU-08), whose check text is the same
+      single directive as CASA-ND-000270: `logging timestamp`. The two are
+      separate findings against separate CCIs and both are reported.
+
+      Not verified: the granularity itself. The ASA's timestamp format is fixed
+      by the platform rather than configured, so a configuration file cannot show
+      whether it meets one second — the directive's presence is the whole of what
+      DISA asks a reviewer to check.
+    condition:
+      type: fact_check
+      path: logging.timestamps
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: stig-asa-ndm-v239937
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239937}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Starting and ending time for administrator access (AU-12), and the one
+      control whose check text asks for all three directives together: `logging
+      enable`, `logging timestamp`, `logging buffered informational`. The
+      timestamp is not optional here — a record of a logon with no time in it
+      cannot establish when the session started, which is the control.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, on_missing: fail}
+        - {type: fact_check, path: logging.timestamps, operator: eq, expected: true, on_missing: fail}
+        - type: fact_check
+          path: logging.buffered
+          operator: in
+          expected: [informational, debugging, "6", "7"]
+          on_missing: fail
+
+  # ══ Audit transport and retention ═══════════════════════════════════════
+
+  - id: stig-asa-ndm-v239923
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239923}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      A real-time alert of audit failure events, which on the ASA is `logging
+      trap <severity>` plus a `logging host` to send the trap to. Both halves are
+      required: a trap severity with no destination alerts nobody.
+
+      The accepted severity set comes from DISA's own note — "The parameter
+      critical can replaced with a lesser severity (i.e., error, warning, notice,
+      informational)" — expanded to the keywords the ASA's CLI actually uses
+      (`errors`, `warnings`, `notifications`) alongside DISA's singular spellings,
+      plus `debugging`, which is strictly more verbose than informational. A
+      device at `alerts` or `emergencies` is a finding: those levels are *more*
+      severe than critical, so the audit-failure messages this control is about
+      never leave the device.
+
+      Not verified: the alternative DISA allows in the same note — "A logging list
+      can be used as an alternative to the severity level." A named list's
+      contents are a separate stanza the pack does not model, so a device using
+      one reports a finding it may not deserve. Recorded in docs/GAPS.md rather
+      than papered over by loosening the rule.
+    condition:
+      type: all_of
+      conditions:
+        - type: fact_check
+          path: logging.trap_level
+          operator: in
+          expected: [critical, errors, error, warnings, warning, notifications, notice,
+                     informational, debugging]
+          on_missing: fail
+        - {type: count, path: logging.remote_syslog, operator: gte, expected: 1}
+
+  - id: stig-asa-ndm-v239943
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239943}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      CAT I, and a count of destinations: "at least two syslog servers". One
+      collector means the audit trail is lost whenever that host is down or
+      compromised, which is why this is high rather than medium.
+
+      This control is why a pattern defect had to be fixed before the pack could
+      be written. `logging flow-export-syslogs enable` — a feature switch, not a
+      destination — was landing at logging.remote_syslog, so an ASA carrying that
+      toggle and a single collector counted two and passed a CAT I requirement it
+      failed. The toggle is no longer recorded at all rather than recorded in the
+      wrong place.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 2}
+
+  # ══ Time synchronisation ════════════════════════════════════════════════
+
+  - id: stig-asa-ndm-v239924
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239924}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      Primary *and* secondary time sources, which the check shows as two `ntp
+      server` lines — hence a count of two rather than a presence check. An audit
+      trail is only correlatable across devices if their clocks agree, and a
+      single time source that drifts takes the whole correlation with it.
+
+      Not verified: that the servers are authoritative, or that they are the ones
+      the organization designated. DISA's note about Firepower chassis hardware —
+      where NTP is configured in FXOS and never appears in the ASA CLI — is a
+      case this rule cannot see either, and it is recorded in docs/GAPS.md.
+    condition: {type: count, path: time.ntp.server, operator: gte, expected: 2}
+
+  # ══ Denial-of-service protection ════════════════════════════════════════
+
+  - id: stig-asa-ndm-v239932
+    catalog: {catalog_id: disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5, control_id: V-239932}
+    applies_to: {vendors: [cisco_asa], os_families: [asa]}
+    mapping_rationale: >
+      One directive: `threat-detection basic-threat`, which turns on the ASA's
+      rate-based detection of scanning, connection-limit and ACL-drop floods.
+
+      The pack files it at firewall.ids_signature, where the `inspect` engines
+      also land — but it is the only thing that writes a *boolean* there, the
+      engines record their own names. So `eq true` with `quantifier: any` reads
+      the basic-threat switch specifically and is not satisfied by a device that
+      merely inspects DNS.
+
+      Not verified: the not-applicable case DISA opens the check with — "When
+      operating the ASA in multi-context mode with a separate IDPS, threat
+      detection cannot be enabled, and this check is Not Applicable." Neither
+      multi-context mode nor the presence of an external IDPS is visible in a
+      single context's configuration, so a device in that architecture reports a
+      finding a reviewer must waive. Recorded in docs/GAPS.md.
+    condition:
+      type: fact_check
+      path: firewall.ids_signature
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail

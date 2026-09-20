@@ -1,0 +1,775 @@
+# DISA STIG — Fortinet FortiGate Firewall NDM v1r5 — canonical mappings
+#
+# 35 of this STIG's 60 controls. As in every pack here, a rule is a *mapping*,
+# never a control: the title, discussion, check text and official remediation an
+# auditor reads all come from the catalog built from DISA's own XCCDF (catalog_id
+# below). A rule supplies only the canonical-model condition that decides the
+# control, plus the rationale for why that condition stands in for it.
+#
+# The conventions in rules/mappings/disa_stig/cisco_ios_router_ndm_v3r8.yaml hold
+# here unchanged, including the three specific to DISA content: no
+# `severity_override` (the publisher's CAT rating wins), no `remediation_ref` (the
+# catalog's fix_text is the remediation), and `on_missing: pass` only where DISA
+# itself words the test as the absence of a command.
+#
+# Three things about this STIG shape the pack:
+#
+#   * **Eleven controls resolve to one pair of directives.** FGFW-ND-000005
+#     through 000090 each name a different class of event that must be audited —
+#     account creation, account modification, account removal, privileged
+#     functions, logon attempts, concurrent logons — and DISA's check text for
+#     every one of them is the same `show full-configuration log eventfilter`
+#     with the same expected output, `set event enable` and `set system enable`.
+#     FortiOS has no per-event-class audit switch below that granularity, so
+#     eleven rules share one condition. They are kept as eleven rules rather than
+#     collapsed into one because they are eleven separate findings with eleven
+#     separate CCIs, and an auditor tracing AC-02(04) must find a result for it
+#     rather than a cross-reference. Each rationale names the event class it
+#     stands for. This is the same shape the ASA pack hit at CASA-ND-000090.
+#
+#   * **Two controls are FIPS-CC mode and nothing else.** FGFW-ND-000255 and
+#     000280 both reduce to `get system status | grep -i fips`. That command
+#     reports runtime state, but the state is set by `config system fips-cc` in
+#     the configuration, which the pack records at crypto.fips_mode, so the
+#     control is decidable from a config file alone.
+#
+#   * **DISA writes some thresholds as equalities that are really floors.** The
+#     lockout check says `admin-lockout-duration 900`; a device locked out for an
+#     hour is not less compliant than one locked out for fifteen minutes. Where
+#     the publisher's intent is unambiguously a minimum (lockout duration, NTP
+#     server count, password minimums) the rule compares `gte`, and says so. Where
+#     the intent is a ceiling (idle timeout, concurrent sessions) it compares
+#     `lte` paired with a `gt 0` guard, because FortiOS spells "no limit" as 0 and
+#     a bare ceiling would pass the least secure setting the platform offers.
+#
+# Six controls fail on the shipped fixture, test_configs/multivendor/
+# fortigate_perimeter.conf, and all six failures are correct rather than rule
+# defects. The fixture is a CIS-hardened Indian enterprise firewall, which is
+# exactly the device a DoD STIG should find wanting:
+#
+#   * **V-234168** — `admin-lockout-duration 300`. Five minutes is a defensible
+#     enterprise setting and CIS asks only that a lockout exist; DISA requires
+#     fifteen. A real difference between two frameworks over the same device,
+#     which is the thing this project exists to show.
+#   * **V-234169** — an enterprise consent banner, not the Standard Mandatory DoD
+#     Notice and Consent Banner.
+#   * **V-234198** — the only trustpoint is `Fortinet_Factory`, the shipped
+#     self-signed CA. Not a DoD-approved provider.
+#   * **V-234210, V-234215** — `set fips-cc-mode disable`. FIPS-CC mode changes
+#     the cipher suites the device will negotiate at all and is not something an
+#     enterprise turns on speculatively; DISA requires it.
+#   * **V-234219** — `set admin-concurrent enable`. DISA requires it disabled.
+#
+# The 25 unmapped controls are recorded in docs/GAPS.md §2.7 with the reason.
+# They render as `notchecked` — an explicit "no automated check exists", never a
+# pass.
+
+rules:
+
+  # ══ Audit record generation ════════════════════════════════════════════
+  #
+  # The eleven controls described in the header. `logging.enable` carries
+  # `set event enable`; `logging.config_changes` carries `set system enable`;
+  # `logging.login_success` carries `set user enable`. All three are booleans on
+  # every pack that emits them.
+
+  - id: stig-fgt-ndm-v234162
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234162}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Account creation. DISA's check does not look for an account-creation audit
+      switch, because FortiOS has none; it looks for the System category of event
+      logging, and states in its own words that "if the System category of Event
+      Logging is enabled, then account creation is audited". The condition is
+      therefore the publisher's own test verbatim rather than an interpretation
+      of it: `set event enable` and `set system enable`.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: all, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234163
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234163}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Account modification. This is the one control in the family whose check
+      text names a third parameter — `set user enable` alongside event and system
+      — because modifying an account is an action taken *by* an administrator
+      against an administrator, and the user category is what records the actor.
+      The extra leaf is not tidiness: a device with event and system enabled but
+      the user category off satisfies the other ten controls and fails this one,
+      which is precisely the distinction DISA drew by listing it.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.login_success, operator: eq, expected: true, quantifier: all, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234164
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234164}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Account removal — the deletion half of the pair V-234162 opens. Same two
+      directives, because FortiOS records creation and removal in the same System
+      event stream and offers no way to audit one without the other.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: all, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234167
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234167}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Execution of privileged functions. Whether the *content* of those records
+      is a full-text command transcript is a separate control, FGFW-ND-000100,
+      mapped below against `cli-audit-log`; this one asks only that the execution
+      be audited at all.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: all, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234171
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234171}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      All user activity. The check text is the GUI branch of the same test — Log
+      Settings set to "All", or to "Customize" with System activity checked —
+      which is what `set event enable` plus `set system enable` renders as in the
+      configuration file.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: all, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234172
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234172}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Successful and unsuccessful attempts to *modify* administrator privileges.
+      DISA rates the successful and unsuccessful cases as one control here, so
+      the condition does not attempt to separate them.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: all, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234173
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234173}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Successful and unsuccessful attempts to *delete* administrator privileges —
+      the counterpart to V-234172, and a separate CCI.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: all, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234174
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234174}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Successful and unsuccessful logon attempts. Worth naming what this control
+      does *not* get: FortiOS files failed administrative logons in the same
+      System event stream as successful ones, so there is no configuration fact
+      that distinguishes the two halves, and a device auditing only successes
+      would pass. The gap is in the platform's vocabulary, not the mapping.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: all, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234175
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234175}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Privileged activities and other system-level access.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: all, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234176
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234176}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Start and end times of administrator access — session boundaries, which
+      FortiOS emits as System events on login and logout.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: all, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234177
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234177}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Concurrent logons from different workstations. Whether concurrent logons
+      are *permitted* is FGFW-ND-000300, mapped below; this control asks only
+      that they be recorded when they happen, which is the same System event
+      stream again.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.enable, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: all, on_missing: fail}
+
+  # ══ Audit record content ═══════════════════════════════════════════════
+
+  - id: stig-fgt-ndm-v234178
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234178}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      A record that establishes the identity of the individual associated with an
+      event. FortiOS has a privacy switch, `user-anonymize`, that strips exactly
+      that field from every log line, and the check text is a single grep for it:
+      "If the log setting user-anonymize is set to enable, this is a finding."
+      The pack records the *complement* at logging.userinfo — user information is
+      present when anonymisation is off — so the rule reads `eq true`. Encoding
+      it that way rather than as a raw `user-anonymize` fact keeps the path
+      meaning the same thing it means on every other vendor, where the question
+      is asked positively.
+    condition:
+      type: fact_check
+      path: logging.userinfo
+      operator: eq
+      expected: true
+      quantifier: all
+      on_missing: fail
+
+  - id: stig-fgt-ndm-v234179
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234179}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Full-text recording of privileged commands. On FortiOS this is one global
+      directive, `cli-audit-log`, and it is the fact the pack files at
+      aaa.accounting_commands — the same path an IOS `aaa accounting commands 15`
+      lands on, because it answers the same question: is the text of what an
+      administrator typed written to the audit trail.
+
+      The leaf is a regex rather than a presence check because the path holds the
+      directive line: `set cli-audit-log disable` is ignore-listed in the pattern
+      pack precisely so the disabled form emits nothing, but a presence check
+      would still be satisfied by any other directive that lands here on a future
+      vendor.
+    condition:
+      type: fact_check
+      path: aaa.accounting_commands
+      operator: regex_match
+      expected: 'cli-audit-log\s+enable'
+      quantifier: any
+      case_sensitive: false
+      on_missing: fail
+
+  - id: stig-fgt-ndm-v234181
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234181}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Off-load audit records to a different system than the one being audited.
+      The check text enumerates seven possible destinations — three FortiAnalyzer
+      slots and four syslog slots — and asks that at least one carry a server.
+      The pack files every configured collector at logging.remote_syslog
+      regardless of which slot it came from, so the count is the check.
+
+      Not verified: that the collector is reachable, or that it is a different
+      system rather than a loopback address on the device itself.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 1}
+
+  # ══ Time ═══════════════════════════════════════════════════════════════
+
+  - id: stig-fgt-ndm-v234183
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234183}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      "Redundant authoritative time sources" is the whole control, and the check
+      text spells the redundancy out as two `set server` lines, a primary and a
+      secondary. One server is a single point of failure for every timestamp the
+      device produces, so the threshold is two rather than one — the same control
+      under CIS asks only for one, and the difference between the two findings on
+      one device is a genuine framework difference rather than a mapping choice.
+
+      Not verified: that the two servers are independent of each other, which the
+      configuration cannot show.
+    condition: {type: count, path: time.ntp.server, operator: gte, expected: 2}
+
+  # ══ Authentication and lockout ═════════════════════════════════════════
+
+  - id: stig-fgt-ndm-v234168
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234168}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Three consecutive invalid attempts, then a fifteen-minute lockout. Both
+      halves are required because either alone is defeated: unlimited retries
+      with a lockout still permits unlimited guessing, and a retry cap with no
+      lockout lets the attacker resume immediately.
+
+      DISA writes the duration as an equality, `set admin-lockout-duration 900`.
+      The rule compares `gte` because a longer lockout is strictly more
+      restrictive and failing a device for locking out an attacker for an hour
+      would be an inversion of the control's intent. The threshold comparison is
+      the reverse for attempts: `lte 3`, since fewer permitted attempts is
+      stricter.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.login_block, operator: gte, expected: 900, on_missing: fail}
+        - {type: fact_check, path: aaa.authentication_attempts, operator: lte, expected: 3, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234169
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234169}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      A login banner existing is not the control; the control is the *Standard
+      Mandatory DoD* banner, which the check text reproduces in full. A device
+      greeting administrators with its own acceptable-use notice has a banner and
+      fails this requirement, so the text is matched as well as its presence —
+      the same treatment the ASA pack gives CASA-ND-000210 and the IOS pack gives
+      CISC-ND-000160.
+
+      'U.S. Government' is the anchor phrase. Matching all nine paragraphs would
+      fail every real device over a line break, a trailing space or a curly
+      apostrophe; matching one phrase that appears in no other banner text is the
+      strongest test that does not fail on whitespace.
+
+      Not verified: that the remaining paragraphs are present and unaltered. An
+      operator who pasted the first sentence and truncated the rest passes this
+      rule, which is why the report prints DISA's full banner from the catalog's
+      fix text for comparison rather than paraphrasing it.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.login_banner, operator: eq, expected: true, on_missing: fail}
+        - type: fact_check
+          path: mgmt.banner.text
+          operator: regex_match
+          expected: 'U\.S\. Government'
+          quantifier: any
+          case_sensitive: false
+          on_missing: fail
+
+  # ══ Password policy ════════════════════════════════════════════════════
+  #
+  # The four complexity controls read mgmt.password_policy.complexity, which
+  # holds one fact per `set min-<class>` directive and records the directive line
+  # rather than its number. The pattern pack files it that way for exactly this
+  # STIG: DISA rates each character class as a separate control, and a bare
+  # integer cannot say which class it came from — filed as numbers the four facts
+  # read [2, 2, 2, 2] with nothing to distinguish them, and the only condition
+  # writable over them was a count, which reports a finding against whichever
+  # classes a partially configured device does enforce.
+
+  - id: stig-fgt-ndm-v234203
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234203}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Minimum 15-character password length. `gte` rather than `eq` because a
+      longer minimum is stricter; the GUI branch of the check also requires that
+      the password policy be scoped to admin accounts at all, which is the
+      presence leaf.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: mgmt.password_policy.name, must_be_present: true}
+        - {type: fact_check, path: mgmt.password_policy.min_length, operator: gte, expected: 15, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234204
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234204}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      At least one uppercase character. The regex matches the class name and
+      requires a trailing non-zero count, because `set min-upper-case-letter 0`
+      is how FortiOS switches the class off and would otherwise satisfy a check
+      that merely found the directive present.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: regex_match
+      expected: '^set min-upper-case-letter\s+[1-9]\d*$'
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-fgt-ndm-v234205
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234205}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      At least one lowercase character — `min-lower-case-letter`, same shape as
+      V-234204 and a separate CCI.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: regex_match
+      expected: '^set min-lower-case-letter\s+[1-9]\d*$'
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-fgt-ndm-v234206
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234206}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      At least one numeric character — `min-number`.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: regex_match
+      expected: '^set min-number\s+[1-9]\d*$'
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-fgt-ndm-v234207
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234207}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      At least one special character. FortiOS spells the class
+      `min-non-alphanumeric`, which is why the rule cannot be shared with the
+      other three vendors' "special character" controls even though the
+      requirement is identical.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: regex_match
+      expected: '^set min-non-alphanumeric\s+[1-9]\d*$'
+      quantifier: any
+      on_missing: fail
+
+  # ══ Cryptography ═══════════════════════════════════════════════════════
+
+  - id: stig-fgt-ndm-v234210
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234210}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      FIPS 140-2 approved algorithms for authentication to a cryptographic
+      module. The check reads `get system status`, which is runtime output, but
+      the state it reports is set by `config system fips-cc` in the configuration
+      and the pack records it at crypto.fips_mode as a boolean. `on_missing:
+      fail` is correct rather than harsh: FIPS-CC mode is off on a shipped
+      FortiGate and enabling it is a deliberate, disruptive act, so a
+      configuration that never mentions it is a device that is not in FIPS mode.
+    condition:
+      type: fact_check
+      path: crypto.fips_mode
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: stig-fgt-ndm-v234215
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234215}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Unique session identifiers from a FIPS-approved random number generator.
+      DISA's check text states the dependency outright — "Session IDs are
+      generated using the FIPS random generator if the device is in FIPS mode" —
+      and then runs the same `get system status | grep -i fips` as V-234210, so
+      the two controls share a condition. Kept separate because they are separate
+      findings against separate CCIs.
+    condition:
+      type: fact_check
+      path: crypto.fips_mode
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: stig-fgt-ndm-v234198
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234198}
+    applies_to:
+      vendors: [fortinet]
+      os_families: [fortios]
+      requires_paths: [crypto.pki.trustpoint]
+    mapping_rationale: >
+      DoD-approved Certificate Authorities. Only half of this control is
+      decidable from a configuration file, and the rule claims only that half:
+      whether a CA appears on the DoD's approved list is a question about an
+      external list, but the FortiGate's shipped self-signed authorities —
+      `Fortinet_Factory` and `Fortinet_CA` — are definitively not on it. The
+      condition is therefore stated negatively, as the absence of a factory
+      trustpoint, and passes any operator-installed CA without asserting that it
+      is approved.
+
+      requires_paths scopes the rule to devices that have a trustpoint at all; a
+      device with no PKI configured is not applicable, not compliant.
+
+      Not verified: that an operator-installed CA is DoD-approved.
+    condition:
+      type: fact_check
+      path: crypto.pki.trustpoint
+      operator: regex_not_match
+      expected: '(?i)^Fortinet_(Factory|CA)'
+      quantifier: all
+      on_missing: fail
+
+  - id: stig-fgt-ndm-v234200
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234200}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Replay-resistant authentication for network access to privileged accounts.
+      DISA's check is two greps: the administrative TLS versions must be 1.2 and
+      1.3, and `admin-ssh-v1` must be disabled — SSH protocol 1 has no replay
+      protection worth the name and TLS below 1.2 negotiates suites that have
+      none either.
+
+      The TLS half is written as "the offered set and the deprecated set are
+      disjoint" rather than as a pattern each element must match, because
+      mgmt.http.tls_version is one list-valued fact: offering 1.3 alongside 1.0
+      is not compliance, so absence of the weak versions is what has to be
+      asserted. The SSH half reads mgmt.ssh.version, where the pack records
+      `admin-ssh-v1 disable` as version 2 — FortiOS has no `ssh version` command,
+      it has one switch deciding whether the service also answers protocol 1,
+      which is the same assertion `ip ssh version 2` makes on IOS.
+    condition:
+      type: all_of
+      conditions:
+        - type: fact_check
+          path: mgmt.http.tls_version
+          operator: disjoint_from
+          expected: [tlsv1-0, tlsv1-1, sslv3, 'TLSv1.0', 'TLSv1.1', SSLv3]
+          case_sensitive: false
+          on_missing: fail
+        - {type: fact_check, path: mgmt.ssh.version, operator: eq, expected: 2, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234201
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234201}
+    applies_to:
+      vendors: [fortinet]
+      os_families: [fortios]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      SNMP messages authenticated with a FIPS-validated HMAC. The check names two
+      parameters per SNMPv3 user: `security-level` must be `auth` or `auth-priv`
+      — `noauth` sends unauthenticated messages — and `auth-proto` must be a SHA
+      variant, since MD5 is not FIPS-validated.
+
+      Both leaves are quantified `all` rather than `any`: one v3 user configured
+      `noauth` is a channel an attacker can forge messages on, and it is not
+      redeemed by a second user who is configured correctly.
+
+      requires_paths scopes the rule to devices running SNMP at all.
+    condition:
+      type: all_of
+      conditions:
+        - type: fact_check
+          path: snmp.group_security
+          operator: in
+          expected: [auth, auth-priv]
+          quantifier: all
+          case_sensitive: false
+          on_missing: fail
+        - type: fact_check
+          path: snmp.v3_auth
+          operator: regex_match
+          expected: '^sha'
+          quantifier: all
+          case_sensitive: false
+          on_missing: fail
+
+  # ══ Management-plane exposure ══════════════════════════════════════════
+
+  - id: stig-fgt-ndm-v234199
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234199}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Prohibit unnecessary and non-secure functions, ports, protocols and
+      services. The check text has two branches; this rule maps the second, the
+      one that reviews `show full-configuration system interface` for unnecessary
+      services, because that is the branch a configuration file can answer.
+
+      Telnet and HTTP are the two the platform still offers and DISA still
+      prohibits. The interface leaf is quantified `all` and uses `disjoint_from`
+      rather than a per-element regex because allowaccess is one list-valued fact
+      per interface: an interface offering `https ssh telnet` must fail, and a
+      condition testing elements individually would find `https` and pass.
+
+      Not verified: the first branch, which reviews firewall policy objects for
+      restricted services. That is a policy-object graph the canonical model does
+      not carry, and it is recorded in docs/GAPS.md §2.7 rather than claimed here.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.telnet.enabled, operator: eq, expected: false, on_missing: fail}
+        - type: fact_check
+          path: mgmt.access.protocols
+          operator: disjoint_from
+          expected: [telnet, http]
+          quantifier: all
+          case_sensitive: false
+          on_missing: fail
+
+  - id: stig-fgt-ndm-v234211
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234211}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      FIPS-validated HMAC protecting nonlocal maintenance traffic, which DISA
+      tests as the administrative access list on the management interface: HTTPS
+      and SSH selected, HTTP not.
+
+      The two leaves are quantified differently, and deliberately. The
+      *prohibition* is quantified `all` — no interface anywhere on the device may
+      offer HTTP for administration, which is both stronger than DISA asks and
+      obviously right. The *requirement* is quantified `any`, because DISA scopes
+      it to "the interface designated for device management traffic" and the
+      canonical model carries no interface-role input: on a firewall whose other
+      five interfaces sensibly offer nothing but `ping`, quantifying `all` would
+      report a finding against a correctly configured device. Naming which
+      interface is the management one is an organisational input the model does
+      not yet accept, recorded in docs/GAPS.md §2.4.
+    condition:
+      type: all_of
+      conditions:
+        - type: fact_check
+          path: mgmt.access.protocols
+          operator: superset_of
+          expected: [https, ssh]
+          quantifier: any
+          case_sensitive: false
+          on_missing: fail
+        - type: fact_check
+          path: mgmt.access.protocols
+          operator: disjoint_from
+          expected: [http]
+          quantifier: all
+          case_sensitive: false
+          on_missing: fail
+
+  - id: stig-fgt-ndm-v234212
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234212}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Cryptographic mechanisms protecting the confidentiality of remote
+      maintenance sessions. DISA's check text is word-for-word the same
+      allowaccess inspection as V-234211 — the two controls differ in the
+      requirement they cite, integrity versus confidentiality, not in the test —
+      so the two rules share a condition and the quantifier reasoning recorded on
+      V-234211 applies here unchanged. Kept separate because they are separate
+      findings against separate CCIs.
+    condition:
+      type: all_of
+      conditions:
+        - type: fact_check
+          path: mgmt.access.protocols
+          operator: superset_of
+          expected: [https, ssh]
+          quantifier: any
+          case_sensitive: false
+          on_missing: fail
+        - type: fact_check
+          path: mgmt.access.protocols
+          operator: disjoint_from
+          expected: [http]
+          quantifier: all
+          case_sensitive: false
+          on_missing: fail
+
+  # ══ Session management ═════════════════════════════════════════════════
+
+  - id: stig-fgt-ndm-v234213
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234213}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Terminate idle sessions after ten minutes. FortiOS states `admintimeout` in
+      minutes and the pack converts it to seconds at line.vty.exec_timeout, the
+      same path and the same units an IOS `exec-timeout` lands on, so the
+      threshold is written as 600.
+
+      `lte` rather than `eq`: DISA writes the check as `set admintimeout 10`, but
+      a device that disconnects an idle administrator after five minutes is not
+      less compliant than one that waits ten. The `gt 0` guard is load-bearing —
+      FortiOS accepts 0 for "never expire", and a bare ceiling would pass the
+      least secure setting the platform offers.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: line.vty.exec_timeout, operator: lte, expected: 600, on_missing: fail}
+        - {type: fact_check, path: line.vty.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234214
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234214}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      The publisher ships this control with the same title and the same check
+      text as V-234213 at a higher CAT rating, one framed as completing a
+      maintenance session and one as terminating an idle session. Both reduce to
+      `admintimeout`, so both get the same condition; the catalog's severity
+      carries the difference, which is one reason this pack sets no
+      severity_override.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: line.vty.exec_timeout, operator: lte, expected: 600, on_missing: fail}
+        - {type: fact_check, path: line.vty.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: stig-fgt-ndm-v234219
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234219}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Limit the number of logon and user sessions. DISA requires `admin-concurrent
+      disable`, which permits an administrator exactly one session at a time.
+
+      aaa.max_sessions is a ceiling on concurrent management sessions, in
+      sessions, and the ASA pack established that 0 at this path means no ceiling
+      — `quota management-session 0` is how the ASA writes unlimited. FortiOS
+      asks the same question with a switch, so the pack answers it in the same
+      units: `admin-concurrent disable` records 1, `enable` records 0. The
+      condition is then the ordinary one for a ceiling, `lte 1` guarded by
+      `gt 0`, and reads identically to the ASA's rule at the same path.
+
+      A device carrying `admin-concurrent enable` alongside an explicit
+      `admin-login-max 3` records both facts and fails on the quantifier, which is
+      the correct reading: this control requires the switch disabled irrespective
+      of what the maximum is set to.
+
+      Not verified: that an organisation-defined maximum has been chosen, which
+      DISA asks for in the same breath and no configuration file can answer.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.max_sessions, operator: lte, expected: 1, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: aaa.max_sessions, operator: gt, expected: 0, quantifier: all, on_missing: fail}
+
+  # ══ Configuration protection and log forwarding ════════════════════════
+
+  - id: stig-fgt-ndm-v234195
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234195}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Back up system-level information when changes occur. DISA's check asks an
+      operator to open the Revisions list in the GUI and confirm saved
+      configurations exist, which is device state rather than configuration. What
+      the configuration does carry is the directive that *causes* those revisions
+      to exist: `revision-backup-on-logout`, recorded at file.write_memory, is
+      FortiOS's "save a revision every time an administrator finishes making
+      changes" — the closest configuration-side statement of "when changes occur"
+      the platform has.
+
+      Not verified: that the saved revisions are actually present, recent, or
+      retrievable. A device that had the directive enabled this morning passes
+      this rule with an empty revision list.
+    condition:
+      type: fact_check
+      path: file.write_memory
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: stig-fgt-ndm-v234218
+    catalog: {catalog_id: disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5, control_id: V-234218}
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Send log data to a central log server so alerts reach administrators and
+      the ISSO. The check text is the same enumeration of FortiAnalyzer and
+      syslog slots as V-234181; the two controls differ in purpose — off-loading
+      for tamper-resistance versus forwarding for alerting — and DISA rates this
+      one CAT I, which is why the catalog's severity rather than an override
+      carries the difference.
+
+      Not verified: that alerts are actually routed to a person. That is an
+      alerting configuration on the collector, not on the FortiGate.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 1}

@@ -1,0 +1,140 @@
+# Benchmark applicability scope — PURE DATA, no code change needed (PS 26155 C5).
+#
+# Each entry maps a published benchmark to the canonical vendor / os_family
+# values it governs. The build script matches `match` as a case-insensitive
+# substring against the benchmark title (XCCDF <title>) or, for CIS, the
+# extracted JSON filename.
+#
+# An entry with empty `vendors` and `os_families` is vendor-neutral: it applies
+# to every device (correct for the DISA SRGs, NIST 800-53 and ISO 27001).
+#
+# To onboard a new vendor benchmark: add an entry here and re-run
+#   python scripts/build_catalog.py
+# No Python file is edited. Vendors must be values of canonical Vendor enum
+# (backend/canonical/models.py); os_families must be values of OsFamily.
+
+patterns:
+  # ── Cisco ─────────────────────────────────────────────────────────────
+  - match: "Cisco IOS XE Router"
+    vendors: [cisco_xe]
+    os_families: [iosxe]
+  - match: "Cisco IOS XE Switch"
+    vendors: [cisco_xe]
+    os_families: [iosxe]
+  - match: "Cisco IOS-XE"
+    vendors: [cisco_xe]
+    os_families: [iosxe]
+  - match: "Cisco IOS XR"
+    vendors: [cisco_xr]
+    os_families: [iosxr]
+  - match: "Cisco IOS Router"
+    vendors: [cisco_ios]
+    os_families: [ios]
+  - match: "Cisco IOS Switch"
+    vendors: [cisco_ios]
+    os_families: [ios]
+  - match: "cisco_ios_15"
+    vendors: [cisco_ios]
+    os_families: [ios]
+  - match: "cisco_ios_xe"
+    vendors: [cisco_xe]
+    os_families: [iosxe]
+  - match: "Cisco NX-OS"
+    vendors: [cisco_nxos]
+    os_families: [nxos]
+  - match: "cisco_nx_os"
+    vendors: [cisco_nxos]
+    os_families: [nxos]
+  - match: "Cisco ASA"
+    vendors: [cisco_asa]
+    os_families: [asa]
+  - match: "cisco_asa"
+    vendors: [cisco_asa]
+    os_families: [asa]
+
+  # ── Juniper ───────────────────────────────────────────────────────────
+  - match: "Juniper SRX"
+    vendors: [juniper_junos]
+    os_families: [junos]
+  - match: "Juniper EX"
+    vendors: [juniper_junos]
+    os_families: [junos]
+  - match: "Juniper Router"
+    vendors: [juniper_junos]
+    os_families: [junos]
+  - match: "juniper_os"
+    vendors: [juniper_junos]
+    os_families: [junos]
+
+  # ── Arista ────────────────────────────────────────────────────────────
+  - match: "Arista MLS EOS"
+    vendors: [arista_eos]
+    os_families: [eos]
+
+  # ── Fortinet ──────────────────────────────────────────────────────────
+  - match: "FortiGate"
+    vendors: [fortinet]
+    os_families: [fortios]
+  - match: "fortigate"
+    vendors: [fortinet]
+    os_families: [fortios]
+
+  # ── Palo Alto ─────────────────────────────────────────────────────────
+  - match: "Palo Alto"
+    vendors: [paloalto_panos]
+    os_families: [panos]
+  - match: "palo_alto"
+    vendors: [paloalto_panos]
+    os_families: [panos]
+
+# Benchmarks whose titles match none of the patterns above are ingested as
+# vendor-neutral.
+
+# Benchmarks to leave out of the catalog entirely. Two reasons appear here.
+#
+# 1. No parser for the platform. These are real published STIGs, but PRAMAN ships
+#    no config parser for them, so every control would be reported as
+#    `notchecked` forever and would only dilute the coverage metric.
+#
+# 2. Vendor-neutral SRGs. A Security Requirements Guide is the template DISA
+#    derives a product STIG from: "Router SRG SRG-NET-000019-RTR-000007" becomes
+#    "Cisco IOS Router V-215807". Auditing a Cisco device against both the
+#    product STIG and the SRG counts the same requirement twice and inflates the
+#    control total, so PRAMAN audits against the product STIG. The SRGs are the
+#    correct source for a platform with no product STIG; when one is added,
+#    remove the matching line here.
+#
+# Both categories are listed in docs/GAPS.md.
+exclude:
+  # 1. Unsupported platforms
+  - F5_BIG-IP
+  - F5 BIG-IP
+  - Akamai
+  - IBM DataPower
+  - Cisco ISE
+  - Cisco ACI
+  # 2. Vendor-neutral SRGs superseded by the product STIGs above
+  - Network Device Management Security Requirements Guide
+  - Router Security Requirements Guide
+  - Layer 2 Switch Security Requirements Guide
+
+# Which STIG packages to extract from the SRG-STIG Library zips. Substring match
+# against the inner zip filename; only network-device STIGs are extracted so the
+# catalog stays scoped to the problem statement.
+stig_library_include:
+  - Cisco_IOS_Router
+  - Cisco_IOS_Switch
+  - Cisco_IOS-XE_Router
+  - Cisco_IOS-XE_Switch
+  - Cisco_IOS-XR_Router
+  - Cisco_NX-OS_Switch
+  - Cisco_ASA
+  - Juniper_EX_Switches
+  - Juniper_Router
+  - Juniper_SRX_SG
+  - Arista_MLS_EOS
+  - FN_FortiGate_Firewall
+  - Palo_Alto_Networks
+  - U_NDM_
+  - U_Router_
+  - U_Layer_2_Switch_

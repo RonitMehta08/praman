@@ -1,0 +1,1072 @@
+# CIS Cisco IOS 15 Benchmark v4.1.1 — canonical mappings
+#
+# A rule in this file is a *mapping*, never a control. Every word an auditor
+# reads — title, discussion, check text, official remediation — comes from the
+# catalog built from the CIS document itself (catalog_id below). A rule supplies
+# only the canonical-model condition that decides the control, plus a rationale
+# for why that condition stands in for it.
+#
+# Four conventions hold throughout, and each exists because breaking it produced
+# a wrong verdict during authoring:
+#
+# 1. No `presence` condition on a path that carries a pack-level default.
+#    `presence` passes whenever *any* fact exists at the path, and a default is a
+#    fact. `service.password_encryption` has a default of false, so a presence
+#    check on it would pass every device ever parsed. Defaulted paths use
+#    `fact_check … eq true|false`.
+#
+# 2. Feature-conditional controls use `applies_to.requires_paths`, not
+#    `any_of[count … eq 0, …]`. A router not running EIGRP is *not applicable* to
+#    the EIGRP authentication control; expressing that as an `any_of` makes it
+#    come back PASS and credits the device for a control it was never subject to.
+#    requires_paths reports notapplicable, which the compliance ratio excludes.
+#
+# 3. Every timeout check is `all_of[lte N, gt 0]`. `no exec-timeout` is recorded
+#    as 0 seconds because that is what IOS means by it — never time out. A bare
+#    `lte 600` would pass the least secure setting the platform offers.
+#
+# 4. `severity_override` is set on every rule. CIS publishes no severity, so
+#    without it every finding would render as unknown severity and the severity
+#    distribution chart would be a single bar. The scale used here is: high =
+#    unauthenticated or cleartext administrative access, or a remote-management
+#    plane exposed; medium = loss of accountability, weakened evidence, or a
+#    hardening step whose absence needs another failure to be exploitable;
+#    low = defence in depth.
+#
+# Controls this file deliberately does not map are listed in docs/GAPS.md with
+# the reason. They render as `notchecked` — an explicit "no automated check
+# exists", never as a pass.
+
+rules:
+
+  # ══ 1.1 Local AAA rules ═════════════════════════════════════════════════
+
+  - id: cis-ios15-1.1.1
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.1.1}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The pack records aaa.new_model as false by default, so absence of
+      'aaa new-model' is a decided finding rather than missing evidence.
+    condition:
+      type: fact_check
+      path: aaa.new_model
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-ios15-1.1.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.1.2}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Any 'aaa authentication login' method list satisfies the control; the list
+      name and method are the operator's choice, so only its existence is checked.
+    condition:
+      type: presence
+      path: aaa.authentication_login
+      must_be_present: true
+
+  - id: cis-ios15-1.1.3
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.1.3}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'aaa authentication enable default' routes privileged-mode authentication
+      through AAA; its presence is the whole control.
+    condition:
+      type: presence
+      path: aaa.authentication_enable
+      must_be_present: true
+
+  - id: cis-ios15-1.1.4
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.1.4}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The control wants an AAA method list on the console, so the three
+      non-AAA forms IOS accepts are the failure set: 'none' (no login at all),
+      'line' (the line password) and 'local' (the local user database, which
+      bypasses the AAA method list). A missing login directive fails for the same
+      reason - the console then falls back to the line password.
+    condition:
+      type: for_each
+      block: line.console.id
+      on_no_blocks: fail
+      condition:
+        type: fact_check
+        path: line.console.login_auth
+        operator: not_in
+        expected: [none, line, local]
+        case_sensitive: false
+        on_missing: fail
+
+  - id: cis-ios15-1.1.5
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.1.5}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Same failure set as the console. on_no_blocks is notapplicable rather than
+      fail: a platform with no asynchronous TTY lines has no TTY login to secure,
+      and reporting a finding against an absent interface class is a false
+      positive.
+    condition:
+      type: for_each
+      block: line.tty.id
+      on_no_blocks: notapplicable
+      condition:
+        type: fact_check
+        path: line.tty.login_auth
+        operator: not_in
+        expected: [none, line, local]
+        case_sensitive: false
+        on_missing: fail
+
+  - id: cis-ios15-1.1.6
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.1.6}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      VTY is the remote administrative path, so an absent 'line vty' stanza fails
+      rather than reporting notapplicable: IOS still offers vty 0 4, and it is
+      then authenticated by the line password or not at all.
+    condition:
+      type: for_each
+      block: line.vty.id
+      on_no_blocks: fail
+      condition:
+        type: fact_check
+        path: line.vty.login_auth
+        operator: not_in
+        expected: [none, line, local]
+        case_sensitive: false
+        on_missing: fail
+
+  - id: cis-ios15-1.1.7
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.1.7}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The control names 'commands 15' specifically, so the privilege level is
+      matched rather than merely checking that command accounting exists. The
+      quantifier is 'any' because a device may account for several levels and
+      only the level-15 list satisfies this control.
+    condition:
+      type: fact_check
+      path: aaa.accounting_commands
+      operator: regex_match
+      expected: '^15\s'
+      quantifier: any
+      on_missing: fail
+
+  - id: cis-ios15-1.1.8
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.1.8}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: Presence of an 'aaa accounting connection' method list.
+    condition: {type: presence, path: aaa.accounting_connection, must_be_present: true}
+
+  - id: cis-ios15-1.1.9
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.1.9}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: Presence of an 'aaa accounting exec' method list.
+    condition: {type: presence, path: aaa.accounting_exec, must_be_present: true}
+
+  - id: cis-ios15-1.1.10
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.1.10}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: Presence of an 'aaa accounting network' method list.
+    condition: {type: presence, path: aaa.accounting_network, must_be_present: true}
+
+  - id: cis-ios15-1.1.11
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.1.11}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: Presence of an 'aaa accounting system' method list.
+    condition: {type: presence, path: aaa.accounting_system, must_be_present: true}
+
+  # ══ 1.2 Access rules ════════════════════════════════════════════════════
+
+  - id: cis-ios15-1.2.1
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.2.1}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Every local user that declares a privilege level must declare level 1. IOS
+      gives a 'username' with no privilege keyword level 1 already, so no fact is
+      emitted for those users and on_missing is notapplicable rather than pass:
+      the device is not credited for a check that had nothing to inspect, and it
+      is not faulted for a default that is already compliant.
+    condition:
+      type: fact_check
+      path: mgmt.local_user.privilege
+      operator: eq
+      expected: 1
+      quantifier: all
+      on_missing: notapplicable
+
+  - id: cis-ios15-1.2.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.2.2}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'transport input' is a set of permitted protocols, so subset_of is the
+      right operator: {ssh} passes, {telnet ssh} fails. 'none' is accepted
+      alongside ssh because a line that admits no inbound transport at all
+      exceeds the control's intent, and failing it would be a false positive. An
+      absent directive fails - the IOS default of 'all' permits telnet.
+    condition:
+      type: for_each
+      block: line.vty.id
+      on_no_blocks: fail
+      condition:
+        type: fact_check
+        path: line.vty.transport_input
+        operator: subset_of
+        expected: [ssh, none]
+        case_sensitive: false
+        on_missing: fail
+
+  - id: cis-ios15-1.2.3
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.2.3}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'no exec' on the AUX line is recorded as state 'disabled'. A device with no
+      AUX line has no AUX port to disable, hence notapplicable.
+    condition:
+      type: for_each
+      block: line.aux.id
+      on_no_blocks: notapplicable
+      condition:
+        type: fact_check
+        path: line.aux.state
+        operator: eq
+        expected: disabled
+        case_sensitive: false
+        on_missing: fail
+
+  - id: cis-ios15-1.2.5
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.2.5}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Each VTY line must carry an 'access-class'. Whether the referenced ACL
+      itself is correctly written is control 1.2.4, which this engine cannot yet
+      decide (see docs/GAPS.md) - so this rule reports only what it can see.
+    condition:
+      type: for_each
+      block: line.vty.id
+      on_no_blocks: fail
+      condition: {type: presence, path: line.vty.access_class, must_be_present: true}
+
+  - id: cis-ios15-1.2.6
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.2.6}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Ten minutes is 600 seconds. The 'gt 0' leaf is not redundant: IOS records
+      'no exec-timeout' and 'exec-timeout 0 0' as zero, meaning never time out,
+      which is the least secure setting available and would pass 'lte 600'.
+    condition:
+      type: for_each
+      block: line.aux.id
+      on_no_blocks: notapplicable
+      condition:
+        type: all_of
+        conditions:
+          - {type: fact_check, path: line.aux.exec_timeout, operator: lte, expected: 600, on_missing: fail}
+          - {type: fact_check, path: line.aux.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-ios15-1.2.7
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.2.7}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      As 1.2.6, on the console. An absent directive fails because the IOS console
+      default is a 10-minute timeout only on some platforms and 'never' on
+      others; the benchmark requires it to be stated.
+    condition:
+      type: for_each
+      block: line.console.id
+      on_no_blocks: fail
+      condition:
+        type: all_of
+        conditions:
+          - {type: fact_check, path: line.console.exec_timeout, operator: lte, expected: 600, on_missing: fail}
+          - {type: fact_check, path: line.console.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-ios15-1.2.8
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.2.8}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: As 1.2.6, on each asynchronous TTY line.
+    condition:
+      type: for_each
+      block: line.tty.id
+      on_no_blocks: notapplicable
+      condition:
+        type: all_of
+        conditions:
+          - {type: fact_check, path: line.tty.exec_timeout, operator: lte, expected: 600, on_missing: fail}
+          - {type: fact_check, path: line.tty.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-ios15-1.2.9
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.2.9}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: As 1.2.6, on each VTY line.
+    condition:
+      type: for_each
+      block: line.vty.id
+      on_no_blocks: fail
+      condition:
+        type: all_of
+        conditions:
+          - {type: fact_check, path: line.vty.exec_timeout, operator: lte, expected: 600, on_missing: fail}
+          - {type: fact_check, path: line.vty.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-ios15-1.2.10
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.2.10}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      CIS v4.1.1 ships 1.2.10 with the same title, check and remediation as
+      1.2.9, so it is decided by the same condition. Mapping it rather than
+      leaving it notchecked keeps the benchmark's own control list complete; the
+      duplication is the publisher's and is recorded in docs/GAPS.md so nobody
+      reads the two identical findings as two independent problems.
+    condition:
+      type: for_each
+      block: line.vty.id
+      on_no_blocks: fail
+      condition:
+        type: all_of
+        conditions:
+          - {type: fact_check, path: line.vty.exec_timeout, operator: lte, expected: 600, on_missing: fail}
+          - {type: fact_check, path: line.vty.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-ios15-1.2.11
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.2.11}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The AUX line must admit no inbound transport at all. subset_of {none}
+      passes only the literal 'transport input none'.
+    condition:
+      type: for_each
+      block: line.aux.id
+      on_no_blocks: notapplicable
+      condition:
+        type: fact_check
+        path: line.aux.transport_input
+        operator: subset_of
+        expected: [none]
+        case_sensitive: false
+        on_missing: fail
+
+  # ══ 1.3 Banner rules ════════════════════════════════════════════════════
+
+  - id: cis-ios15-1.3.1
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.3.1}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The banner's wording is a legal question the tool does not judge; what it
+      can decide is whether an exec banner is configured at all. 'no banner exec'
+      records false explicitly, and an absent banner fails.
+    condition:
+      type: fact_check
+      path: mgmt.exec_banner
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-ios15-1.3.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.3.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: As 1.3.1, for the login banner.
+    condition:
+      type: fact_check
+      path: mgmt.login_banner
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-ios15-1.3.3
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.3.3}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: As 1.3.1, for the MOTD banner.
+    condition:
+      type: fact_check
+      path: mgmt.motd_banner
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  # ══ 1.4 Password rules ══════════════════════════════════════════════════
+
+  - id: cis-ios15-1.4.1
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.4.1}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The control asks only that an enable secret exists. The pack emits
+      mgmt.enable_secret.hash_type for both the typed and untyped forms and
+      deliberately never emits it for 'enable password', so this presence check
+      cannot be satisfied by the weak predecessor command.
+    condition:
+      type: presence
+      path: mgmt.enable_secret.hash_type
+      must_be_present: true
+
+  - id: cis-ios15-1.4.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.4.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Defaulted to false by the pack, so a config that never mentions the command
+      is a decided finding.
+    condition:
+      type: fact_check
+      path: service.password_encryption
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-ios15-1.4.3
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.4.3}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Every local user with a credential must use the 'secret' keyword rather
+      than 'password'. The pack emits one mgmt.local_user.secret fact per
+      credentialed user, so an all-quantified check really does cover every user -
+      reading the hash type instead would miss 'username x secret MyPass', which
+      carries no type digit and therefore produces no hash-type fact at all.
+    condition:
+      type: fact_check
+      path: mgmt.local_user.secret
+      operator: eq
+      expected: true
+      quantifier: all
+      on_missing: notapplicable
+
+  # ══ 1.5 SNMP rules ══════════════════════════════════════════════════════
+
+  - id: cis-ios15-1.5.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.5.2}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      No community string may be the default 'private'. notapplicable when no
+      community exists at all, because there is then no default community to
+      remove and failing would be a false positive.
+    condition:
+      type: fact_check
+      path: snmp.community
+      operator: ne
+      expected: private
+      quantifier: all
+      case_sensitive: false
+      on_missing: notapplicable
+
+  - id: cis-ios15-1.5.3
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.5.3}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: As 1.5.2, for the default 'public' community.
+    condition:
+      type: fact_check
+      path: snmp.community
+      operator: ne
+      expected: public
+      quantifier: all
+      case_sensitive: false
+      on_missing: notapplicable
+
+  - id: cis-ios15-1.5.4
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.5.4}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      No community may grant write access. IOS defaults an unqualified community
+      to RO and the pack emits no access fact in that case, so notapplicable is
+      reported rather than a pass the evidence does not support.
+    condition:
+      type: fact_check
+      path: snmp.community_access
+      operator: ne
+      expected: rw
+      quantifier: all
+      case_sensitive: false
+      on_missing: notapplicable
+
+  - id: cis-ios15-1.5.7
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.5.7}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The control is scoped "when using SNMP", so it is conditioned on the agent
+      actually being enabled. snmp.enabled is observed only when a community,
+      group, user or host is configured; requires_paths would be satisfied by the
+      pack's default fact, so the condition tests the value instead.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: snmp.enabled, operator: eq, expected: false}
+        - {type: presence, path: snmp.host, must_be_present: true}
+
+  - id: cis-ios15-1.5.8
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.5.8}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      As 1.5.7: only devices with SNMP enabled need 'snmp-server enable traps'.
+      The second leaf carries on_missing: fail explicitly. Leaving it at the
+      default of 'unknown' made the whole any_of report unknown on a device with
+      SNMP enabled and no traps directive - which is precisely the violation, and
+      reporting it as missing evidence excluded it from the score instead of
+      counting it as the finding it is.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: snmp.enabled, operator: eq, expected: false}
+        - {type: fact_check, path: snmp.traps, operator: eq, expected: true, on_missing: fail}
+
+  - id: cis-ios15-1.5.9
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.5.9}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Every SNMPv3 group must require privacy. The pack emits the security level
+      only for v3 groups - a v1 or v2c group has no such field - so a device
+      using only v2c reports notapplicable rather than failing a control scoped
+      to SNMPv3.
+    condition:
+      type: fact_check
+      path: snmp.group_security
+      operator: eq
+      expected: priv
+      quantifier: all
+      case_sensitive: false
+      on_missing: notapplicable
+
+  - id: cis-ios15-1.5.10
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 1.5.10}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The control names 'aes 128' as the minimum, so any AES variant satisfies it
+      and DES or 3DES does not. Matching the algorithm prefix rather than an
+      exact string keeps 'aes 192' and 'aes 256' compliant.
+    condition:
+      type: fact_check
+      path: snmp.v3_priv
+      operator: regex_match
+      expected: '^aes'
+      quantifier: all
+      case_sensitive: false
+      on_missing: notapplicable
+
+  # ══ 2.1 Global service rules ════════════════════════════════════════════
+
+  - id: cis-ios15-2.1.1.1.1
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.1.1.1}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      A hostname must exist and must not be the factory default, which is what
+      the control is really about - 'Router' and 'Switch' are what ships, and
+      leaving them signals an unmanaged device as well as breaking SSH key
+      generation.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: device.hostname, must_be_present: true}
+        - type: fact_check
+          path: device.hostname
+          operator: not_in
+          expected: [router, switch]
+          case_sensitive: false
+          on_missing: fail
+
+  - id: cis-ios15-2.1.1.1.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.1.1.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'ip domain-name' is a prerequisite for RSA key generation and therefore for
+      SSH; its presence is the control.
+    condition: {type: presence, path: mgmt.domain_name, must_be_present: true}
+
+  - id: cis-ios15-2.1.1.1.3
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.1.1.3}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'crypto key generate rsa' is an exec command, not a configuration line, so
+      most running configurations carry no evidence of the modulus and the
+      verdict is honestly unknown rather than a guess. When the command is
+      present in an archived script or a show-run capture, 2048 bits is the
+      floor. Deciding this control properly needs 'show crypto key mypubkey rsa'
+      alongside the config - recorded in docs/GAPS.md.
+    condition:
+      type: fact_check
+      path: crypto.key.size
+      operator: gte
+      expected: 2048
+      quantifier: all
+      on_missing: unknown
+
+  - id: cis-ios15-2.1.1.1.4
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.1.1.4}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      CIS recommends 60 seconds. The pack states the platform default of 120, so
+      a config that omits the command fails on the default rather than reporting
+      missing evidence. 'gt 0' guards the never-time-out setting.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.ssh.timeout, operator: lte, expected: 60, on_missing: fail}
+        - {type: fact_check, path: mgmt.ssh.timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-ios15-2.1.1.1.5
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.1.1.5}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      At most three authentication retries. The platform default is already 3, so
+      the pack default makes a silent config compliant rather than unknown.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.maxretries
+      operator: lte
+      expected: 3
+      on_missing: fail
+
+  - id: cis-ios15-2.1.1.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.1.2}
+    severity_override: high
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      SSHv1 is cryptographically broken. Without an explicit 'ip ssh version 2'
+      IOS negotiates 1.99 and still accepts v1, which the pack records as version
+      1 - so the absence of the command is a finding, not missing evidence.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.version
+      operator: eq
+      expected: 2
+      on_missing: fail
+
+  - id: cis-ios15-2.1.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      CDP advertises platform, version and addressing to any listener on the
+      segment. It runs by default, so only an explicit 'no cdp run' passes.
+    condition: {type: fact_check, path: service.cdp, operator: eq, expected: false, on_missing: fail}
+
+  - id: cis-ios15-2.1.3
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.3}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: The BOOTP server is on by default; only 'no ip bootp server' passes.
+    condition: {type: fact_check, path: service.bootp, operator: eq, expected: false, on_missing: fail}
+
+  - id: cis-ios15-2.1.4
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.4}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: The DHCP service is on by default; only 'no service dhcp' passes.
+    condition: {type: fact_check, path: service.dhcp, operator: eq, expected: false, on_missing: fail}
+
+  - id: cis-ios15-2.1.5
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.5}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      identd is off by default on supported releases, so this normally passes on
+      the pack default and fails only where 'ip identd' is explicitly present.
+    condition: {type: fact_check, path: service.identd, operator: eq, expected: false, on_missing: fail}
+
+  - id: cis-ios15-2.1.6
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.6}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Inbound TCP keepalives reap orphaned management sessions. Off unless
+      configured, so the pack default decides the absent case.
+    condition: {type: fact_check, path: service.tcp_keepalives_in, operator: eq, expected: true, on_missing: fail}
+
+  - id: cis-ios15-2.1.7
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.7}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: As 2.1.6, outbound.
+    condition: {type: fact_check, path: service.tcp_keepalives_out, operator: eq, expected: true, on_missing: fail}
+
+  - id: cis-ios15-2.1.8
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.1.8}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The X.25 PAD service is enabled by default and has no place on a modern
+      network; only 'no service pad' passes.
+    condition: {type: fact_check, path: service.pad, operator: eq, expected: false, on_missing: fail}
+
+  # ══ 2.2 Logging rules ═══════════════════════════════════════════════════
+
+  - id: cis-ios15-2.2.1
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.2.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      IOS logs by default, so this passes on the pack default and fails only
+      where 'no logging on' is explicitly present.
+    condition: {type: fact_check, path: logging.on, operator: eq, expected: true, on_missing: fail}
+
+  - id: cis-ios15-2.2.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.2.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      CIS recommends a 64000-byte buffer. A config with no 'logging buffered'
+      line keeps the 4096-byte default, which is a finding, so absence fails.
+    condition:
+      type: fact_check
+      path: logging.buffered_size
+      operator: gte
+      expected: 64000
+      on_missing: fail
+
+  - id: cis-ios15-2.2.3
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.2.3}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The intent is to keep the console from being flooded, so any level at or
+      below critical severity satisfies it - including 'no logging console',
+      which the pack records as 'none'. Requiring the literal string 'critical'
+      would fail a stricter configuration.
+    condition:
+      type: fact_check
+      path: logging.console
+      operator: in
+      expected: [critical, alerts, emergencies, none]
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-ios15-2.2.4
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.2.4}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The check targets logging.remote_syslog - the destination itself - rather
+      than logging.enable, which the pack also sets from the same line. Reading
+      the boolean companion would pass a device whose only syslog directive is
+      'no logging host'.
+    condition: {type: presence, path: logging.remote_syslog, must_be_present: true}
+
+  - id: cis-ios15-2.2.5
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.2.5}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'informational' or more verbose satisfies the control; 'debugging' is
+      accepted because it emits a superset. The platform default is already
+      informational, stated in the pack, so a silent config passes on the default
+      rather than reporting missing evidence.
+    condition:
+      type: fact_check
+      path: logging.trap_level
+      operator: in
+      expected: [informational, debugging]
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-ios15-2.2.6
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.2.6}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Debug timestamps must be wall-clock, not uptime, or the log is useless for
+      correlation. The debug stream has its own canonical path so this control is
+      not decided by the log stream's setting. The IOS default is uptime, so an
+      absent directive fails.
+    condition:
+      type: fact_check
+      path: logging.timestamps_debug
+      operator: regex_match
+      expected: '^datetime'
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-ios15-2.2.7
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.2.7}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      A stable source interface keeps syslog correlation working when a physical
+      interface flaps. Presence is the control; whether it names a loopback is
+      2.4.x territory.
+    condition: {type: presence, path: logging.source_interface, must_be_present: true}
+
+  # ══ 2.3 NTP rules ═══════════════════════════════════════════════════════
+
+  - id: cis-ios15-2.3.1.1
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.3.1.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Defaulted to false by the pack, so a config that never mentions
+      'ntp authenticate' is a decided finding.
+    condition: {type: fact_check, path: time.ntp.authentication, operator: eq, expected: true, on_missing: fail}
+
+  - id: cis-ios15-2.3.1.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.3.1.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: An 'ntp authentication-key' must exist for NTP authentication to work.
+    condition: {type: presence, path: time.ntp.key, must_be_present: true}
+
+  - id: cis-ios15-2.3.1.3
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.3.1.3}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      A configured key is only honoured once it is listed as trusted, so
+      'ntp trusted-key' is a separate control and a separate fact.
+    condition: {type: presence, path: time.ntp.trusted_keys, must_be_present: true}
+
+  - id: cis-ios15-2.3.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.3.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Each NTP server must be addressed by IP, not by name: name resolution at
+      boot is exactly when the clock cannot be trusted. Absence of any NTP server
+      fails - an unsynchronised clock invalidates every timestamp in the log.
+    condition:
+      type: fact_check
+      path: time.ntp.server
+      operator: regex_match
+      expected: '^\d{1,3}(\.\d{1,3}){3}$'
+      quantifier: all
+      on_missing: fail
+
+  # ══ 2.4 Loopback rules ══════════════════════════════════════════════════
+
+  - id: cis-ios15-2.4.1
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.4.1}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Quantifier 'any' over the interface names is how "at least one loopback
+      exists" is expressed without a dedicated condition type: the control passes
+      as soon as one interface is named Loopback.
+    condition:
+      type: fact_check
+      path: interface.name
+      operator: regex_match
+      expected: '^loopback'
+      quantifier: any
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-ios15-2.4.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.4.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      A stable AAA source address is what lets the TACACS+ or RADIUS server
+      recognise the device across interface failures.
+    condition: {type: presence, path: aaa.source_interface, must_be_present: true}
+
+  - id: cis-ios15-2.4.3
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.4.3}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The control names the loopback specifically, so the interface name is
+      matched rather than merely checking that 'ntp source' is set.
+    condition:
+      type: fact_check
+      path: time.ntp.source
+      operator: regex_match
+      expected: '^loopback'
+      quantifier: any
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-ios15-2.4.4
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 2.4.4}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: As 2.4.3, for TFTP.
+    condition:
+      type: fact_check
+      path: file.tftp_source_interface
+      operator: regex_match
+      expected: '^loopback'
+      case_sensitive: false
+      on_missing: fail
+
+  # ══ 3.1 Routing / forwarding rules ══════════════════════════════════════
+
+  - id: cis-ios15-3.1.1
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 3.1.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Source routing lets a sender dictate the path and is enabled by default;
+      only an explicit 'no ip source-route' passes.
+    condition: {type: fact_check, path: routing.source_routing, operator: eq, expected: false, on_missing: fail}
+
+  - id: cis-ios15-3.1.2
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 3.1.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Proxy ARP is per-interface and on by default, so the check runs once per
+      interface and the pack's per-instance default supplies the fact for
+      interfaces that never mention it - which is what makes the evidence name
+      the exact interfaces to remediate. Loopback and Null interfaces are skipped
+      because proxy ARP on them cannot be exploited; a finding there would be
+      noise that trains the reader to ignore the control.
+    condition:
+      type: for_each
+      block: interface.name
+      skip_block_regex: '(?i)^interface\s+(loopback|null)'
+      on_no_blocks: notapplicable
+      condition:
+        type: fact_check
+        path: interface.proxy_arp
+        operator: eq
+        expected: false
+        on_missing: fail
+
+  - id: cis-ios15-3.1.3
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 3.1.3}
+    severity_override: low
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      No interface may be a tunnel. Expressed over interface.name rather than
+      interface.tunnel because a tunnel interface that declares no source,
+      destination or mode still exists and still needs reporting.
+    condition:
+      type: fact_check
+      path: interface.name
+      operator: regex_not_match
+      expected: '^tunnel'
+      quantifier: all
+      case_sensitive: false
+      on_missing: notapplicable
+
+  # ══ 3.3 Routing-protocol authentication ═════════════════════════════════
+
+  - id: cis-ios15-3.3.1.6
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 3.3.1.6}
+    severity_override: medium
+    applies_to:
+      vendors: [cisco_ios]
+      os_families: [ios]
+      requires_paths: [routing.eigrp.process]
+    mapping_rationale: >
+      Scoped by requires_paths to devices actually running EIGRP; a device
+      without an EIGRP process reports notapplicable rather than being credited
+      with a pass for a protocol it does not run.
+    condition: {type: presence, path: routing.eigrp.key_chain, must_be_present: true}
+
+  - id: cis-ios15-3.3.1.7
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 3.3.1.7}
+    severity_override: medium
+    applies_to:
+      vendors: [cisco_ios]
+      os_families: [ios]
+      requires_paths: [routing.eigrp.process]
+    mapping_rationale: >
+      Every EIGRP authentication mode must be md5. The EIGRP process path is the
+      precondition, and the authentication path is a separate fact emitted only
+      by an authentication line - so a bare 'router eigrp' fails rather than
+      asserting its own compliance.
+    condition:
+      type: fact_check
+      path: routing.eigrp.auth
+      operator: eq
+      expected: md5
+      quantifier: all
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-ios15-3.3.2.1
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 3.3.2.1}
+    severity_override: medium
+    applies_to:
+      vendors: [cisco_ios]
+      os_families: [ios]
+      requires_paths: [routing.ospf.process]
+    mapping_rationale: >
+      At least one OSPF area must require message-digest authentication.
+      Quantifier 'any' because a device may carry both authenticated and
+      unauthenticated areas and the control asks that the feature be in use;
+      per-area enforcement is 3.3.2.2, which needs interface-level OSPF facts the
+      pack does not yet emit (docs/GAPS.md).
+    condition:
+      type: fact_check
+      path: routing.ospf.message_digest
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: cis-ios15-3.3.3.4
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 3.3.3.4}
+    severity_override: medium
+    applies_to:
+      vendors: [cisco_ios]
+      os_families: [ios]
+      requires_paths: [routing.rip.process]
+    mapping_rationale: >
+      Scoped to devices running RIP. The RIP process and RIP authentication are
+      separate canonical paths precisely so that the existence of the process
+      cannot assert the existence of the authentication.
+    condition: {type: presence, path: routing.rip.key_chain, must_be_present: true}
+
+  - id: cis-ios15-3.3.3.5
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 3.3.3.5}
+    severity_override: medium
+    applies_to:
+      vendors: [cisco_ios]
+      os_families: [ios]
+      requires_paths: [routing.rip.process]
+    mapping_rationale: RIP authentication must be md5, not the cleartext default.
+    condition:
+      type: fact_check
+      path: routing.rip.auth
+      operator: eq
+      expected: md5
+      quantifier: all
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-ios15-3.3.4.1
+    catalog: {catalog_id: cis_cisco_ios_15_v4_1_1, control_id: 3.3.4.1}
+    severity_override: medium
+    applies_to:
+      vendors: [cisco_ios]
+      os_families: [ios]
+      requires_paths: [routing.bgp.asn]
+    mapping_rationale: >
+      Scoped to devices running BGP. Presence of a neighbour password is what the
+      control asks for; the pack records the neighbour address as the value so
+      the evidence names which session carries authentication.
+    condition: {type: presence, path: routing.bgp.neighbor_auth, must_be_present: true}

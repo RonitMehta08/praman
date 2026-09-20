@@ -1,0 +1,55 @@
+# QLoRA fine-tune configuration for PRAMAN syntax classifier
+# Used by: python -m scripts.finetune_qlora --config configs/qlora.yaml
+# MANUAL_COMMANDS.md Step 8b (OPTIONAL)
+
+# ─── Base model ────────────────────────────────────────────────────────
+model:
+  name: "Qwen/Qwen3-4B-Instruct-2507"
+  # Use the GGUF on disk only for llama-server inference (Step 6).
+  # QLoRA fine-tuning loads the HuggingFace safetensors via transformers.
+  quantization: "4bit"           # QLoRA: 4-bit NormalFloat (nf4)
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_quant_type: "nf4"
+  use_double_quant: true         # nested quantisation saves ~0.4 GB
+
+# ─── LoRA adapter ─────────────────────────────────────────────────────
+lora:
+  r: 16                          # rank — 16 is plenty for classification
+  lora_alpha: 32                 # alpha = 2*r is the standard starting point
+  lora_dropout: 0.05
+  target_modules:                # Qwen3 attention projection names
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+  bias: "none"
+  task_type: "SEQ_CLS"           # sequence classification
+
+# ─── Training ─────────────────────────────────────────────────────────
+training:
+  num_epochs: 3
+  batch_size: 4                  # fits in 6 GB VRAM with gradient checkpointing
+  gradient_accumulation_steps: 4 # effective batch = 16
+  learning_rate: 2.0e-4          # QLoRA default
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.1
+  weight_decay: 0.01
+  max_seq_length: 128            # config lines are short — 128 tokens is plenty
+  gradient_checkpointing: true   # essential for 6 GB VRAM
+  bf16: true
+  seed: 42
+  logging_steps: 10
+  save_strategy: "epoch"
+  evaluation_strategy: "epoch"
+
+# ─── Data ─────────────────────────────────────────────────────────────
+data:
+  labels_path: "data/labels/line_to_path.jsonl"
+  test_size: 0.15                # hold-out fraction
+  group_by: "device"             # group split to prevent leakage
+  max_samples: null              # null = use all; set a number to cap
+
+# ─── Output ───────────────────────────────────────────────────────────
+output:
+  adapter_dir: "data/models/lora"
+  metrics_path: "reports/metrics/qlora.json"

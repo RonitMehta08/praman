@@ -1,0 +1,333 @@
+{
+  "caveats": [
+    "Coverage is measured against the fixtures shipped with the project, which were written alongside the pattern pack. It is an upper bound on what a genuinely unseen config from the same vendor would score, and says nothing about a vendor with no pack.",
+    "'Understood' means a pattern claimed the line, not that the facts extracted from it are the facts a human would have extracted. Correctness of extraction is asserted by tests/test_rules_mapping.py on specific controls, not measured as a rate here.",
+    "Measured across 7 vendor pack(s) \u2014 arista_eos, cisco_asa, cisco_ios, cisco_nxos, fortinet, juniper_junos, paloalto_panos \u2014 so the aggregate is a weighted average over uneven per-vendor fixture counts, not 7 independent results. Read per_fixture for the vendor breakdown before quoting the total.",
+    "Parse latency excludes pattern-library load, which is paid once per process and dominates a single-file run."
+  ],
+  "dataset": "20 fixtures under test_configs/ (realistic, compliance_extremes, malformed). No held-out split: these are hand-written fixtures, not a sample from a population, so a split would imply a generalisation claim the dataset cannot support.",
+  "environment": {
+    "cpu_count": 16,
+    "gpu": "not recorded",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.10.11"
+  },
+  "generated_at": "2026-09-19T12:45:55.782149+00:00",
+  "measures": "Share of semantically significant configuration lines claimed by a deterministic pattern, across every shipped fixture. A line is significant unless it is blank, a comment, or a Cisco '!' separator. Also reports parse latency for the largest fixture.",
+  "metric": "parse_coverage",
+  "n": 3477,
+  "results": {
+    "coverage_of_all_lines": 0.9899,
+    "coverage_of_significant": 0.9868,
+    "distinct_unmapped_commands": 36,
+    "facts_extracted": 4302,
+    "fixtures": 20,
+    "fixtures_detected": 20,
+    "lines_significant": 3477,
+    "lines_total": 4576,
+    "lines_unparsed": 46,
+    "parse_latency_largest_fixture": {
+      "max_ms": 11.677,
+      "mean_ms": 8.725,
+      "min_ms": 6.994,
+      "n": 20,
+      "p50_ms": 8.207,
+      "p95_ms": 11.677,
+      "timings_ms": [
+        7.564,
+        9.594,
+        8.461,
+        7.395,
+        7.458,
+        10.306,
+        9.6,
+        7.606,
+        7.358,
+        9.324,
+        7.953,
+        10.894,
+        9.798,
+        7.153,
+        6.994,
+        7.403,
+        7.364,
+        10.371,
+        10.218,
+        11.677
+      ]
+    },
+    "per_fixture": [
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 366,
+        "fixture": "eos_fully_hardened.conf",
+        "lines_significant": 282,
+        "lines_total": 364,
+        "lines_unparsed": 0,
+        "vendor": "arista_eos"
+      },
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 188,
+        "fixture": "eos_fully_noncompliant.conf",
+        "lines_significant": 152,
+        "lines_total": 285,
+        "lines_unparsed": 0,
+        "vendor": "arista_eos"
+      },
+      {
+        "coverage_of_all_lines": 0.9748,
+        "coverage_of_significant": 0.9628,
+        "detected": true,
+        "facts_extracted": 250,
+        "fixture": "fully_hardened.conf",
+        "lines_significant": 188,
+        "lines_total": 278,
+        "lines_unparsed": 7,
+        "vendor": "cisco_ios"
+      },
+      {
+        "coverage_of_all_lines": 0.9658,
+        "coverage_of_significant": 0.9394,
+        "detected": true,
+        "facts_extracted": 132,
+        "fixture": "fully_noncompliant.conf",
+        "lines_significant": 66,
+        "lines_total": 117,
+        "lines_unparsed": 4,
+        "vendor": "cisco_ios"
+      },
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 186,
+        "fixture": "panos_fully_hardened.conf",
+        "lines_significant": 153,
+        "lines_total": 228,
+        "lines_unparsed": 0,
+        "vendor": "paloalto_panos"
+      },
+      {
+        "coverage_of_all_lines": 0.9898,
+        "coverage_of_significant": 0.9778,
+        "detected": true,
+        "facts_extracted": 120,
+        "fixture": "panos_fully_noncompliant.conf",
+        "lines_significant": 90,
+        "lines_total": 196,
+        "lines_unparsed": 2,
+        "vendor": "paloalto_panos"
+      },
+      {
+        "coverage_of_all_lines": 0.9706,
+        "coverage_of_significant": 0.9524,
+        "detected": true,
+        "facts_extracted": 129,
+        "fixture": "router_with_show_version.conf",
+        "lines_significant": 126,
+        "lines_total": 204,
+        "lines_unparsed": 6,
+        "vendor": "cisco_ios"
+      },
+      {
+        "coverage_of_all_lines": 0.9795,
+        "coverage_of_significant": 0.9655,
+        "detected": true,
+        "facts_extracted": 130,
+        "fixture": "stacked_switch_with_inventory.conf",
+        "lines_significant": 116,
+        "lines_total": 195,
+        "lines_unparsed": 4,
+        "vendor": "cisco_ios"
+      },
+      {
+        "coverage_of_all_lines": 0.9474,
+        "coverage_of_significant": 0.8947,
+        "detected": true,
+        "facts_extracted": 81,
+        "fixture": "crypto_ipsec_isis.conf",
+        "lines_significant": 38,
+        "lines_total": 76,
+        "lines_unparsed": 4,
+        "vendor": "cisco_ios"
+      },
+      {
+        "coverage_of_all_lines": 0.9972,
+        "coverage_of_significant": 0.9968,
+        "detected": true,
+        "facts_extracted": 375,
+        "fixture": "asa_dmz_firewall.conf",
+        "lines_significant": 311,
+        "lines_total": 363,
+        "lines_unparsed": 1,
+        "vendor": "cisco_asa"
+      },
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 366,
+        "fixture": "eos_dc_leaf_switch.conf",
+        "lines_significant": 282,
+        "lines_total": 344,
+        "lines_unparsed": 0,
+        "vendor": "arista_eos"
+      },
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 280,
+        "fixture": "fortigate_perimeter.conf",
+        "lines_significant": 362,
+        "lines_total": 366,
+        "lines_unparsed": 0,
+        "vendor": "fortinet"
+      },
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 185,
+        "fixture": "juniper_edge_router.conf",
+        "lines_significant": 286,
+        "lines_total": 287,
+        "lines_unparsed": 0,
+        "vendor": "juniper_junos"
+      },
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 318,
+        "fixture": "nxos_datacenter_switch.conf",
+        "lines_significant": 259,
+        "lines_total": 263,
+        "lines_unparsed": 0,
+        "vendor": "cisco_nxos"
+      },
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 295,
+        "fixture": "panos_perimeter_firewall.conf",
+        "lines_significant": 327,
+        "lines_total": 339,
+        "lines_unparsed": 0,
+        "vendor": "paloalto_panos"
+      },
+      {
+        "coverage_of_all_lines": 0.9357,
+        "coverage_of_significant": 0.9143,
+        "detected": true,
+        "facts_extracted": 430,
+        "fixture": "enterprise_complex.conf",
+        "lines_significant": 210,
+        "lines_total": 280,
+        "lines_unparsed": 18,
+        "vendor": "cisco_ios"
+      },
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 74,
+        "fixture": "insecure_minimal.conf",
+        "lines_significant": 38,
+        "lines_total": 76,
+        "lines_unparsed": 0,
+        "vendor": "cisco_ios"
+      },
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 102,
+        "fixture": "partial_compliance.conf",
+        "lines_significant": 45,
+        "lines_total": 79,
+        "lines_unparsed": 0,
+        "vendor": "cisco_ios"
+      },
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 193,
+        "fixture": "secure_baseline.conf",
+        "lines_significant": 100,
+        "lines_total": 144,
+        "lines_unparsed": 0,
+        "vendor": "cisco_ios"
+      },
+      {
+        "coverage_of_all_lines": 1.0,
+        "coverage_of_significant": 1.0,
+        "detected": true,
+        "facts_extracted": 102,
+        "fixture": "telnet_exposed.conf",
+        "lines_significant": 46,
+        "lines_total": 92,
+        "lines_unparsed": 0,
+        "vendor": "cisco_ios"
+      }
+    ],
+    "top_unmapped": [
+      {
+        "command": "no ip",
+        "occurrences": 3
+      },
+      {
+        "command": "passive-interface default",
+        "occurrences": 2
+      },
+      {
+        "command": "network 192.168.1.0",
+        "occurrences": 2
+      },
+      {
+        "command": "ip prefix-list",
+        "occurrences": 2
+      },
+      {
+        "command": "route-map PROVIDER-A-IN",
+        "occurrences": 2
+      },
+      {
+        "command": "match ip",
+        "occurrences": 2
+      },
+      {
+        "command": "set local-preference",
+        "occurrences": 2
+      },
+      {
+        "command": "neighbor 203.0.113.1",
+        "occurrences": 2
+      },
+      {
+        "command": "neighbor 198.51.100.1",
+        "occurrences": 2
+      },
+      {
+        "command": "network 10.20.0.0",
+        "occurrences": 1
+      }
+    ],
+    "vendors_measured": [
+      "arista_eos",
+      "cisco_asa",
+      "cisco_ios",
+      "cisco_nxos",
+      "fortinet",
+      "juniper_junos",
+      "paloalto_panos"
+    ]
+  }
+}

@@ -1,0 +1,769 @@
+# CIS Juniper OS Benchmark v2.0.0 — canonical mappings
+#
+# 172 controls, the largest catalog in the project, and the vendor whose syntax
+# looks least like Cisco's — which makes it the strongest evidence that rules are
+# written against the canonical model rather than against a CLI. Junos states
+# configuration as a brace-delimited tree with trailing semicolons; nothing below
+# contains a brace, a semicolon, or the word `set`. The pack turned
+# `system { services { web-management { http; } } }` into
+# `mgmt.http.server_enabled = false`, and the rule reads that.
+#
+# Conventions inherited from cisco_ios_15_v4_1_1.yaml. Junos-specific notes:
+#
+#   * **Anchors avoid `$`.** `\A`/`\Z` are used instead. Same meaning, and it keeps
+#     the YAML scalar unambiguous.
+#   * **Timeouts are seconds.** `idle-timeout` under a login class is minutes in
+#     Junos and the pack now normalises it, so 600 below is ten minutes. The same
+#     is true of `lockout-period` at `aaa.login_block`, so 6.6.1.5 reads 1800.
+#   * **Junos protects the routing engine with a filter on `lo0.0`**, not with an
+#     ACL on each transit interface. That is why 2.1 and 3.10 read the same path:
+#     on this platform they are the same mechanism seen from two angles, and the
+#     benchmark states both.
+#
+# Deliberately NOT mapped, with the reason, because a wrong verdict is worse than
+# no verdict:
+#
+#   * **6.3.2 (local accounts only on loss of external AAA).** The control turns on
+#     the *order* of `authentication-order`, and a list-valued fact check cannot
+#     express ordering. The fixture would in fact fail this one — `password` is
+#     listed before `radius` — which is exactly why guessing at it is tempting and
+#     wrong.
+#   * **6.6.10, 6.10.2.4/2.5, 6.14.** The path either does not exist on this pack
+#     or its value looked like a mis-parse on inspection.
+#   * **Sections 4.2 (IS-IS), 4.5-4.11, 6.5 (ICMP rate limits), 6.15-6.17.** No
+#     canonical fact carries them. They render `notchecked`, never a pass.
+
+rules:
+
+  # ══ 1 Governance and backup ════════════════════════════════════════════
+
+  - id: cis-junos-1.4
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '1.4'}
+    severity_override: low
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      A configuration archive on commit is the only automatic backup Junos offers,
+      and it is what makes a bad change reversible without a console visit.
+    condition:
+      type: fact_check
+      path: file.config_archive
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-junos-1.5
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '1.5'}
+    severity_override: medium
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [file.archive_path]
+    mapping_rationale: >
+      A configuration archive contains every credential hash and shared secret on
+      the device, so the transfer must be encrypted. Stated as "not one of the
+      cleartext schemes" rather than as a whitelist, so a site using SFTP or HTTPS
+      is not failed for a scheme the rule's author did not think of.
+    condition:
+      type: fact_check
+      path: file.archive_path
+      operator: regex_not_match
+      expected: "(?i)\\A(ftp|http|tftp)://"
+      quantifier: all
+      on_missing: fail
+
+  # ══ 2 Routing-engine protection ════════════════════════════════════════
+
+  - id: cis-junos-2.1
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '2.1'}
+    severity_override: high
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      An inbound filter on the routing engine is the single highest-value control
+      in this benchmark: without it every service the RE listens on is reachable
+      from every interface, and the SSH and NETCONF restrictions further down are
+      decoration. Junos applies it to `lo0.0`, which the pack records as an
+      interface input filter.
+    condition: {type: presence, path: interface.acl_in, must_be_present: true}
+
+  - id: cis-junos-2.4
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '2.4'}
+    severity_override: medium
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [acl.name]
+    mapping_rationale: >
+      A packet arriving on an external interface claiming an RFC1918 source is
+      spoofed, and the filter must drop it. The canonical evidence is a private
+      prefix appearing among the filter's match sources together with a deny
+      action — both halves, because either alone is satisfied by a filter that
+      permits the prefix.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: acl.entry.source, operator: regex_match, expected: "\\A(10\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|192\\.168\\.)", quantifier: any, on_missing: fail}
+        - {type: fact_check, path: acl.entry.action, operator: contains, expected: deny, quantifier: any, case_sensitive: false, on_missing: fail}
+
+  - id: cis-junos-2.5
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '2.5'}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Junos discards unmatched traffic silently. An explicit final term that denies
+      *and logs* is what turns "the packet vanished" into evidence, which is the
+      whole point of the control.
+    condition:
+      type: fact_check
+      path: acl.implicit_deny_log
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  # ══ 3 Interfaces ═══════════════════════════════════════════════════════
+
+  - id: cis-junos-3.4
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '3.4'}
+    severity_override: low
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [interface.name]
+    mapping_rationale: >
+      A description on every interface is what lets the next operator tell a spare
+      port from a live one — which is the prerequisite for 3.3, disabling unused
+      interfaces, being safe to act on. Evaluated per interface so the finding
+      names the undocumented port.
+    condition:
+      type: for_each
+      block: interface.name
+      on_no_blocks: notapplicable
+      condition: {type: presence, path: interface.description, must_be_present: true}
+
+  - id: cis-junos-3.6
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '3.6'}
+    severity_override: low
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      ICMP redirects let a host on the segment be steered to a different gateway.
+      Junos states this once globally with `no-redirects` rather than per
+      interface, so the canonical fact is global too.
+    condition:
+      type: fact_check
+      path: interface.redirects
+      operator: eq
+      expected: false
+      on_missing: fail
+
+  - id: cis-junos-3.10
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '3.10'}
+    severity_override: high
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      The loopback filter *is* the routing-engine filter on this platform — see
+      2.1. Kept as its own rule because the benchmark states it twice and an
+      auditor tracing 3.10 should land on 3.10's finding, not be redirected.
+    condition: {type: presence, path: interface.acl_in, must_be_present: true}
+
+  # ══ 4 Routing protocol authentication ══════════════════════════════════
+
+  - id: cis-junos-4.1.1
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 4.1.1}
+    severity_override: high
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [routing.bgp.asn]
+    mapping_rationale: >
+      Without peer authentication an on-path attacker can inject routes, which is
+      a full traffic redirect rather than a hardening gap. Scoped to devices
+      actually running BGP: a switch with no BGP is not applicable, not compliant.
+    condition: {type: presence, path: routing.bgp.neighbor_auth, must_be_present: true}
+
+  - id: cis-junos-4.1.3
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 4.1.3}
+    severity_override: medium
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [routing.bgp.asn]
+    mapping_rationale: >
+      GTSM — the generalised TTL security mechanism — rejects EBGP packets that
+      have crossed more hops than the peer should be away, which defeats
+      off-path spoofing without any cryptography. The canonical fact is the
+      configured TTL bound.
+    condition: {type: presence, path: routing.bgp.ttl_security, must_be_present: true}
+
+  - id: cis-junos-4.1.5
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 4.1.5}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Unicast reverse-path forwarding drops traffic whose source could not have
+      arrived on the interface it came in on — the cheapest defence against
+      spoofed sources, and the one the control names for EBGP edges.
+    condition:
+      type: fact_check
+      path: routing.urpf
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-junos-4.3.1
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 4.3.1}
+    severity_override: high
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [routing.ospf.process]
+    mapping_rationale: >
+      An unauthenticated OSPF adjacency accepts LSAs from anything on the segment.
+      Scoped to devices running an OSPF process.
+    condition:
+      type: any_of
+      conditions:
+        - {type: presence, path: routing.ospf.message_digest, must_be_present: true}
+        - {type: presence, path: routing.ospf.auth, must_be_present: true}
+
+  # ══ 5 SNMP ═════════════════════════════════════════════════════════════
+
+  - id: cis-junos-5.1
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '5.1'}
+    severity_override: high
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      `public` and `private` are the first strings every scanner tries, so a
+      community set to either is equivalent to no authentication at all.
+      Quantifier `all`, so a device with a strong community *and* `public` still
+      fails; `on_missing: pass` because no community at all is the strongest
+      possible satisfaction of a control about the community not being a default.
+    condition:
+      type: fact_check
+      path: snmp.community
+      operator: not_in
+      expected: [public, private, juniper, admin, monitor]
+      quantifier: all
+      case_sensitive: false
+      on_missing: pass
+
+  - id: cis-junos-5.2
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '5.2'}
+    severity_override: high
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [snmp.community]
+    mapping_rationale: >
+      A v1/v2c community with write access hands device configuration to anyone
+      who can read the string off the wire, which is trivial because the string
+      travels in cleartext. Read-only is the ceiling.
+    condition:
+      type: fact_check
+      path: snmp.community_access
+      operator: in
+      expected: [read-only, ro]
+      quantifier: all
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-junos-5.3
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '5.3'}
+    severity_override: medium
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [snmp.community]
+    mapping_rationale: >
+      A client list narrows which sources may poll the community. Without one, a
+      cleartext string is usable from anywhere the agent is reachable.
+    condition: {type: presence, path: snmp.acl, must_be_present: true}
+
+  - id: cis-junos-5.5
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '5.5'}
+    severity_override: high
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      Write access over SNMP is a configuration channel with weaker
+      authentication than the CLI. The control's position is that it is never set;
+      `on_missing: pass` because a device with no access clause has no write
+      access to find.
+    condition:
+      type: fact_check
+      path: snmp.community_access
+      operator: not_in
+      expected: [read-write, rw, write]
+      quantifier: all
+      case_sensitive: false
+      on_missing: pass
+
+  - id: cis-junos-5.7
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '5.7'}
+    severity_override: medium
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [snmp.user]
+    mapping_rationale: >
+      SHA rather than MD5 for the v3 authentication digest. Stated as "not MD5" so
+      that SHA-2 family members satisfy it without the rule needing revision each
+      time the platform adds one.
+    condition:
+      type: fact_check
+      path: snmp.v3_auth
+      operator: regex_not_match
+      expected: "(?i)\\Amd5"
+      quantifier: all
+      on_missing: fail
+
+  - id: cis-junos-5.8
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '5.8'}
+    severity_override: medium
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      An interface restriction is what keeps the agent off the data plane. Junos
+      states it as a client list or a routing-instance restriction; the pack files
+      both at snmp.acl.
+    condition: {type: presence, path: snmp.acl, must_be_present: true}
+
+  # ══ 6.2 Configuration archival ═════════════════════════════════════════
+
+  - id: cis-junos-6.2.1
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.2.1}
+    severity_override: low
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Archive on commit, so the backup is taken at the moment the change lands
+      rather than on a timer that may miss it.
+    condition:
+      type: fact_check
+      path: file.config_archive
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-junos-6.2.2
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.2.2}
+    severity_override: low
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      At least one SCP destination. The control names SCP specifically because it
+      is the scheme Junos supports that both encrypts and authenticates the server.
+    condition:
+      type: fact_check
+      path: file.archive_path
+      operator: regex_match
+      expected: "(?i)\\A(scp|sftp)://"
+      quantifier: any
+      on_missing: fail
+
+  - id: cis-junos-6.2.3
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.2.3}
+    severity_override: medium
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [file.archive_path]
+    mapping_rationale: >
+      The inverse assertion to 6.2.2, and the one that actually protects the
+      credentials in the archive: *no* site may be cleartext. Quantifier `all`,
+      because one FTP destination alongside three SCP ones still leaks everything.
+    condition:
+      type: fact_check
+      path: file.archive_path
+      operator: regex_not_match
+      expected: "(?i)\\A(ftp|http|tftp)://"
+      quantifier: all
+      on_missing: fail
+
+  # ══ 6.3 External AAA ═══════════════════════════════════════════════════
+
+  - id: cis-junos-6.3.1
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.3.1}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Centralised authentication is what makes revoking an administrator's access
+      a single action rather than one per device. The canonical evidence is an
+      external method appearing in the authentication order.
+
+      `authentication-order` is one fact holding an ordered *list*, so the operator
+      has to be `contains` — which reads the left side as a set — and not `in`,
+      which asks whether the whole list is one of the listed strings and raises on
+      an unhashable value. The distinction is easy to get wrong because both read
+      naturally in English.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: aaa.authentication_order, operator: contains, expected: radius, case_sensitive: false, on_missing: fail}
+        - {type: fact_check, path: aaa.authentication_order, operator: contains, expected: tacplus, case_sensitive: false, on_missing: fail}
+        - {type: fact_check, path: aaa.authentication_order, operator: contains, expected: 'tacacs+', case_sensitive: false, on_missing: fail}
+
+  # ══ 6.6 Login and local credentials ════════════════════════════════════
+
+  - id: cis-junos-6.6.1.1
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.6.1.1}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Three attempts before the connection is dropped, which turns an online
+      password guess from unlimited into a handful of tries per connection.
+    condition:
+      type: fact_check
+      path: aaa.authentication_attempts
+      operator: lte
+      expected: 3
+      on_missing: fail
+
+  - id: cis-junos-6.6.1.5
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.6.1.5}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Thirty minutes, expressed as 1800 because `aaa.login_block` is a count of
+      seconds on every pack. Junos writes `lockout-period` in minutes and the
+      pattern pack normalises it on the way in, which is the change that made
+      this control mappable at all — it was left unmapped for as long as the
+      path meant seconds on some vendors and minutes on others.
+
+      6.6.1.1 above caps the attempts per connection; this one governs how long
+      the account is unusable afterwards, and neither substitutes for the other:
+      three attempts with no lockout is three attempts per reconnection.
+    condition:
+      type: fact_check
+      path: aaa.login_block
+      operator: gte
+      expected: 1800
+      on_missing: fail
+
+  - id: cis-junos-6.6.3
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.6.3}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      An idle timeout on every login class. Seconds — see the file header. `gt 0`
+      is load-bearing: Junos treats 0 as "never", so a bare `lte 600` would pass
+      the least secure setting available.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: line.vty.exec_timeout, operator: lte, expected: 600, on_missing: fail}
+        - {type: fact_check, path: line.vty.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-junos-6.6.8
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.6.8}
+    severity_override: low
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      The login message is the pre-authentication legal notice — the thing an
+      unauthorised-access prosecution actually turns on.
+    condition: {type: presence, path: mgmt.login_banner, must_be_present: true}
+
+  - id: cis-junos-6.6.9
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.6.9}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Junos states complexity as a named change-type — `character-sets` — rather
+      than as a count or a flag, so the canonical fact is that token and the check
+      is for its presence.
+    condition: {type: presence, path: mgmt.password_policy.complexity, must_be_present: true}
+
+  - id: cis-junos-6.6.11
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.6.11}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Ten characters is this benchmark's floor, which is longer than most vendors'
+      and worth honouring exactly rather than normalising to a house standard.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.min_length
+      operator: gte
+      expected: 10
+      on_missing: fail
+
+  - id: cis-junos-6.6.12
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.6.12}
+    severity_override: high
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      SHA-512 for the local password database. The weaker formats Junos still
+      accepts — DES crypt and MD5 — are recoverable offline at a rate that makes a
+      leaked configuration equivalent to a leaked password.
+    condition:
+      type: fact_check
+      path: mgmt.local_user.hash_type
+      operator: regex_match
+      expected: "(?i)(sha512|sha-512|\\A6\\Z)"
+      quantifier: all
+      on_missing: fail
+
+  # ══ 6.7 Time ═══════════════════════════════════════════════════════════
+
+  - id: cis-junos-6.7.1
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.7.1}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      The control names a number — more than one external server — so this is a
+      count. A single server is a single point of failure for every timestamp the
+      device will ever write.
+    condition: {type: count, path: time.ntp.server, operator: gte, expected: 2}
+
+  - id: cis-junos-6.7.4
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.7.4}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Unauthenticated NTP lets an on-path attacker move the clock, which backdates
+      log entries and can bring an expired certificate back to life. Both the
+      authentication flag and a trusted key are required, because either alone is
+      a no-op.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: time.ntp.authentication, operator: eq, expected: true, quantifier: any, on_missing: fail}
+        - {type: presence, path: time.ntp.trusted_keys, must_be_present: true}
+
+  # ══ 6.10.1 SSH ═════════════════════════════════════════════════════════
+
+  - id: cis-junos-6.10.1.2
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.10.1.2}
+    severity_override: high
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      SSHv1 has known integrity failures and Junos will still speak it if asked.
+      Version 2 only. Matched as a regex rather than `eq 2` because the pack files
+      both the enabled flag and the protocol version at this path, so the value may
+      arrive as an int or a bool depending on which statement produced it.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.version
+      operator: regex_match
+      expected: "\\A2"
+      quantifier: any
+      on_missing: fail
+
+  - id: cis-junos-6.10.1.3
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.10.1.3}
+    severity_override: low
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      A connection limit bounds how much of the routing engine a single source can
+      consume; this is denial-of-service hardening rather than access control.
+    condition: {type: presence, path: aaa.max_sessions, must_be_present: true}
+
+  - id: cis-junos-6.10.1.6
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.10.1.6}
+    severity_override: high
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Stated as "the offered ciphers and the broken ciphers are disjoint" rather
+      than as a whitelist. That is the correct shape for a list-valued fact and
+      the correct reading of the control: offering AES-256-GCM alongside 3DES is
+      not compliance, because a client can negotiate the weak one.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.cipher
+      operator: disjoint_from
+      expected: [3des-cbc, des-cbc, arcfour, arcfour128, arcfour256, blowfish-cbc, cast128-cbc, aes128-cbc, aes192-cbc, aes256-cbc]
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-junos-6.10.1.8
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.10.1.8}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      MD5 and SHA-1 MACs are the weak link in an otherwise modern suite, and a
+      downgrade to them is negotiated by the client rather than the server.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.mac
+      operator: disjoint_from
+      expected: [hmac-md5, 'hmac-md5-96', hmac-sha1, 'hmac-sha1-96', umac-64]
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-junos-6.10.1.9
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.10.1.9}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Group 1 and the SHA-1 exchanges are below the current factoring floor; the
+      key exchange is where a downgrade costs the most, because it compromises the
+      session key rather than one message.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.kex
+      operator: disjoint_from
+      expected: ['diffie-hellman-group1-sha1', 'dh-group1-sha1', 'diffie-hellman-group14-sha1', 'group14-sha1', 'diffie-hellman-group-exchange-sha1']
+      case_sensitive: false
+      on_missing: fail
+
+  # ══ 6.10.2 Web management ══════════════════════════════════════════════
+
+  - id: cis-junos-6.10.2.1
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.10.2.1}
+    severity_override: high
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      J-Web over plain HTTP carries the administrative session cookie in
+      cleartext. Junos has an explicit `http` statement, so its absence is a
+      decided `false` rather than missing evidence.
+    condition:
+      type: fact_check
+      path: mgmt.http.server_enabled
+      operator: eq
+      expected: false
+      on_missing: fail
+
+  - id: cis-junos-6.10.2.2
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.10.2.2}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      The positive half of 6.10.2.1: if a web interface is offered at all it must
+      be the HTTPS one.
+    condition:
+      type: fact_check
+      path: mgmt.http.secure_server_enabled
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-junos-6.10.2.3
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.10.2.3}
+    severity_override: medium
+    applies_to:
+      vendors: [juniper_junos]
+      os_families: [junos]
+      requires_paths: [mgmt.http.secure_server_enabled]
+    mapping_rationale: >
+      HTTPS with the self-signed certificate Junos generates on first boot trains
+      administrators to click through the warning, which removes the only signal
+      that would reveal an interception. A named local certificate is what the
+      control asks for.
+    condition: {type: presence, path: crypto.pki.trustpoint, must_be_present: true}
+
+  # ══ 6.10.6 - 6.10.9 Legacy services ════════════════════════════════════
+
+  - id: cis-junos-6.10.6
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '6.10.6'}
+    severity_override: high
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Telnet carries the administrative password in cleartext. Junos ships with it
+      off, and the pack records that default, so a decided `false` is available.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: mgmt.telnet.enabled, operator: eq, expected: false, on_missing: unknown}
+        - {type: fact_check, path: service.telnet, operator: eq, expected: false, on_missing: unknown}
+
+  - id: cis-junos-6.10.9
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '6.10.9'}
+    severity_override: low
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Finger enumerates logged-in users to anyone who asks, which is free
+      reconnaissance for an attacker choosing whose credentials to phish.
+    condition:
+      type: fact_check
+      path: service.finger
+      operator: eq
+      expected: false
+      on_missing: fail
+
+  # ══ 6.12 Logging ═══════════════════════════════════════════════════════
+
+  - id: cis-junos-6.12.1
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.12.1}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      At least one off-box collector receiving any facility at informational
+      severity. On-box logs are the first thing an attacker with administrative
+      access clears.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 1}
+
+  - id: cis-junos-6.12.2
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.12.2}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Two collectors, so that the loss of one — or its being the target of the
+      same intrusion — does not end the audit trail. Stated as a count because the
+      control names a number.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 2}
+
+  - id: cis-junos-6.12.5
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: 6.12.5}
+    severity_override: medium
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Interactive-command logging is the record of what an administrator actually
+      typed. Its absence is what makes an insider action unreconstructable, which
+      is why the benchmark separates it from general event logging.
+    condition:
+      type: fact_check
+      path: logging.buffered
+      operator: contains
+      expected: interactive-commands
+      quantifier: any
+      case_sensitive: false
+      on_missing: fail
+
+  # ══ 6.18 - 6.21 Global hygiene ═════════════════════════════════════════
+
+  - id: cis-junos-6.18
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '6.18'}
+    severity_override: low
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      This benchmark asks for UTC specifically, not merely for a timezone to be
+      set, and the reason is correlation: a fleet whose devices each log in their
+      own local zone cannot be merged without knowing each device's offset and its
+      daylight-saving history. Honoured exactly as written rather than relaxed to
+      "some timezone" — a device set to Asia/Kolkata is a real deviation from this
+      control even though it is a perfectly sensible operational choice, and
+      softening the rule would be the tool deciding the benchmark is wrong.
+    condition:
+      type: fact_check
+      path: time.timezone
+      operator: regex_match
+      expected: "(?i)\\A(utc|gmt|etc/utc|etc/gmt)\\Z"
+      on_missing: fail
+
+  - id: cis-junos-6.19
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '6.19'}
+    severity_override: low
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      A hostname that names the platform tells an attacker which exploits to try
+      before they have authenticated to anything.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: device.hostname, must_be_present: true}
+        - {type: fact_check, path: device.hostname, operator: regex_not_match, expected: "(?i)\\A(juniper|junos|mx|ex|srx|qfx|acx|ptx)[-_0-9]*\\Z", on_missing: fail}
+
+  - id: cis-junos-6.21
+    catalog: {catalog_id: cis_juniper_os_v2_0_0, control_id: '6.21'}
+    severity_override: low
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      The global statement of 3.6. Both are in the benchmark and both get their
+      own finding, because 3.6 is scoped to untrusted interfaces and this one is
+      not.
+    condition:
+      type: fact_check
+      path: interface.redirects
+      operator: eq
+      expected: false
+      on_missing: fail

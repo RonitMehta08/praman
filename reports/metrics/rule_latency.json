@@ -1,0 +1,313 @@
+{
+  "caveats": [
+    "3.1% coverage of all loaded controls is the honest headline and the least useful of the three figures: 42 catalogs are loaded so that a control id can be resolved and cited, not because rules were attempted for all of them. Per-benchmark coverage is what says how complete the targeted work is.",
+    "governance_reach counts distinct controls across the whole fixture set, not per device. No single device reaches that many, and the figure describes what the shipped crosswalk can reach at all.",
+    "The MODERATE-baseline denominator is the one a reader actually wants and the one that cannot be produced from the repository: SP 800-53B is a separate publication and is not vendored. Absent it, no baseline-scoped percentage is published rather than a plausible one being estimated.",
+    "Latency is single-threaded on one machine with warm caches. It is a lower bound for a cold process, where catalog and pattern load dominates by roughly an order of magnitude.",
+    "No estate-scale measurement: the largest input measured is one config file. Throughput across a thousand devices is not claimed, and the per-device figure should not be multiplied to guess it, because database writes and PDF generation are not in this number.",
+    "The governance projection is included in latency_all_frameworks but produces no verdict of its own: every NIST or ISO pass and fail in governance_reach is derived arithmetic over a CIS or DISA result that was already counted in verdicts_across_fixtures. Adding the two together would count the same evidence twice."
+  ],
+  "dataset": "Latency: enterprise_complex.conf, the largest shipped fixture. Coverage: all 42 built catalogs and all 454 shipped mapping rules. Verdict counts: every fixture under test_configs/, direct frameworks only, governance projection off. Governance reach: the same fixtures with the projection on, counting distinct NIST and ISO controls.",
+  "environment": {
+    "cpu_count": 16,
+    "gpu": "not recorded",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.10.11"
+  },
+  "generated_at": "2026-09-19T12:46:02.139053+00:00",
+  "measures": "Wall-clock latency of one RulesEvaluator.evaluate() call over pre-parsed facts with catalogs and rule packs warm, plus the share of loaded controls a deterministic rule can decide, reported against three denominators.",
+  "metric": "rule_latency_and_coverage",
+  "n": 20,
+  "results": {
+    "catalogs_loaded": 42,
+    "controls_by_framework": {
+      "CIS": 629,
+      "DISA_STIG": 1602,
+      "ISO_27001": 121,
+      "NIST_800_53": 1014
+    },
+    "controls_total": 3366,
+    "coverage_of_all_loaded_controls": 0.1349,
+    "coverage_of_direct_framework_controls": 0.2035,
+    "coverage_per_targeted_benchmark": [
+      {
+        "benchmark": "CIS Cisco IOS 15",
+        "catalog_id": "cis_cisco_ios_15_v4_1_1",
+        "controls_in_catalog": 90,
+        "controls_with_a_rule": 71,
+        "coverage": 0.7889,
+        "framework": "CIS"
+      },
+      {
+        "benchmark": "CIS Juniper OS",
+        "catalog_id": "cis_juniper_os_v2_0_0",
+        "controls_in_catalog": 172,
+        "controls_with_a_rule": 47,
+        "coverage": 0.2733,
+        "framework": "CIS"
+      },
+      {
+        "benchmark": "CIS Cisco ASA 9.x",
+        "catalog_id": "cis_cisco_asa_9_x_v1_1_0",
+        "controls_in_catalog": 78,
+        "controls_with_a_rule": 45,
+        "coverage": 0.5769,
+        "framework": "CIS"
+      },
+      {
+        "benchmark": "Cisco ASA NDM Security Technical Implementation Guide",
+        "catalog_id": "disa_stig_cisco_asa_ndm_security_technical_implementation_guide_v2r5",
+        "controls_in_catalog": 47,
+        "controls_with_a_rule": 44,
+        "coverage": 0.9362,
+        "framework": "DISA_STIG"
+      },
+      {
+        "benchmark": "Cisco NX OS Switch NDM Security Technical Implementation Guide",
+        "catalog_id": "disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6",
+        "controls_in_catalog": 42,
+        "controls_with_a_rule": 39,
+        "coverage": 0.9286,
+        "framework": "DISA_STIG"
+      },
+      {
+        "benchmark": "CIS Cisco NX-OS",
+        "catalog_id": "cis_cisco_nx_os_v1_2_0",
+        "controls_in_catalog": 62,
+        "controls_with_a_rule": 38,
+        "coverage": 0.6129,
+        "framework": "CIS"
+      },
+      {
+        "benchmark": "Fortinet FortiGate Firewall NDM Security Technical Implementation Guide",
+        "catalog_id": "disa_stig_fortinet_fortigate_firewall_ndm_security_technical_implementation_guide_v1r5",
+        "controls_in_catalog": 60,
+        "controls_with_a_rule": 35,
+        "coverage": 0.5833,
+        "framework": "DISA_STIG"
+      },
+      {
+        "benchmark": "Juniper Router NDM Security Technical Implementation Guide",
+        "catalog_id": "disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2",
+        "controls_in_catalog": 49,
+        "controls_with_a_rule": 34,
+        "coverage": 0.6939,
+        "framework": "DISA_STIG"
+      },
+      {
+        "benchmark": "Cisco IOS Router NDM Security Technical Implementation Guide",
+        "catalog_id": "disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8",
+        "controls_in_catalog": 35,
+        "controls_with_a_rule": 32,
+        "coverage": 0.9143,
+        "framework": "DISA_STIG"
+      },
+      {
+        "benchmark": "CIS FortiGate 7.4.x",
+        "catalog_id": "cis_fortigate_7_4_x_v1_0_1",
+        "controls_in_catalog": 64,
+        "controls_with_a_rule": 22,
+        "coverage": 0.3438,
+        "framework": "CIS"
+      },
+      {
+        "benchmark": "CIS Palo Alto Firewall 11",
+        "catalog_id": "cis_palo_alto_firewall_11_v1_2_0",
+        "controls_in_catalog": 79,
+        "controls_with_a_rule": 19,
+        "coverage": 0.2405,
+        "framework": "CIS"
+      },
+      {
+        "benchmark": "Arista MLS EOS 4.X NDM Security Technical Implementation Guide",
+        "catalog_id": "disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2",
+        "controls_in_catalog": 21,
+        "controls_with_a_rule": 17,
+        "coverage": 0.8095,
+        "framework": "DISA_STIG"
+      },
+      {
+        "benchmark": "Arista MLS EOS 4.X L2S Security Technical Implementation Guide",
+        "catalog_id": "disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3",
+        "controls_in_catalog": 18,
+        "controls_with_a_rule": 11,
+        "coverage": 0.6111,
+        "framework": "DISA_STIG"
+      }
+    ],
+    "governance_reach": {
+      "ISO_27001": {
+        "composition": {
+          "base_controls": 121,
+          "controls": 121,
+          "enhancements": 0
+        },
+        "controls_decided": 21,
+        "controls_emitted": 121,
+        "reach_of_emitted": 0.1736
+      },
+      "NIST_800_53": {
+        "composition": {
+          "base_controls": 300,
+          "controls": 1014,
+          "enhancements": 714
+        },
+        "controls_decided": 43,
+        "controls_emitted": 1014,
+        "moderate_baseline": "not on disk: SP 800-53B allocates the baselines and is published separately from the SP 800-53 catalog. Run MANUAL_COMMANDS.md Step 16. Until then the only honest denominator is the full catalog, which is what reach_of_emitted uses.",
+        "reach_of_emitted": 0.0424
+      }
+    },
+    "latency_all_frameworks": {
+      "max_ms": 32.492,
+      "mean_ms": 16.497,
+      "min_ms": 12.527,
+      "n": 20,
+      "p50_ms": 13.264,
+      "p95_ms": 32.492,
+      "timings_ms": [
+        28.214,
+        13.3,
+        12.668,
+        12.527,
+        12.528,
+        12.847,
+        30.336,
+        13.838,
+        12.844,
+        12.699,
+        12.743,
+        13.01,
+        13.085,
+        29.797,
+        13.637,
+        13.267,
+        13.404,
+        13.262,
+        13.435,
+        32.492
+      ]
+    },
+    "latency_direct_only": {
+      "max_ms": 14.562,
+      "mean_ms": 8.485,
+      "min_ms": 4.918,
+      "n": 20,
+      "p50_ms": 8.356,
+      "p95_ms": 14.562,
+      "timings_ms": [
+        10.477,
+        9.262,
+        8.787,
+        7.925,
+        7.54,
+        7.028,
+        5.329,
+        5.121,
+        4.972,
+        4.918,
+        5.153,
+        4.981,
+        5.044,
+        11.843,
+        14.562,
+        13.404,
+        11.427,
+        10.764,
+        10.381,
+        10.785
+      ]
+    },
+    "latency_per_fixture": [
+      {
+        "fixture": "eos_fully_hardened.conf",
+        "p50_ms": 19.05
+      },
+      {
+        "fixture": "eos_fully_noncompliant.conf",
+        "p50_ms": 24.051
+      },
+      {
+        "fixture": "fully_hardened.conf",
+        "p50_ms": 37.952
+      },
+      {
+        "fixture": "fully_noncompliant.conf",
+        "p50_ms": 35.87
+      },
+      {
+        "fixture": "panos_fully_hardened.conf",
+        "p50_ms": 23.539
+      },
+      {
+        "fixture": "panos_fully_noncompliant.conf",
+        "p50_ms": 17.528
+      },
+      {
+        "fixture": "router_with_show_version.conf",
+        "p50_ms": 37.088
+      },
+      {
+        "fixture": "stacked_switch_with_inventory.conf",
+        "p50_ms": 25.647
+      },
+      {
+        "fixture": "crypto_ipsec_isis.conf",
+        "p50_ms": 29.807
+      },
+      {
+        "fixture": "asa_dmz_firewall.conf",
+        "p50_ms": 26.505
+      },
+      {
+        "fixture": "eos_dc_leaf_switch.conf",
+        "p50_ms": 22.621
+      },
+      {
+        "fixture": "fortigate_perimeter.conf",
+        "p50_ms": 20.903
+      },
+      {
+        "fixture": "juniper_edge_router.conf",
+        "p50_ms": 31.378
+      },
+      {
+        "fixture": "nxos_datacenter_switch.conf",
+        "p50_ms": 29.801
+      },
+      {
+        "fixture": "panos_perimeter_firewall.conf",
+        "p50_ms": 21.182
+      },
+      {
+        "fixture": "enterprise_complex.conf",
+        "p50_ms": 30.389
+      },
+      {
+        "fixture": "insecure_minimal.conf",
+        "p50_ms": 25.599
+      },
+      {
+        "fixture": "partial_compliance.conf",
+        "p50_ms": 29.825
+      },
+      {
+        "fixture": "secure_baseline.conf",
+        "p50_ms": 29.131
+      },
+      {
+        "fixture": "telnet_exposed.conf",
+        "p50_ms": 28.079
+      }
+    ],
+    "rules_loaded": 454,
+    "verdicts_across_fixtures": {
+      "decided": 1339,
+      "fail": 607,
+      "notapplicable": 131,
+      "notchecked": 3587,
+      "pass": 732,
+      "unknown": 5
+    }
+  }
+}

@@ -1,0 +1,922 @@
+# DISA STIG — Cisco NX-OS Switch NDM v3r6 — canonical mappings
+#
+# 39 of this STIG's 42 controls. As everywhere in rules/mappings/, a rule here is
+# a *mapping*, never a control: every word an auditor reads — title, discussion,
+# check text, official remediation — comes from the catalog built from DISA's own
+# XCCDF (catalog_id below). A rule supplies only the canonical-model condition
+# that decides the control, plus a rationale for why that condition stands in for
+# it.
+#
+# The three DISA conventions stated in cisco_ios_router_ndm_v3r8.yaml hold here
+# unchanged, and are not restated: no `severity_override` (DISA publishes the CAT
+# rating), no `remediation_ref` (DISA publishes per-control fix text), and
+# `on_missing: pass` only where DISA words the test as "the following command
+# should not be found in the configuration".
+#
+# Two things are specific to NX-OS and shape most of this file.
+#
+# **The accounting monoculture.** Eleven of these controls — account creation,
+# modification, disabling, removal and enabling; non-repudiation; full-text
+# command recording; privileged-function execution; configuration change logging;
+# privilege escalation and de-escalation — are checked by DISA with the *same two
+# steps against the same one line*: `aaa accounting default group <SERVERS>`, and
+# then "verify that the referenced group name has defined AAA servers that are
+# online". DISA says why in a note repeated on every one of them: "Cisco NX-OS
+# devices report configuration activity to TACACS+ or RADIUS servers in the form
+# of accounting records." There is no per-event knob to read. So eleven rules
+# share one condition, and each rationale says so rather than paraphrasing the
+# same evidence eleven different ways to look like eleven different checks.
+#
+# **Step 2 is not decided anywhere in this file.** Binding `group TACACS-DC1` on
+# the accounting line to the `aaa group server tacacs+ TACACS-DC1` stanza that
+# defines its servers needs a condition type that can follow a reference from one
+# fact to another; PRAMAN does not have one yet, and docs/PRODUCTION-ROADMAP.md §3
+# records it as `cross_reference`. What every affected rule does instead is assert
+# the two halves separately — accounting names a *group* rather than `local`, and
+# at least one AAA server host exists on the device — and say in its rationale
+# that the binding between them is unverified. That is strictly stronger than
+# checking the accounting line alone (a switch pointing at a server group it never
+# defined fails here) and strictly weaker than DISA's procedure (a switch pointing
+# at the *wrong* group passes). "Online" is not decidable from a configuration
+# file at all, by DISA's own wording, and no rule here pretends otherwise.
+#
+# The three unmapped controls are recorded in docs/GAPS.md with the reason. They
+# render as `notchecked` — an explicit "no automated check exists", never a pass.
+
+rules:
+
+  # ══ Session control and management-plane access ═════════════════════════
+
+  - id: stig-nxos-ndm-v220474
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220474}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      NX-OS states this one way and only one way — `session-limit` under `line
+      vty` — so unlike the IOS control of the same shape there are no alternative
+      branches to accept. The pack records the number at
+      `line.vty.session_limit`, and presence is the whole test.
+
+      Not verified: whether the configured limit matches the
+      organization-defined number. DISA's example shows 2; the control text says
+      "the organization-defined number", which is not in the configuration file.
+      A rule asserting a specific ceiling would be asserting this project's
+      opinion of a value the publisher deliberately left to the site.
+    condition: {type: presence, path: line.vty.session_limit, must_be_present: true}
+
+  - id: stig-nxos-ndm-v220479
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220479}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      The check gives two configurations and accepts either, because the platform
+      changed underneath it: `access-class MGMT_NET in` under `line vty`, or —
+      "NX-OS v8 and later example" — `ip access-group MGMT_NET in` on `interface
+      mgmt0`. Both branches are tested. A rule recognising only the older form
+      would report a finding against a device DISA's own text calls compliant on
+      a current release.
+
+      The mgmt0 branch is a for_each over interfaces with everything that is not
+      `mgmt0` skipped, rather than a bare presence check on
+      `interface.acl_in`. That distinction is the rule: a bare presence check
+      passes a switch with an inbound ACL on a data port and nothing at all on
+      its management path, which is the exact device this control exists to
+      catch.
+
+      `access-class ... out` lands on its own canonical path and is deliberately
+      not read here, so a switch restricting where sessions may *go* rather than
+      where they may come from cannot satisfy an inbound-filter control.
+
+      Not verified: Step 2, that the ACL permits only management-network hosts.
+      The ACEs are parsed as separate facts with no binding back to the line or
+      interface that references them, and a guess that came back PASS would be
+      worse than the honest partial answer.
+    condition:
+      type: any_of
+      conditions:
+        - type: for_each
+          block: line.vty.id
+          on_no_blocks: fail
+          condition: {type: presence, path: line.vty.access_class, must_be_present: true}
+        - type: for_each
+          block: interface.name
+          skip_block_regex: '^(?!mgmt0\b)'
+          on_no_blocks: fail
+          condition: {type: presence, path: interface.acl_in, must_be_present: true}
+
+  - id: stig-nxos-ndm-v220480
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220480}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      `ssh login-attempts 3` is the whole of DISA's example, and the pack records
+      its argument at `mgmt.ssh.maxretries`.
+
+      `lte 3` rather than `eq 3`, for the reason the IOS pack gives on the
+      equivalent control: a switch disconnecting after two attempts is more
+      restrictive than the requirement, and reporting a finding against it would
+      be reporting a finding against being safer than asked.
+
+      Absence is a finding. NX-OS defaults to three attempts, so a silent switch
+      is arguably already compliant — but DISA's note is explicit that this
+      setting only disconnects the session and that account lockout is the AAA
+      server's job, which makes the explicit statement the thing being audited.
+      Convention 7 does not apply: DISA words this check as a command that
+      *should* be present, not one that should be absent.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.maxretries
+      operator: lte
+      expected: 3
+      on_missing: fail
+
+  - id: stig-nxos-ndm-v220481
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220481}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      `banner motd` is the pre-authentication banner on NX-OS — there is no
+      separate login banner — so `mgmt.login_banner` is where the pack records it
+      and its absence is the AC-8 finding rather than a cosmetic gap. The pack's
+      `defaults:` entry states this explicitly, which is why a switch with no
+      banner line reaches this rule as a false fact rather than as silence.
+
+      Not verified: that the text is the Standard Mandatory DoD Notice and
+      Consent Banner verbatim. The banner body is recorded at
+      `mgmt.banner.text`, so the auditor reading the report sees the actual
+      wording next to the finding; comparing it to DoD's paragraph is a manual
+      step, because a near-match differing in one clause is a finding that no
+      substring test would catch honestly.
+    condition:
+      type: fact_check
+      path: mgmt.login_banner
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: stig-nxos-ndm-v220493
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220493}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Both management paths are checked, because DISA's example configures both
+      and a switch that times out its vty sessions while leaving a console
+      session open indefinitely has not satisfied the control.
+
+      The comparison is in seconds against 300. NX-OS writes `exec-timeout 5`
+      meaning five *minutes*; the pack converts to seconds at parse time so this
+      rule states DISA's "five minutes or less" as the plain `lte 300` rather
+      than as a unit conversion buried in a rule. The evidence line an auditor
+      sees is unchanged — every fact carries its source line verbatim.
+
+      Absence of either stanza is a finding: a switch with no `line vty` block
+      still accepts management sessions on the platform's default vty lines, so
+      absence is the absence of the control, not inapplicability.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: line.console.exec_timeout, operator: lte, expected: 300, on_missing: fail}
+        - {type: fact_check, path: line.vty.exec_timeout, operator: lte, expected: 300, on_missing: fail}
+
+  - id: stig-nxos-ndm-v220486
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220486}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      This control is deliberately mapped narrower than its check text lists, and
+      the reason is in the check text itself: "the following features such as
+      telnet should never be enabled, while other features should only be enabled
+      if required for operations." DISA names five features and says only one of
+      them is unconditional.
+
+      So `feature telnet` is asserted false, and nothing else DISA lists is. A
+      rule failing on `feature dhcp` would report a finding against every switch
+      doing DHCP relay or DHCP snooping — both of which other controls in this
+      same corpus require — and a rule failing on `feature nxapi` would report
+      one against an HTTPS-only automation interface. Whether those are
+      "required for operations" is a PPSM question about the site, not a fact in
+      the configuration, and manufacturing findings out of it would make this
+      number look better while making the report worse.
+
+      `service.rcmd` is asserted false as well, and it is not on DISA's list.
+      DISA's list is prefixed "For example", so it is not exhaustive, and
+      `feature bash-shell` — which is what that path records on this platform —
+      drops a network-admin to a root shell on the supervisor. It is the
+      strongest instance of "unnecessary and nonsecure function" the NX-OS
+      feature set has, and the pattern pack already records it at the path the
+      other remote-shell services use.
+
+      Not verified: `feature wccp` and `feature imp`. Neither has a canonical
+      path, and inventing one to raise this control's coverage would put a fact
+      in the vocabulary that no rule needs and no other pack emits.
+
+      Both leaves rely on the pack's `defaults:` block rather than on
+      `on_missing`. On NX-OS a subsystem that is not declared is not installed,
+      so `feature telnet` absent is positive evidence that the telnet daemon does
+      not exist — a statement about the device, not an assumption about it.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.telnet.enabled, operator: eq, expected: false}
+        - {type: fact_check, path: service.rcmd, operator: eq, expected: false}
+
+  - id: stig-nxos-ndm-v220487
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220487}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Both of DISA's steps are decided, and they pull in opposite directions,
+      which is the point of the control: exactly one local account must exist,
+      and the fallback that makes it reachable must not have been switched off.
+
+      `eq 1` is literal — "configured with only one local account to be used as
+      the account of last resort". A switch with three local accounts has three
+      standing credentials that bypass the AAA server, which is the risk the
+      control names, so more is a finding rather than a stricter reading.
+
+      Step 2 reads `ne false` with `on_missing: pass`, which is convention 7 in
+      its cleanest form: DISA's own note says "The fallback is enabled by
+      default; hence the above command should not be seen in the configuration."
+      The pack has a pattern for exactly that negation, so a switch that really
+      has disabled fallback emits `false` and fails; a silent switch is the
+      compliant default the publisher describes.
+    condition:
+      type: all_of
+      conditions:
+        - {type: count, path: mgmt.local_user.name, operator: eq, expected: 1}
+        - {type: fact_check, path: aaa.local_fallback, operator: ne, expected: false, on_missing: pass}
+
+  # ══ AAA accounting — eleven controls, one line ══════════════════════════
+  #
+  # See the file header. Every rule in this section carries the same condition,
+  # deliberately and visibly, because DISA checks all eleven controls with the
+  # same two steps against `aaa accounting default group <SERVERS>`. The
+  # rationales differ only where the control's own subject differs; none of them
+  # claims evidence the others do not have.
+  #
+  # The `regex_match '^group\s'` half is doing real work rather than restating
+  # presence: `aaa accounting default local` is valid NX-OS and satisfies a bare
+  # presence check while writing the accounting records to the box being audited,
+  # which is the opposite of what every one of these controls asks for.
+
+  - id: stig-nxos-ndm-v220475
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220475}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Account creation is audited on NX-OS by the accounting record the switch
+      sends when the `username` command runs; there is no account-creation event
+      knob. DISA's Step 1 is `aaa accounting default group <SERVERS>`, and that
+      is what `aaa.accounting_commands` holds.
+
+      The group-to-server binding of Step 2 is unverified — see the file header.
+      What is checked is that accounting targets a server group rather than the
+      local log, and that the device defines at least one AAA server.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.accounting_commands, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 1}
+
+  - id: stig-nxos-ndm-v220476
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220476}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Account modification, same mechanism and same evidence as account creation:
+      the accounting record for the `username` command that performed the
+      modification. DISA's check text for this control and for V-220475 is
+      identical below the first sentence.
+
+      The group-to-server binding of Step 2 is unverified — see the file header.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.accounting_commands, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 1}
+
+  - id: stig-nxos-ndm-v220477
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220477}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Account disabling. NX-OS records the command that disabled the account as
+      an accounting record and nothing else; there is no separate audit switch
+      for the disabling event.
+
+      The group-to-server binding of Step 2 is unverified — see the file header.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.accounting_commands, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 1}
+
+  - id: stig-nxos-ndm-v220478
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220478}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Account removal, audited through the same accounting record as creation,
+      modification and disabling.
+
+      The group-to-server binding of Step 2 is unverified — see the file header.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.accounting_commands, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 1}
+
+  - id: stig-nxos-ndm-v220482
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220482}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Non-repudiation — "protect against an individual falsely denying having
+      performed" an action. What makes the denial refutable on NX-OS is that the
+      accounting record naming the administrator is stored on a server the
+      administrator does not control, which is precisely why this control is
+      checked with the same `aaa accounting default group` line as the account
+      auditing family: accounting to `local` would leave the evidence on the box
+      the person being audited administers.
+
+      The group-to-server binding of Step 2 is unverified — see the file header.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.accounting_commands, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 1}
+
+  - id: stig-nxos-ndm-v220485
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220485}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Full-text recording of privileged commands. The accounting record an NX-OS
+      switch emits carries the command as typed, in its attribute-value pairs —
+      DISA's note on this control says so — so the same accounting line decides
+      it. There is no `log config`-style local command log on this platform to
+      check instead.
+
+      The group-to-server binding of Step 2 is unverified — see the file header.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.accounting_commands, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 1}
+
+  - id: stig-nxos-ndm-v220494
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220494}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Account enabling — the fifth member of the account-lifecycle family, and
+      audited by the same accounting record as the other four.
+
+      The group-to-server binding of Step 2 is unverified — see the file header.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.accounting_commands, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 1}
+
+  - id: stig-nxos-ndm-v220495
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220495}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Configuration-change logging. DISA opens the check with "The configuration
+      example below will log all configuration changes" and then shows the same
+      `aaa accounting default group <SERVERS>` line, so on NX-OS this control and
+      the audit-of-privileged-functions control are satisfied by one statement.
+
+      The pattern pack emits `logging.config_changes` from that line as well, and
+      this rule deliberately does not read it: that fact exists so the IOS-shaped
+      `archive / log config` question has an answer on this platform, and reading
+      it here would make the rule look like it had independent evidence when it
+      is the same line either way.
+
+      The group-to-server binding of Step 2 is unverified — see the file header.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.accounting_commands, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 1}
+
+  - id: stig-nxos-ndm-v220506
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220506}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Log records when administrator privileges are *modified upward*. On NX-OS a
+      privilege change is a `username ... role ...` command, and the record of it
+      is the accounting record for that command.
+
+      The group-to-server binding of Step 2 is unverified — see the file header.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.accounting_commands, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 1}
+
+  - id: stig-nxos-ndm-v220507
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220507}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      The de-escalation half of V-220506, and the same command and the same
+      accounting record decide it.
+
+      The group-to-server binding of Step 2 is unverified — see the file header.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.accounting_commands, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 1}
+
+  - id: stig-nxos-ndm-v220509
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220509}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Log records for privileged activities generally, as distinct from the
+      execution of privileged *functions* in V-220495. DISA checks both with the
+      same accounting line, and this rule says so rather than inventing a
+      distinction the platform does not make.
+
+      The group-to-server binding of Step 2 is unverified — see the file header.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.accounting_commands, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 1}
+
+  # ══ Password complexity ═════════════════════════════════════════════════
+  #
+  # Four controls — uppercase, lowercase, numeric, special character — and one
+  # switch. NX-OS has no per-character-class knob: `password strength-check`
+  # enforces all four together, so DISA words all four checks identically and
+  # tests for the *negation*. That makes convention 7 apply to all four, and it
+  # makes the pack's `defaults:` entry load-bearing: strength checking is on by
+  # default and does not print when it is on, so a switch that never touched the
+  # setting is compliant rather than silent. Filing that default the wrong way
+  # round once made every untouched NX-OS switch fail CIS 1.4.1; the reasoning,
+  # with both publishers' own wording, is on the default in
+  # data/ingest/patterns/cisco_nxos.yaml.
+
+  - id: stig-nxos-ndm-v220489
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220489}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Uppercase character requirement. DISA: "Password complexity is enabled by
+      default … The following command should not be found in the configuration:
+      no password strength-check." The canonical boolean is the negation of that
+      line, so `eq true` with `on_missing: pass` is the publisher's test stated
+      directly.
+
+      The four complexity controls cannot be distinguished from a configuration
+      file, because NX-OS does not distinguish them. A switch failing one fails
+      all four, and the report says the same thing four times — which is DISA's
+      structure, not a duplication introduced here.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: eq
+      expected: true
+      on_missing: pass
+
+  - id: stig-nxos-ndm-v220490
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220490}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Lowercase character requirement, enforced by the same
+      `password strength-check` switch as V-220489. See that rule for why all
+      four complexity controls share one condition.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: eq
+      expected: true
+      on_missing: pass
+
+  - id: stig-nxos-ndm-v220491
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220491}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Numeric character requirement, enforced by the same
+      `password strength-check` switch as V-220489. See that rule for why all
+      four complexity controls share one condition.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: eq
+      expected: true
+      on_missing: pass
+
+  - id: stig-nxos-ndm-v220492
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220492}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Special-character requirement, enforced by the same
+      `password strength-check` switch as V-220489. See that rule for why all
+      four complexity controls share one condition.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: eq
+      expected: true
+      on_missing: pass
+
+  # ══ Cryptography on the management session ══════════════════════════════
+  #
+  # V-220488 and V-220503 are the same requirement filed under two control ids —
+  # DISA's check text for the two is byte-identical — so they carry the same
+  # condition for the same reason the accounting family does.
+  #
+  # All three rules in this section accept `fips mode enable` as an alternative
+  # to the explicit algorithm list, and that needs stating because DISA's note
+  # appears to argue against it: "Using 'fips mode enable' to enable all FIPS
+  # protocols disables TACACS+ and RADIUS, which is required for authentication
+  # server requirements. It is recommended to enable FIPS-validated protocols
+  # manually and keep FIPS mode disabled." Read carefully, that note *confirms*
+  # FIPS mode satisfies these three controls and warns that it costs you the
+  # eleven accounting controls and V-220513. It is a recommendation about which
+  # trade-off to take, not a statement that FIPS mode fails this control — so a
+  # switch in FIPS mode passes here and takes its findings where the note says it
+  # will.
+
+  - id: stig-nxos-ndm-v220488
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220488}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Replay-resistant authentication for the management session, which DISA
+      checks as `ssh macs hmac-sha2-256 hmac-sha2-512`. The pack records the
+      whole MAC list as one fact at `mgmt.ssh.mac` rather than splitting it, so
+      "is a SHA-2 HMAC offered" stays answerable with a substring test and "is
+      anything weak still offered" stays answerable at all — splitting the list
+      into one fact per algorithm would lose which device offered which set.
+
+      Absence is a finding rather than a default: NX-OS's built-in MAC list is
+      release-dependent and includes algorithms DISA does not accept, so a switch
+      that never stated a list has not been shown to offer only FIPS-validated
+      ones.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: mgmt.ssh.mac, operator: regex_match, expected: 'hmac-sha2-(256|512)', on_missing: fail}
+        - {type: fact_check, path: crypto.fips_mode, operator: eq, expected: true}
+
+  - id: stig-nxos-ndm-v220503
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220503}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      FIPS-validated HMAC for remote maintenance sessions. DISA's check text for
+      this control is identical to V-220488's — same example, same note, same
+      finding statement — so it carries the identical condition. Two control ids
+      over one requirement is the publisher's structure; collapsing them into one
+      rule would drop a control id out of the report.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: mgmt.ssh.mac, operator: regex_match, expected: 'hmac-sha2-(256|512)', on_missing: fail}
+        - {type: fact_check, path: crypto.fips_mode, operator: eq, expected: true}
+
+  - id: stig-nxos-ndm-v220504
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220504}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Confidentiality of the remote maintenance session, checked as
+      `ssh ciphers aes128-ctr aes256-ctr`.
+
+      The test is worded as the absence of a weak algorithm rather than the
+      presence of a named strong one, and that is what makes it decide both of
+      the forms a real NX-OS switch uses. NX-OS 10.x accepts DISA's explicit
+      `ssh ciphers` list, and every release accepts `no ssh cipher-mode weak`,
+      which restricts the offered set to the strong ciphers without naming them;
+      both land on `mgmt.ssh.cipher`, the second as the normalised value
+      `strong`. A rule demanding the literal string `aes128-ctr` would report a
+      finding against a switch that had disabled every weak cipher on the box.
+
+      The rejected set is the SSH ciphers DISA and CIS name as weak across the
+      benchmarks this project loads: single and triple DES, RC4/arcfour,
+      Blowfish, CAST, and CBC-mode AES. `ASSUMPTION:` this list is treated as
+      complete for the platform; a cipher NX-OS gains later that belongs on it
+      would pass until the pattern is extended.
+    condition:
+      type: any_of
+      conditions:
+        - type: fact_check
+          path: mgmt.ssh.cipher
+          operator: regex_not_match
+          expected: '(^|[,\s])(3des|des|arcfour|rc4|blowfish|cast128|aes\d+-cbc)'
+          on_missing: fail
+          case_sensitive: false
+        - {type: fact_check, path: crypto.fips_mode, operator: eq, expected: true}
+
+  # ══ Time ════════════════════════════════════════════════════════════════
+
+  - id: stig-nxos-ndm-v220498
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220498}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      "Primary and secondary" is two servers, and DISA's example shows exactly
+      two `ntp server` lines. A count is the right shape here rather than a
+      presence test: a switch with one authoritative source has a single point of
+      failure for the timestamps every other audit control depends on, which is
+      the risk this control names.
+
+      Not verified: that the sources are authoritative, or that they are the
+      organisation's designated primary and secondary. Neither is in the
+      configuration file.
+    condition: {type: count, path: time.ntp.server, operator: gte, expected: 2}
+
+  - id: stig-nxos-ndm-v220502
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220502}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      This control cannot be passed on Cisco NX-OS, and the mapping says so
+      rather than quietly passing switches that have done everything available to
+      them. DISA's own note: "Cisco NX-OS is limited to MD5 for NTP
+      authentication, and incurs a permanent finding as it is not FIPS
+      compliant."
+
+      Both halves are still checked, so the finding distinguishes a switch that
+      configured NTP authentication as well as the platform allows from one that
+      configured none at all. The first is a permanent finding the publisher
+      acknowledges; the second is a permanent finding plus an unauthenticated
+      clock. `ne md5` is the half that can never pass, and it is written as a
+      real condition rather than a hardcoded fail so that the day NX-OS gains
+      SHA-2 support this rule starts passing without being touched — the pattern
+      already reads `sha1` and `sha256` off the key line for exactly that reason.
+
+      This mirrors `stig-ios-router-ndm-v215698` deliberately: DISA words the
+      same permanent finding for both platforms, so the two reports should say it
+      the same way.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: time.ntp.authentication, operator: eq, expected: true}
+        - {type: fact_check, path: time.ntp.key, operator: ne, expected: md5, on_missing: fail, case_sensitive: false}
+
+  # ══ Logging ═════════════════════════════════════════════════════════════
+
+  - id: stig-nxos-ndm-v220496
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220496}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      `logging logfile LOGFILE1 6 size nnnnn` — the `size` argument is the
+      allocation this control is about, and the pack emits it at
+      `logging.buffered_size` only when it is actually written. A switch with
+      `logging logfile LOGFILE1 6` and no size clause takes the platform default
+      and has not allocated capacity "in accordance with organization-defined
+      requirements", so presence of the size is the test rather than presence of
+      the logfile line.
+
+      Not verified: that the size satisfies the organisation's retention
+      requirement. The requirement is not in the configuration file, and a
+      threshold invented here would be this project's number rather than the
+      site's.
+    condition: {type: presence, path: logging.buffered_size, must_be_present: true}
+
+  - id: stig-nxos-ndm-v220497
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220497}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      DISA's example is `logging server 10.1.48.10 2` and the note widens it:
+      "The parameter 2 (critical) can [be] replaced with a lesser severity level
+      3 through 6." So the test is that every configured syslog destination
+      carries a threshold of 6 or lower, which is what `lte 6` under the default
+      `all` quantifier states. A switch with two servers, one at severity 5 and
+      one at 7, would fail — correctly, because the second one is not carrying
+      the alerts.
+
+      Absence is a finding: a switch with no syslog destination cannot alert on
+      anything, so there is nothing to be silent about.
+    condition:
+      type: fact_check
+      path: logging.trap_level
+      operator: lte
+      expected: 6
+      on_missing: fail
+
+  - id: stig-nxos-ndm-v220508
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220508}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      DISA shows two lines and both are checked: `logging logfile LOG_FILE 6`
+      gives the records somewhere to land, and `logging level authpri 6` is what
+      makes authentication events appear at all. Checking only the second would
+      pass a switch generating logon records that go nowhere.
+
+      `authpri` is the syslog facility that carries NX-OS's authentication and
+      privilege events, and the pattern pack emits `logging.login_success` and
+      `logging.login_failure` from that one line rather than filing its severity
+      as a facility name. Both are read here, and they will always agree today
+      because one line produces both — the rule reads both so that it keeps
+      meaning what it says if a future platform or pack emits them separately.
+
+      Not verified: that the severity argument is 6 rather than a lower number.
+      `logging level authpri` sets which authentication events reach the log, and
+      DISA's example uses 6; a switch using 5 logs fewer of them. The pack
+      deliberately does not file that severity — `logging.trap_level` is the
+      syslog *destination* threshold and putting a facility severity there would
+      make V-220497 read a number that has nothing to do with it.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: logging.buffered, must_be_present: true}
+        - {type: fact_check, path: logging.login_success, operator: eq, expected: true, on_missing: fail}
+        - {type: fact_check, path: logging.login_failure, operator: eq, expected: true, on_missing: fail}
+
+  - id: stig-nxos-ndm-v220510
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220510}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      "Starting and ending time for administrator access" is the logon and the
+      logoff, and on NX-OS both are `authpri` events — DISA's check for this
+      control is the single line `logging level authpri 6`, with no logfile
+      clause, which is the only difference from V-220508.
+
+      That difference is preserved rather than smoothed over: this rule does not
+      require the logfile, because DISA did not ask for it here.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.login_success, operator: eq, expected: true, on_missing: fail}
+        - {type: fact_check, path: logging.login_failure, operator: eq, expected: true, on_missing: fail}
+
+  - id: stig-nxos-ndm-v220512
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220512}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Off-loading log records onto a different system means at least one
+      `logging server`. The count is `gte 1` here and `gte 2` on V-220516, which
+      is the distinction DISA draws between the two controls — this one is about
+      the records leaving the audited device at all, that one is about surviving
+      the loss of one collector.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 1}
+
+  - id: stig-nxos-ndm-v220516
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220516}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      "At least two central log servers", and DISA's example shows exactly two
+      `logging server` lines. A switch satisfying V-220512 with one collector
+      fails this one, which is the intended relationship between the pair.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 2}
+
+  # ══ SNMP ════════════════════════════════════════════════════════════════
+  #
+  # Both SNMP controls are gated on the switch actually running SNMP.
+  # `snmp.enabled` is observed only when a community, user, group or trap host is
+  # configured, so its pack default of false is what a silent switch carries —
+  # which is why the gate is a value test inside an any_of rather than a
+  # requires_paths, exactly as in the IOS pack.
+
+  - id: stig-nxos-ndm-v220500
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220500}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      A FIPS-validated HMAC for SNMP means two things, and both are checked: the
+      v3 user's authentication protocol is SHA, and the agent will not accept a
+      request that skips authentication. `snmp-server user NETOPS … auth sha …`
+      with an agent that still answers `noAuthNoPriv` requests authenticates
+      nothing.
+
+      NX-OS states the second half switch-wide with `snmp-server
+      globalEnforcePriv` rather than per group as IOS and the ASA do, so the pack
+      files it at `snmp.group_security` — the path that carries the required
+      security level on every pack — and one fact stands for the whole agent.
+      `in [auth, priv]` accepts either, because `priv` implies authentication.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: snmp.enabled, operator: eq, expected: false}
+        - type: all_of
+          conditions:
+            - {type: fact_check, path: snmp.v3_auth, operator: regex_match, expected: '^sha', on_missing: fail, case_sensitive: false}
+            - {type: fact_check, path: snmp.group_security, operator: in, expected: [auth, priv], on_missing: fail}
+
+  - id: stig-nxos-ndm-v220501
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220501}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      The privacy half of V-220500: `priv aes-128` on the user, and an agent that
+      refuses unencrypted v3 requests. DES and 3DES are the algorithms this
+      control exists to exclude, so the test is that the privacy protocol is an
+      AES variant rather than merely that one is configured.
+
+      This control was undecidable until the pattern pack was corrected. The
+      privacy algorithm was not being captured at all: `snmp.v3_priv` — which
+      holds the algorithm on every other vendor pack — was being filled from
+      `snmp-server globalEnforcePriv` with the literal `enforced`, so the only
+      value the path could ever hold was a security level. No rule can answer
+      "is the encryption FIPS 140-2 approved" from that. The algorithm now comes
+      off the `snmp-server user` line where NX-OS actually writes it, and the
+      enforcement flag moved to `snmp.group_security` where it belongs.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: snmp.enabled, operator: eq, expected: false}
+        - type: all_of
+          conditions:
+            - {type: fact_check, path: snmp.v3_priv, operator: regex_match, expected: '^aes', on_missing: fail, case_sensitive: false}
+            - {type: fact_check, path: snmp.group_security, operator: eq, expected: priv, on_missing: fail}
+
+  # ══ Authentication servers, backup, PKI and the control plane ═══════════
+
+  - id: stig-nxos-ndm-v220513
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220513}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Both of DISA's steps map, and the second is the one that carries the
+      control: two authentication servers. Step 1 is checked on both access
+      methods DISA names — `aaa authentication login default` for in-band and
+      `aaa authentication login console` for the console — because a switch
+      authenticating vty sessions against RADIUS while leaving the console on
+      local credentials has not moved administrative authentication off the box.
+
+      The `regex_match '^group\s'` on each is the same distinction the accounting
+      family draws: `local` satisfies presence and defeats the control.
+
+      The group-to-server binding is unverified for the reason in the file
+      header, so Step 2 is asserted as "the device defines at least two AAA
+      server hosts" rather than "the group named in Step 1 contains two". A
+      switch pointing at a group with one server and defining a second server in
+      an unrelated group passes here and would fail DISA's procedure.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.authentication_login, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: fact_check, path: line.console.login_auth, operator: regex_match, expected: '^group\s', on_missing: fail}
+        - {type: count, path: aaa.server.host, operator: gte, expected: 2}
+
+  - id: stig-nxos-ndm-v220514
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220514}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      NX-OS has no `archive` stanza. DISA's check walks the reviewer through an
+      EEM applet that copies the configuration off the box when a change occurs,
+      and that is the only mechanism the platform offers, so it is what the
+      pattern pack models and what this rule reads.
+
+      Two facts, not one, and the second is the rule. `file.config_archive` is
+      the applet container, which fires on every `event manager applet`
+      regardless of what the applet does — a switch whose one applet reboots a
+      line card would satisfy a container-only check. `file.archive_path` is the
+      destination of the `copy running-config` action, so requiring it is
+      requiring that some applet actually copies the configuration somewhere.
+
+      Not verified: that the applet's trigger is a configuration-change event
+      rather than a timer or an operator command, and that the destination is
+      off-box. DISA's example triggers on the `SYSLOG_CONFIG_I` pattern and
+      copies over SCP; a timer-driven applet copying to `bootflash:` passes this
+      rule and would not satisfy "when changes occur". Deciding it needs the
+      applet's trigger and its destination to be compared inside one block, which
+      is the `cross_reference` gap again.
+
+      Absence is a finding rather than silence: DISA asks for the applet, and a
+      switch without one is not backing up its configuration by some other means
+      that the configuration file would show.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: file.config_archive, operator: eq, expected: true, on_missing: fail}
+        - {type: presence, path: file.archive_path, must_be_present: true}
+
+  - id: stig-nxos-ndm-v220515
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-220515}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      This rule can return `pass` or `notapplicable` and never `fail`, which is
+      unusual enough in this project to state plainly rather than leave a reader
+      to discover.
+
+      DISA opens the check with "If PKI certificates are not implemented on the
+      switch, this requirement is not applicable", and Step 1 is the presence of
+      a `crypto ca trustpoint` stanza. So a switch with a trustpoint has
+      satisfied Step 1, and a switch without one is the case the publisher calls
+      not applicable. `on_missing: notapplicable` is that sentence, encoded.
+
+      What the mapping cannot see is the difference between a switch that does
+      not need PKI and one that needs it and has none — the distinction is about
+      the device's role, not its configuration, and DISA's own reviewer resolves
+      it by asking rather than by reading. Closing it needs the organisational
+      inputs docs/PRODUCTION-ROADMAP.md §2.4 records; until then `notapplicable`
+      is the honest answer and `fail` would be a guess.
+
+      Not verified: Step 2, that the CA is DoD or DoD-approved. That comes from
+      `show crypto ca certificates` — the issuer's CN and O — which is runtime
+      state, not configuration, so no configuration file can answer it.
+    condition:
+      type: fact_check
+      path: crypto.pki.trustpoint
+      operator: regex_match
+      expected: '\S'
+      on_missing: notapplicable
+
+  - id: stig-nxos-ndm-v260464
+    catalog: {catalog_id: disa_stig_cisco_nx_os_switch_ndm_security_technical_implementation_guide_v3r6, control_id: V-260464}
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Control Plane Policing. DISA's Step 1 is that traffic types have been
+      classified by importance — a set of `class-map type control-plane` stanzas
+      — and Step 2 is that the ACLs those class maps reference classify the
+      traffic appropriately.
+
+      Step 1 maps directly: `control_plane.service_policy` carries the class-map
+      names and `control_plane.policing` the access groups they match on, so
+      requiring both is requiring class maps that actually select traffic rather
+      than empty ones.
+
+      Not verified: Step 2. Judging whether an ACL classifies control-plane
+      traffic "appropriately" means knowing which addresses are this switch's
+      OSPF and BGP neighbours and which are not — a topology question, not a
+      configuration one. DISA's own example fills the addresses with placeholders
+      for that reason.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: control_plane.service_policy, must_be_present: true}
+        - {type: presence, path: control_plane.policing, must_be_present: true}

@@ -1,0 +1,1921 @@
+# Juniper Junos pattern pack.
+#
+# The second platform PRAMAN parses, and the one that proves C5 is real rather
+# than a claim: there is no juniper.py, no new adapter class and no redeploy
+# behind this file. backend/ingest/generic.py runs it with exactly the engine that
+# runs cisco_ios.yaml, and the NIST/ISO rules read the facts it emits without
+# knowing Junos exists.
+#
+# Junos differs from IOS in three ways that matter to a parser, and all three are
+# handled by declaring them rather than by branching in code:
+#
+# 1. **Blocks are brace-delimited, not indentation-scoped.** `mode: brace` counts
+#    `{` and `}` across lines. Indentation in a Junos config is cosmetic — a
+#    `show configuration | display set` round-trip loses it entirely — so scoping
+#    a stanza by indent would misattribute children the first time someone pasted
+#    a reflowed config.
+#
+# 2. **Statements terminate with `;`.** Every leaf regex therefore ends
+#    `\s*;?\s*$` rather than `$`. The `?` is deliberate: a statement that opens a
+#    block has no semicolon, and the same regex must not fire on both.
+#
+# 3. **The hierarchy is deep and meaningful.** `ssh` under `services` under
+#    `system` is a different thing from `ssh` under `web-management`. Nested
+#    `blocks:` mirror that, and generic.py matches a line against the innermost
+#    enclosing block first, so `protocol-version v2;` can only be read as an SSH
+#    fact when it is actually inside the ssh stanza.
+#
+# Both serialisations are covered. The brace format above is what `show
+# configuration` and every published Junos corpus emit; the flat `set` format
+# (`display set`, and what an operator pastes from a change ticket) is covered by
+# the `set_*` patterns at the end of `patterns:`. Neither is a translation of the
+# other — they are two regex families writing to the same canonical paths, which
+# is the whole point of having canonical paths.
+#
+# Conventions inherited from cisco_ios.yaml and deliberately not re-litigated:
+# value paths carry values while boolean companions carry on/off; first match
+# wins top-to-bottom; secrets are recorded by hash *type*, never by ciphertext.
+
+vendor: juniper_junos
+os_family: junos
+parser_id: juniper_junos_patterns@1
+description: >
+  Juniper Junos (EX / MX / SRX / QFX) configuration, in both the brace-delimited
+  `show configuration` format and the flat `display set` format. Covers the CIS
+  Juniper OS v2.0.0 benchmark surface and the DISA Juniper Router / EX-Series /
+  SRX NDM STIG check surfaces.
+
+# Junos comments are `#` to end-of-line and `/* ... */` inline. `##` introduces
+# the annotations Junos adds itself — `## SECRET-DATA` after a hash, `## Last
+# changed:` in a header — which are metadata, not configuration.
+#
+# `!` is NOT a comment prefix here. It appears inside Junos regular expressions
+# and inside `then reject` policy names, and treating it as a comment would
+# truncate a firewall term mid-definition.
+comment_prefixes:
+  - "#"
+  - "/*"
+
+case_insensitive: true
+
+# Detection has the same two halves as the IOS pack: *shape* markers that say the
+# file is written in Junos syntax, and *surface* markers that say it configures
+# what Junos configs configure. Junos is easier to recognise than the Cisco
+# dialects because its top-level hierarchy words are unique to it — no other
+# supported platform has a `routing-options` or a `protocols` stanza.
+detect:
+  min_hits: 3
+  markers:
+    # ── Shape: this file is written in Junos syntax ────────────────────
+    # Junos spells the hostname with a hyphen. IOS, NX-OS, ASA and Arista all
+    # write `hostname`; FortiOS writes `set hostname`. Nobody else writes this.
+    - "host-name"
+    # Top-level hierarchy words. Each is a Junos stanza name with no analogue in
+    # any other supported platform's syntax.
+    - "routing-options"
+    - "system {"
+    - "interfaces {"
+    - "protocols {"
+    - "firewall {"
+    - "snmp {"
+    # The `set` serialisation of the same hierarchy.
+    - "set system "
+    - "set interfaces "
+    - "set protocols "
+    # ── Surface: this file configures what Junos configs configure ─────
+    - "root-authentication"
+    - "authentication-order"
+    - "retry-options"
+    - "tries-before-disconnect"
+    - "encrypted-password"
+    - "unit 0"
+    - "family inet"
+    - "web-management"
+    - "traceoptions"
+    - "apply-groups"
+    - "## secret-data"
+  # Junos-only spellings. `root-authentication` is the account no other platform
+  # models as a configuration stanza, and `family inet` is Junos's way of saying
+  # "IPv4 on this logical unit" — both together put Junos unambiguously ahead of
+  # any dialect that merely shares a word.
+  strong_markers:
+    - "host-name"
+    - "family inet"
+  strong_bonus: 10
+  # A file carrying any of these is another platform, whatever else it contains.
+  # PAN-OS is the dangerous neighbour: it also uses `set` syntax and also nests
+  # braces, so its two distinctive top-level words are excluded explicitly.
+  anti_markers:
+    - "boot-start-marker"            # cisco_ios
+    - "asa version"                  # cisco_asa
+    - "feature nx-os"                # cisco_nxos
+    - "config system global"         # fortinet
+    - "set deviceconfig"             # paloalto_panos
+    - "set network profiles"         # paloalto_panos
+    - "management api http-commands"  # arista_eos
+  filename_hints:
+    - "junos"
+    - "juniper"
+    - "jnpr"
+    - ".jcfg"
+
+# Structural noise: syntax that carries no compliance meaning at all. A line here
+# is neither a fact nor an unparsed line.
+#
+# The bare `}` and `next` closers are the big ones — a real Junos config is about
+# 12% closing braces, and leaving them in unparsed_lines would bury every genuine
+# gap under punctuation and make the parse-coverage metric meaningless.
+ignore:
+  - '^\}\s*$'
+  - '^\{\s*$'
+  - '^\}\s*\{\s*$'
+  - '^inactive:\s*$'
+  - '^##'
+  - '^\s*$'
+  # Account bookkeeping that is not hardening posture. A UID is an inventory
+  # integer and a full name is a display string; the canonical vocabulary has no
+  # path for either, and the honest answer to "where does this go" is nowhere
+  # rather than into the nearest credential-shaped path.
+  - '^uid\s+\d+\s*;\s*$'
+  - '^full-name\s'
+  # Login throttling knobs with no canonical home. `backoff-threshold N` is how
+  # many failed attempts pass before Junos starts delaying the prompt,
+  # `backoff-factor N` is the seconds added per further failure, and
+  # `rate-limit N` is the cap on new SSH connections per minute. All three are
+  # real hardening, and none of them is a session ceiling, a retry count, a
+  # rekey interval or a AAA server timeout — which is where they were previously
+  # filed. Nothing in CIS, DISA, NIST or ISO reads them, so they are recorded as
+  # covered-but-unmapped rather than pushed into the nearest number-shaped path.
+  - '^backoff-threshold\s+\d+\s*;\s*$'
+  - '^backoff-factor\s+\d+\s*;\s*$'
+  - '^rate-limit\s+\d+\s*;\s*$'
+  # How many times Junos re-sends an unanswered RADIUS/TACACS+ request before
+  # giving up on that server. It is an availability tuning knob, not a hardening
+  # one — no framework reads it — and it is emphatically not `aaa.server.timeout`
+  # or an authentication-attempt ceiling, which are the two number-shaped paths
+  # it sits next to.
+  - '^retry\s+\d+\s*;\s*$'
+  - '^set system (?:radius|tacplus)-server\s+\S+\s+retry\s+\d+\s*$'
+  # Pure structural containers. Junos nests deeply and several levels exist only
+  # to say "what follows is of this kind" — `from {`, `then {`, `family inet {`,
+  # `authentication {`. None is a configuration decision, and leaving them in
+  # unparsed_lines would put a hundred punctuation lines in the coverage report
+  # and bury the gaps that are real. Their *children* are matched normally; it is
+  # only the opening word that carries nothing.
+  - '^from\s*\{'
+  - '^then\s*\{'
+  - '^family\s+inet6?\s*\{'
+  - '^authentication\s*\{'
+  - '^retry-options\s*\{'
+  - '^password\s*\{'
+  - '^filter\s*\{'
+  - '^source-address\s*\{'
+  - '^destination-address\s*\{'
+  - '^configuration\s*\{'
+  - '^archival\s*\{'
+  - '^usm\s*\{'
+  - '^vacm\s*\{'
+  - '^local-engine\s*\{'
+  - '^security-model\s'
+  - '^security-name\s'
+  - '^targets\s*\{'
+  - '^unicast\s*\{'
+  - '^prefix-limit\s*\{'
+  - '^multihop\s*\{'
+  - '^categories\s*\{'
+  - '^session\s*\{'
+  - '^web-management\s*\{'
+  - '^forwarding-table\s*\{'
+  - '^static\s*\{'
+  - '^area\s+\S+\s*\{'
+  - '^group\s+\S+\s*\{'
+  # `type external;` declares a BGP session as eBGP or iBGP. It changes routing
+  # behaviour, not security posture, and no control in any of the four frameworks
+  # reads it — the neighbour's authentication and TTL security do, and both are
+  # captured.
+  - '^type\s+(?:external|internal)\s*;'
+  # `apply-groups` and `apply-flags` are inheritance directives. What they pull in
+  # is not in this file, so pretending to have parsed them would be a lie in the
+  # other direction: the honest report is that the group's contents were never
+  # uploaded, which is what the missing facts already say.
+  - '^apply-groups\b'
+  - '^apply-flags\b'
+  - '^set apply-groups\b'
+  # Junos writes these headers into `show configuration` output.
+  - '^Last commit:'
+  - '^## Last changed:'
+
+patterns:
+
+  # ── Device identity ───────────────────────────────────────────────────
+  # C4 requires the report to name a device by serial and hardware. A Junos
+  # running configuration contains neither, so both come from any `show version`
+  # or `show chassis hardware` text included in the upload.
+
+  - id: junos_version
+    regex: '^version\s+(?P<value>\d+\.\d+[A-Z]\d+[\d.\-S]*)\s*;?\s*$'
+    path: device.os_version
+    value: str
+    note: >
+      Junos writes its own version as the first statement of a saved
+      configuration. Deliberately not in the ignore list above: `ignore` is
+      checked before the pattern list, so an entry there would suppress this fact
+      rather than merely tidy the coverage report.
+
+  - id: junos_show_version_model
+    regex: '^Model:\s*(?P<value>\S+)'
+    path: device.model
+    value: str
+    note: "'show version' output"
+
+  - id: junos_show_version_os
+    regex: '^Junos:\s*(?P<value>\S+)'
+    path: device.os_version
+    value: str
+
+  - id: junos_chassis_serial
+    regex: '^Chassis\s+(?P<value>[A-Z0-9]{6,})\s'
+    path: device.serials
+    value: str
+    note: "'show chassis hardware' — the chassis row carries the system serial"
+
+  - id: junos_hostname
+    regex: '^host-name\s+(?P<value>\S+?)\s*;\s*$'
+    path: device.hostname
+    value: str
+
+  - id: junos_domain_name
+    regex: '^domain-name\s+(?P<value>\S+?)\s*;\s*$'
+    path: mgmt.domain_name
+    value: str
+
+  - id: junos_time_zone
+    regex: '^time-zone\s+(?P<value>\S+?)\s*;\s*$'
+    path: time.timezone
+    value: str
+
+  # ── Authentication order and AAA ──────────────────────────────────────
+  # `authentication-order` is the Junos equivalent of `aaa authentication login`:
+  # an ordered list of methods. Captured as a word_list so a rule can ask "is
+  # radius or tacplus in the list" without caring how the operator spaced it.
+  #
+  # This is §26 case 7 of the master prompt: the control is NIST IA-2 and the
+  # evidence line is `authentication-order [ radius password ];`.
+
+  - id: junos_authentication_order
+    regex: '^authentication-order\s+\[?\s*(?P<value>[^\];]+?)\s*\]?\s*;\s*$'
+    path: aaa.authentication_order
+    value: word_list
+    note: >
+      Both spellings are one regex: `authentication-order radius;` for a single
+      method and `authentication-order [ radius password ];` for several. Junos
+      accepts both and they mean the same thing, so they must produce the same
+      fact shape or a rule would pass on one and fail on the other.
+
+  # `radius-server` and `tacplus-server` used to be matched here, as line
+  # patterns against the opening brace, which recorded the protocol and threw the
+  # servers away. They are blocks now — see `junos_radius_server` under
+  # `junos_system` — because the server *addresses* are the compliance fact: DISA
+  # V-217350 asks for at least two authentication servers, and a pattern that
+  # sees only `radius-server {` cannot count them. The protocol is still emitted,
+  # from the block anchor, so nothing that read aaa.server.protocol has changed.
+
+  - id: junos_radius_options_source
+    regex: '^radius-options\s+source-address\s+(?P<value>\S+?)\s*;\s*$'
+    path: aaa.source_interface
+    value: str
+
+  - id: junos_tacplus_options_source
+    regex: '^tacplus-options\s+service-name\s+(?P<value>\S+?)\s*;\s*$'
+    path: aaa.server.name
+    value: str
+
+  # ── Root authentication ───────────────────────────────────────────────
+  # Junos models `root` as a configuration stanza rather than as an `enable`
+  # secret, but the compliance question is the same one CIS and the STIG ask of
+  # `enable secret`: is the stored credential a modern hash?
+  #
+  # The hash *type* is emitted; the ciphertext never is. `$6$` is SHA-512,
+  # `$5$` SHA-256, `$1$` MD5, `$sha1$` the legacy Junos form. A rule compares the
+  # type, which is the compliance-relevant part, and the report cites the line
+  # without reprinting the hash.
+
+  - id: junos_root_encrypted_password
+    regex: '^encrypted-password\s+"?\$(?P<value>[0-9a-z]+)\$'
+    path: mgmt.enable_secret.hash_type
+    value: lower
+    note: >
+      Matched at top level rather than only inside root-authentication because
+      `encrypted-password` also appears under `system login user <n>
+      authentication`, and a weak hash there is the same finding.
+
+  - id: junos_root_plaintext_password
+    regex: '^plain-text-password'
+    path: mgmt.enable_secret.hash_type
+    value: const
+    literal: plaintext
+    note: >
+      Junos prompts for this interactively and stores the result hashed, so it
+      should never survive into a saved configuration. When it does, the device
+      was configured from a script that typed a password in clear and the
+      credential is in whatever ran that script.
+
+  - id: junos_root_ssh_rsa
+    regex: '^ssh-rsa\s+"?ssh-rsa\s'
+    path: mgmt.local_user.ssh_key
+    value: const
+    literal: ssh-rsa
+
+  - id: junos_root_ssh_ed25519
+    regex: '^ssh-ed25519\s+"?ssh-ed25519\s'
+    path: mgmt.local_user.ssh_key
+    value: const
+    literal: ssh-ed25519
+
+  # ── Login controls ────────────────────────────────────────────────────
+
+  - id: junos_retry_tries
+    regex: '^tries-before-disconnect\s+(?P<value>\d+)\s*;\s*$'
+    path: aaa.authentication_attempts
+    value: int
+
+  - id: junos_retry_lockout
+    regex: '^lockout-period\s+(?P<minutes>\d+)\s*;\s*$'
+    path: aaa.login_block
+    value: minutes_seconds
+    note: >
+      Junos states the lockout in minutes; every other pack normalises this path
+      to seconds (Arista `duration`, NX-OS `system login block-for`, FortiOS
+      `admin-lockout-duration`), so `minutes_seconds` is what makes one threshold
+      readable on all of them. It was `value: int` until now, which is why
+      `cis-junos-6.6.1.5` was left unmapped with the unit collision recorded in
+      GAPS.md rather than guessed at — 15 read against a seconds threshold of 900
+      fails a device that is in fact compliant.
+
+  - id: junos_password_min_length
+    regex: '^minimum-length\s+(?P<value>\d+)\s*;\s*$'
+    path: mgmt.password_policy.min_length
+    value: int
+
+  - id: junos_password_max_length
+    regex: '^maximum-length\s+(?P<value>\d+)\s*;\s*$'
+    path: mgmt.password_policy.max_length
+    value: int
+
+  - id: junos_password_change_type
+    regex: '^change-type\s+(?P<value>\S+?)\s*;\s*$'
+    path: mgmt.password_policy.complexity
+    value: lower
+
+  - id: junos_password_minimum_changes
+    regex: '^minimum-changes\s+(?P<value>\d+)\s*;\s*$'
+    path: mgmt.password_policy.history
+    value: int
+
+  - id: junos_password_format
+    regex: '^format\s+(?P<value>sha1|sha256|sha512|md5|des)\s*;\s*$'
+    path: mgmt.local_user.hash_type
+    value: lower
+
+  - id: junos_idle_timeout_web
+    regex: '^idle-timeout\s+(?P<minutes>\d+)\s*;\s*$'
+    path: mgmt.http.idle_timeout
+    value: minutes_seconds
+    note: >
+      Junos writes `idle-timeout N;` in two unrelated places, and this pattern is
+      the *fallback* for the second of them. Inside `system login class <name>`
+      it is the CLI/management-session idle timeout the NDM STIG asks about;
+      inside `system services web-management session` it is the J-Web GUI
+      timeout. The first is claimed by `login_class_idle_timeout` under the
+      `junos_login_class` block, and a block child beats a top-level pattern, so
+      anything reaching here is the J-Web one.
+
+      This pattern used to be `junos_idle_timeout` and wrote every match to
+      line.vty.exec_timeout with a note claiming the canonical path held minutes.
+      Both halves were wrong. `minutes_seconds` yields seconds — as it does on
+      IOS, ASA and Arista — and the fixture has no login class at all, so the
+      only `idle-timeout` in it is J-Web's: a rule asking "is the management
+      session timeout five minutes or less" was reading the web GUI's setting on
+      a device whose CLI has no timeout configured. That can only ever produce a
+      false pass.
+
+  # ── Management services ───────────────────────────────────────────────
+  # A Junos service is on because its stanza exists. `telnet;` is a whole
+  # statement; `ssh { ... }` opens a block. Both are handled: the bare-statement
+  # forms are line patterns here, and the block forms are under `blocks:` where
+  # their children can be scoped.
+
+  - id: junos_service_telnet
+    regex: '^telnet\s*;\s*$'
+    path: mgmt.telnet.enabled
+    value: true
+
+  - id: junos_service_telnet_block
+    regex: '^telnet\s*\{\s*$'
+    path: mgmt.telnet.enabled
+    value: true
+    note: >
+      `telnet { connection-limit 5; }` is the same finding as bare `telnet;` —
+      the service is enabled either way. Declared as a line pattern rather than a
+      block because nothing inside it is compliance-relevant, and a single-line
+      block would be indistinguishable from a leaf fact downstream.
+
+  - id: junos_service_finger
+    regex: '^finger\s*[;{]\s*$'
+    path: service.finger
+    value: true
+
+  - id: junos_service_ftp
+    regex: '^ftp\s*[;{]\s*$'
+    path: mgmt.access.protocols
+    value: const
+    literal: ftp
+
+  - id: junos_service_rlogin
+    regex: '^rlogin\s*[;{]\s*$'
+    path: service.rcmd
+    value: true
+
+  - id: junos_service_reverse_telnet
+    regex: '^reverse-telnet\s*[;{]\s*$'
+    path: service.telnet
+    value: true
+
+  - id: junos_service_dhcp_local_server
+    regex: '^dhcp-local-server\s*\{\s*$'
+    path: service.dhcp
+    value: true
+
+  - id: junos_service_dns_server
+    regex: '^name-server\s*\{\s*$'
+    path: service.dns
+    value: true
+
+  # `backoff-threshold` and `backoff-factor` used to be line patterns here,
+  # writing to aaa.max_sessions and aaa.server.timeout. Neither is what those
+  # paths mean: backoff-threshold is how many failed attempts pass before Junos
+  # starts delaying the prompt, and backoff-factor is how many seconds each
+  # further failure adds. Filing them at a session ceiling and a RADIUS response
+  # timeout meant `cis-junos-6.10.1.3`, whose own rationale says "a connection
+  # limit bounds how much of the routing engine a single source can consume",
+  # was reading the number 2 from `backoff-threshold 2`. The canonical
+  # vocabulary has no login-backoff path, and the honest answer to "where does
+  # this go" is nowhere — so both are in the `ignore:` list above, alongside
+  # `uid` and `full-name`, for the same stated reason. The real connection
+  # ceiling is `ssh connection-limit`, now captured at aaa.max_sessions.
+
+  - id: junos_service_lldp
+    regex: '^lldp\s*\{\s*$'
+    path: service.lldp
+    value: true
+
+  - id: junos_service_netconf
+    regex: '^netconf\s*\{\s*$'
+    path: mgmt.netconf.enabled
+    value: true
+
+  - id: junos_service_rest
+    regex: '^rest\s*\{\s*$'
+    path: mgmt.restconf.enabled
+    value: true
+
+  # ── Web management ────────────────────────────────────────────────────
+  # `http;` inside `web-management` is cleartext J-Web. `https { ... }` is the
+  # encrypted form. They map to the two paths the IOS pack uses for `ip http
+  # server` / `ip http secure-server`, so one rule covers both platforms.
+
+  - id: junos_web_http
+    regex: '^http\s*[;{]\s*$'
+    path: mgmt.http.server_enabled
+    value: true
+
+  - id: junos_web_https
+    regex: '^https\s*[;{]\s*$'
+    path: mgmt.http.secure_server_enabled
+    value: true
+
+  # `junos_web_session_idle` used to sit here, matching a one-line
+  # `session idle-timeout N;`. Junos never writes that form — `session` opens a
+  # brace block — so the pattern matched nothing and the J-Web timeout fell
+  # through to the top-level idle-timeout pattern instead. It is replaced by
+  # `junos_idle_timeout_web` above, which is that fallback made deliberate.
+
+  - id: junos_web_local_cert
+    regex: '^local-certificate\s+(?P<value>\S+?)\s*;\s*$'
+    path: crypto.pki.trustpoint
+    value: str
+
+  # ── Archival and integrity ────────────────────────────────────────────
+
+  - id: junos_archival_transfer_on_commit
+    regex: '^transfer-on-commit\s*;\s*$'
+    path: file.config_archive
+    value: true
+
+  - id: junos_archival_transfer_interval
+    regex: '^transfer-interval\s+(?P<value>\d+)\s*;\s*$'
+    path: file.config_archive
+    value: true
+
+  - id: junos_archive_site
+    regex: '^archive-sites\s*\{?\s*(?P<value>\S+)?\s*;?\s*$'
+    path: file.archive_path
+    value: str
+
+  - id: junos_no_saved_core_files
+    regex: '^no-saved-core-context\s*;\s*$'
+    path: file.privilege
+    value: true
+
+  # ── Static routing ────────────────────────────────────────────────────
+
+  - id: junos_static_default_route
+    regex: '^route\s+0\.0\.0\.0/0\s+next-hop\s+(?P<value>\S+?)\s*;\s*$'
+    path: routing.default_route
+    value: str
+    note: must precede junos_static_route, which would otherwise swallow it
+
+  - id: junos_static_route
+    regex: '^route\s+(?P<value>\d+\.\d+\.\d+\.\d+/\d+)\s+next-hop\s'
+    path: routing.static_route
+    value: str
+
+  - id: junos_autonomous_system
+    regex: '^autonomous-system\s+(?P<value>\d+)\s*;\s*$'
+    path: routing.bgp.asn
+    value: int
+
+  - id: junos_no_source_route
+    regex: '^no-source-route\s*;\s*$'
+    path: routing.source_routing
+    value: false
+
+  - id: junos_source_route
+    regex: '^source-route\s*;\s*$'
+    path: routing.source_routing
+    value: true
+
+  - id: junos_rpf_check
+    regex: '^rpf-check\s*[;{]\s*$'
+    path: routing.urpf
+    value: true
+
+  - id: junos_unicast_reverse_path
+    regex: '^unicast-reverse-path\s+(?P<value>\S+?)\s*;\s*$'
+    path: routing.urpf
+    value: true
+    note: >
+      The forwarding-table form of the same control. `feasible-paths` is the
+      loose mode and `active-paths` the strict one; both mean uRPF is on, which is
+      what the anti-spoofing control asks, so both produce the same boolean.
+
+  - id: junos_lldp_interface
+    regex: '^interface\s+(?:all|(?:ae|em|fe|ge|xe|et)[\w./:-]*)\s*;\s*$'
+    path: interface.lldp_enabled
+    value: true
+    note: >
+      `interface all;` inside `protocols lldp`. Junos enables LLDP per interface
+      rather than globally, so this is the fact that decides the control — the
+      `protocols lldp` stanza alone can exist with no interfaces in it.
+
+  - id: junos_no_redirects
+    regex: '^no-redirects\s*;\s*$'
+    path: interface.redirects
+    value: false
+
+  - id: junos_no_ping_broadcast
+    regex: '^no-ping-record-route\s*;\s*$'
+    path: interface.directed_broadcast
+    value: false
+
+  - id: junos_stp_mode_rstp
+    regex: '^rstp\s*\{\s*$'
+    path: stp.mode
+    value: const
+    literal: rstp
+
+  - id: junos_stp_mode_mstp
+    regex: '^mstp\s*\{\s*$'
+    path: stp.mode
+    value: const
+    literal: mstp
+
+  - id: junos_stp_bpdu_block
+    regex: '^bpdu-block-on-edge\s*;\s*$'
+    path: stp.bpduguard_default
+    value: true
+
+  # ── The flat `set` serialisation ──────────────────────────────────────
+  # `show configuration | display set` and every change ticket ever written use
+  # this form. These are not translations of the brace patterns — they are their
+  # own regexes writing to the same canonical paths, which is exactly what a
+  # vendor-neutral model is for. Kept last so a brace-format file never pays for
+  # them: first match wins, and a brace-format line cannot start with `set `.
+
+  - id: set_hostname
+    regex: '^set system host-name\s+(?P<value>\S+)\s*$'
+    path: device.hostname
+    value: str
+
+  - id: set_domain_name
+    regex: '^set system domain-name\s+(?P<value>\S+)\s*$'
+    path: mgmt.domain_name
+    value: str
+
+  - id: set_time_zone
+    regex: '^set system time-zone\s+(?P<value>\S+)\s*$'
+    path: time.timezone
+    value: str
+
+  - id: set_authentication_order
+    regex: '^set system authentication-order\s+\[?\s*(?P<value>[^\]]+?)\s*\]?\s*$'
+    path: aaa.authentication_order
+    value: word_list
+
+  # `display set` flattens a stanza onto one line per attribute, so the same
+  # RADIUS server reappears for `secret`, `timeout`, `retry` and
+  # `source-address`. Only the `secret` line emits aaa.server.host, and that is
+  # not a stylistic choice: `count aaa.server.host >= 2` decides DISA V-217350,
+  # and a pattern that emitted the host from every attribute line would count one
+  # well-configured server as four. The `secret` line is the one Junos always
+  # writes for a usable server, and it is the line DISA's own check text prints.
+  - id: set_radius_server
+    regex: '^set system radius-server\s+(?P<host>\S+)\s+secret\s+\S+'
+    emits:
+      - {path: aaa.server.protocol, value: const, literal: radius}
+      - {path: aaa.server.host, value: str, group: host}
+      - {path: aaa.server.key_encrypted, value: true}
+
+  - id: set_radius_server_timeout
+    regex: '^set system radius-server\s+\S+\s+timeout\s+(?P<value>\d+)\s*$'
+    path: aaa.server.timeout
+    value: int
+
+  - id: set_radius_server_source
+    regex: '^set system radius-server\s+\S+\s+source-address\s+(?P<value>\S+)\s*$'
+    path: aaa.source_interface
+    value: str
+
+  - id: set_tacplus_server
+    regex: '^set system tacplus-server\s+(?P<host>\S+)\s+secret\s+\S+'
+    emits:
+      - {path: aaa.server.protocol, value: const, literal: "tacacs+"}
+      - {path: aaa.server.host, value: str, group: host}
+      - {path: aaa.server.key_encrypted, value: true}
+
+  - id: set_tacplus_server_timeout
+    regex: '^set system tacplus-server\s+\S+\s+timeout\s+(?P<value>\d+)\s*$'
+    path: aaa.server.timeout
+    value: int
+
+  - id: set_tacplus_server_source
+    regex: '^set system tacplus-server\s+\S+\s+source-address\s+(?P<value>\S+)\s*$'
+    path: aaa.source_interface
+    value: str
+
+  - id: set_radius_options_source
+    regex: '^set system radius-options source-address\s+(?P<value>\S+)\s*$'
+    path: aaa.source_interface
+    value: str
+
+  - id: set_root_encrypted_password
+    regex: '^set system root-authentication encrypted-password\s+"?\$(?P<value>[0-9a-z]+)\$'
+    path: mgmt.enable_secret.hash_type
+    value: lower
+
+  - id: set_ssh_root_login
+    regex: '^set system services ssh root-login\s+(?P<value>\S+)\s*$'
+    path: mgmt.ssh.acl
+    value: lower
+    note: >
+      `root-login deny` is the Junos spelling of "no direct root over SSH". The
+      canonical path is the SSH access restriction rather than a bespoke path,
+      because that is the control CIS and the STIG both write.
+
+  - id: set_ssh_protocol_version
+    regex: '^set system services ssh protocol-version\s+v?(?P<value>\d)\s*$'
+    path: mgmt.ssh.version
+    value: int
+
+  - id: set_ssh_ciphers
+    regex: '^set system services ssh ciphers\s+\[?\s*(?P<value>[^\]]+?)\s*\]?\s*$'
+    path: mgmt.ssh.cipher
+    value: word_list
+
+  - id: set_ssh_macs
+    regex: '^set system services ssh macs\s+\[?\s*(?P<value>[^\]]+?)\s*\]?\s*$'
+    path: mgmt.ssh.mac
+    value: word_list
+
+  - id: set_ssh_kex
+    regex: '^set system services ssh key-exchange\s+\[?\s*(?P<value>[^\]]+?)\s*\]?\s*$'
+    path: mgmt.ssh.kex
+    value: word_list
+
+  - id: set_ssh_connection_limit
+    regex: '^set system services ssh connection-limit\s+(?P<value>\d+)\s*$'
+    path: aaa.max_sessions
+    value: int
+    note: "Set-format twin of ssh_connection_limit; same path, same reasoning."
+
+  - id: set_service_telnet
+    regex: '^set system services telnet\s*$'
+    path: mgmt.telnet.enabled
+    value: true
+
+  - id: set_web_http
+    regex: '^set system services web-management http\s*$'
+    path: mgmt.http.server_enabled
+    value: true
+
+  - id: set_web_https
+    regex: '^set system services web-management https\b'
+    path: mgmt.http.secure_server_enabled
+    value: true
+
+  - id: set_retry_tries
+    regex: '^set system login retry-options tries-before-disconnect\s+(?P<value>\d+)\s*$'
+    path: aaa.authentication_attempts
+    value: int
+
+  - id: set_login_message
+    regex: '^set system login message\s+(?P<value>.+?)\s*$'
+    emits:
+      - {path: mgmt.login_banner, value: true}
+      - {path: mgmt.banner.text, value: str, group: value}
+
+  - id: set_login_announcement
+    regex: '^set system login announcement\s+(?P<value>.+?)\s*$'
+    emits:
+      - {path: mgmt.motd_banner, value: true}
+      - {path: mgmt.banner.text, value: str, group: value}
+
+  # The message-class decomposition described at `junos_syslog_host` applies to
+  # the flat serialisation too, or a `display set` capture of the same device
+  # would score differently from its brace-format twin. Ordered specific-first;
+  # the bare `set_syslog_host` below stays as the fallback for a `host` line that
+  # carries no class (`set system syslog host 10.1.58.2 port 6514`).
+  - id: set_syslog_class_any
+    regex: '^set system syslog (?:host\s+(?P<host>\S+)|file\s+\S+)\s+any\s+(?:emergency|alert|critical|error|warning|notice|info|any)\s*$'
+    emits:
+      - {path: logging.enable, value: true}
+      - {path: logging.remote_syslog, value: str, group: host}
+      - {path: logging.config_changes, value: true}
+      - {path: logging.login_success, value: true}
+      - {path: logging.login_failure, value: true}
+      - {path: logging.commands, value: true}
+  - id: set_syslog_class_change_log
+    regex: '^set system syslog (?:host\s+(?P<host>\S+)|file\s+\S+)\s+change-log\s+(?:emergency|alert|critical|error|warning|notice|info|any)\s*$'
+    emits:
+      - {path: logging.enable, value: true}
+      - {path: logging.remote_syslog, value: str, group: host}
+      - {path: logging.config_changes, value: true}
+  - id: set_syslog_class_authorization
+    regex: '^set system syslog (?:host\s+(?P<host>\S+)|file\s+\S+)\s+authorization\s+(?:emergency|alert|critical|error|warning|notice|info|any)\s*$'
+    emits:
+      - {path: logging.enable, value: true}
+      - {path: logging.remote_syslog, value: str, group: host}
+      - {path: logging.login_success, value: true}
+      - {path: logging.login_failure, value: true}
+  - id: set_syslog_class_interactive
+    regex: '^set system syslog (?:host\s+(?P<host>\S+)|file\s+\S+)\s+interactive-commands\s+(?:emergency|alert|critical|error|warning|notice|info|any)\s*$'
+    emits:
+      - {path: logging.enable, value: true}
+      - {path: logging.remote_syslog, value: str, group: host}
+      - {path: logging.commands, value: true}
+
+  - id: set_syslog_host
+    regex: '^set system syslog host\s+(?P<value>\S+)'
+    emits:
+      - {path: logging.remote_syslog, value: str, group: value}
+      - {path: logging.enable, value: true}
+
+  - id: set_ntp_server
+    regex: '^set system ntp server\s+(?P<value>\S+)'
+    emits:
+      - {path: time.ntp.server, value: str, group: value}
+      - {path: time.ntp.enabled, value: true}
+      - {path: time.ntp, value: true}
+
+  - id: set_ntp_authentication_key
+    regex: '^set system ntp authentication-key\s+(?P<value>\d+)'
+    emits:
+      - {path: time.ntp.key_id, value: int, group: value}
+      - {path: time.ntp.authentication, value: true}
+
+  - id: set_snmp_community
+    regex: '^set snmp community\s+(?P<value>\S+)'
+    emits:
+      - {path: snmp.community, value: str, group: value}
+      - {path: snmp.enabled, value: true}
+
+  - id: set_snmp_v3
+    regex: '^set snmp v3\b'
+    path: snmp.version
+    value: const
+    literal: 3
+
+  - id: set_interface_disable
+    regex: '^set interfaces (?P<name>[\w./:-]+) disable\s*$'
+    emits:
+      - {path: interface.name, value: str, group: name}
+      - {path: interface.admin_state, value: const, literal: shutdown}
+
+  - id: set_interface_address
+    regex: '^set interfaces [\w./:-]+ unit \d+ family inet address\s+(?P<value>\S+)\s*$'
+    path: interface.ip_address
+    value: str
+
+  - id: set_bgp_authentication
+    regex: '^set protocols bgp group \S+ authentication-key\b'
+    path: routing.bgp.neighbor_auth
+    value: true
+
+  - id: set_ospf_authentication
+    regex: '^set protocols ospf area \S+ interface \S+ authentication\b'
+    path: routing.ospf.auth
+    value: true
+
+  - id: set_lldp
+    regex: '^set protocols lldp\b'
+    path: service.lldp
+    value: true
+
+blocks:
+
+  # ── system ────────────────────────────────────────────────────────────
+  # The outermost management stanza. Almost every leaf pattern above lives
+  # somewhere under it, and generic.py searches enclosing blocks outward, so
+  # declaring `system` as a block costs nothing and gives every management fact a
+  # stanza the report can point at.
+
+  - id: junos_system
+    anchor_path: mgmt.privilege.level
+    regex: '^system\s*\{\s*$'
+    anchor_value: true
+    mode: brace
+    note: >
+      The anchor path is a stretch and it is chosen deliberately. `system` is
+      where privilege is defined on Junos — classes, permissions, the root
+      account — and the canonical vocabulary has no `system` path. Inventing one
+      would add a path no rule reads; reusing an unrelated one would make a rule
+      that reads it wrong. This is the closest true statement available, and the
+      block exists mainly to give its children a scope.
+    children:
+      - id: system_name_server_address
+        regex: '^(?P<value>\d+\.\d+\.\d+\.\d+)\s*;\s*$'
+        path: service.dns
+        value: true
+        note: >
+          A bare address inside `name-server { }`. The fact is that name
+          resolution is configured, not which resolver — the resolver's identity
+          is not a compliance control on any of the four frameworks, and the
+          canonical model has no path for it.
+      - id: system_archive_site_url
+        regex: '^"?(?P<value>(?:scp|ftp|https?|sftp)://[^"\s;]+)"?\s*;\s*$'
+        path: file.archive_path
+        value: str
+        note: >
+          The archival destination, captured because the control asks *where*
+          configurations go: an `ftp://` site is the finding, an `scp://` one is
+          the pass. The embedded username survives; a password in a Junos archive
+          URL is redacted upstream by backend/ingest/redact.py before this fact is
+          ever stored.
+    blocks:
+
+      # ── Authentication servers ────────────────────────────────────────
+      # Junos writes these two stanzas in two shapes and both are current
+      # syntax, so both are children here rather than one being treated as the
+      # real one:
+      #
+      #     radius-server {              radius-server {
+      #         10.20.0.60 secret "..";      10.20.0.60 {
+      #         10.20.0.61 secret "..";          secret "..";
+      #     }                                    timeout 5;
+      #                                      }
+      #                                  }
+      #
+      # The first is the form DISA's own check text prints; the second is what a
+      # device with per-server tuning holds. Both land on aaa.server.host, which
+      # is what makes `count aaa.server.host >= 2` mean the same thing on Junos
+      # as it does on IOS and the ASA.
+      #
+      # The secret itself is never emitted — aaa.server.key_encrypted records
+      # only that a shared secret is configured and that Junos stored it
+      # encrypted, which is the compliance-relevant half. The ciphertext is
+      # redacted upstream by backend/ingest/redact.py in any case.
+
+      - id: junos_radius_server
+        anchor_path: aaa.server.protocol
+        regex: '^radius-server\s*\{\s*$'
+        anchor_value: const
+        literal: radius
+        mode: brace
+        children:
+          - id: radius_server_inline
+            regex: '^(?P<host>\S+)\s+secret\s+"[^"]*"\s*;'
+            emits:
+              - {path: aaa.server.host, value: str, group: host}
+              - {path: aaa.server.key_encrypted, value: true}
+          - id: radius_server_secret
+            regex: '^secret\s+"[^"]*"\s*;'
+            path: aaa.server.key_encrypted
+            value: true
+          - id: radius_server_timeout
+            regex: '^timeout\s+(?P<value>\d+)\s*;\s*$'
+            path: aaa.server.timeout
+            value: int
+          - id: radius_server_source_address
+            regex: '^source-address\s+(?P<value>\S+?)\s*;\s*$'
+            path: aaa.source_interface
+            value: str
+        blocks:
+          - id: junos_radius_server_host
+            anchor_path: aaa.server.host
+            regex: '^(?P<value>[0-9a-fA-F.:]+)\s*\{\s*$'
+            anchor_value: str
+            mode: brace
+            note: >
+              The per-server form. The anchor is deliberately narrow — an address
+              literal, v4 or v6 — because a bare `<word> {` inside this stanza
+              would also match nothing else Junos puts here, and a loose anchor
+              on a block that emits an *address* is how a keyword ends up filed
+              as a RADIUS server.
+            children:
+              - id: radius_host_secret
+                regex: '^secret\s+"[^"]*"\s*;'
+                path: aaa.server.key_encrypted
+                value: true
+              - id: radius_host_timeout
+                regex: '^timeout\s+(?P<value>\d+)\s*;\s*$'
+                path: aaa.server.timeout
+                value: int
+              - id: radius_host_source_address
+                regex: '^source-address\s+(?P<value>\S+?)\s*;\s*$'
+                path: aaa.source_interface
+                value: str
+
+      - id: junos_tacplus_server
+        anchor_path: aaa.server.protocol
+        regex: '^tacplus-server\s*\{\s*$'
+        anchor_value: const
+        literal: tacacs+
+        mode: brace
+        children:
+          - id: tacplus_server_inline
+            regex: '^(?P<host>\S+)\s+secret\s+"[^"]*"\s*;'
+            emits:
+              - {path: aaa.server.host, value: str, group: host}
+              - {path: aaa.server.key_encrypted, value: true}
+          - id: tacplus_server_secret
+            regex: '^secret\s+"[^"]*"\s*;'
+            path: aaa.server.key_encrypted
+            value: true
+          - id: tacplus_server_timeout
+            regex: '^timeout\s+(?P<value>\d+)\s*;\s*$'
+            path: aaa.server.timeout
+            value: int
+          - id: tacplus_server_source_address
+            regex: '^source-address\s+(?P<value>\S+?)\s*;\s*$'
+            path: aaa.source_interface
+            value: str
+        blocks:
+          - id: junos_tacplus_server_host
+            anchor_path: aaa.server.host
+            regex: '^(?P<value>[0-9a-fA-F.:]+)\s*\{\s*$'
+            anchor_value: str
+            mode: brace
+            children:
+              - id: tacplus_host_secret
+                regex: '^secret\s+"[^"]*"\s*;'
+                path: aaa.server.key_encrypted
+                value: true
+              - id: tacplus_host_timeout
+                regex: '^timeout\s+(?P<value>\d+)\s*;\s*$'
+                path: aaa.server.timeout
+                value: int
+              - id: tacplus_host_source_address
+                regex: '^source-address\s+(?P<value>\S+?)\s*;\s*$'
+                path: aaa.source_interface
+                value: str
+
+      - id: junos_root_authentication
+        anchor_path: mgmt.enable_secret.value
+        regex: '^root-authentication\s*\{\s*$'
+        anchor_value: true
+        mode: brace
+        note: >
+          Anchors the *presence* of a root credential, not its content. A device
+          with no root-authentication stanza cannot be committed at all on Junos,
+          so absence here means the upload was partial rather than the device
+          being open — and the missing fact says exactly that.
+
+      - id: junos_login
+        anchor_path: mgmt.password_policy.name
+        regex: '^login\s*\{\s*$'
+        anchor_value: true
+        mode: brace
+        children:
+          - id: junos_login_message
+            regex: '^message\s+"?(?P<value>[^";]+)"?\s*;\s*$'
+            emits:
+              - {path: mgmt.login_banner, value: true}
+              - {path: mgmt.banner.text, value: str, group: value}
+            note: >
+              Junos `message` is displayed *before* the login prompt, which is
+              what a consent-to-monitor banner has to do to be legally useful.
+              `announcement` is shown after authentication and answers a
+              different control, so the two map to different paths.
+          - id: junos_login_announcement
+            regex: '^announcement\s+"?(?P<value>[^";]+)"?\s*;\s*$'
+            emits:
+              - {path: mgmt.motd_banner, value: true}
+              - {path: mgmt.banner.text, value: str, group: value}
+        blocks:
+          - id: junos_login_class
+            anchor_path: mgmt.privilege.level
+            regex: '^class\s+(?P<value>[\w.-]+)\s*\{\s*$'
+            anchor_value: true
+            mode: brace
+            note: >
+              `system login class <name> { ... }` defines a privilege class. The
+              anchor is boolean rather than the class name for the same reason
+              `junos_system` is: mgmt.privilege.level is where privilege
+              *definition* is recorded on this platform, and a rule asking
+              whether privilege is defined should not have to know the site's
+              naming scheme. The name is not lost — it is on the evidence line.
+
+              The block exists so `idle-timeout` inside a class can be told apart
+              from `idle-timeout` inside `web-management session`. A block child
+              beats a top-level pattern, so the class one lands on the management
+              session path and the J-Web one falls through to the HTTP path.
+
+              Note the ordering hazard this avoids: `class <name>;` inside a
+              `user` stanza assigns a class, and `class <name> {` here defines
+              one. The trailing `{` in this regex is what separates them.
+            children:
+              - id: login_class_idle_timeout
+                regex: '^idle-timeout\s+(?P<minutes>\d+)\s*;\s*$'
+                path: line.vty.exec_timeout
+                value: minutes_seconds
+                note: >
+                  Junos states this in minutes; the canonical path holds seconds,
+                  as it does for IOS `exec-timeout` and FortiOS `admintimeout`.
+
+          - id: junos_login_user
+            anchor_path: mgmt.local_user.name
+            regex: '^user\s+(?P<value>[\w.-]+)\s*\{\s*$'
+            anchor_value: str
+            mode: brace
+            children:
+              - id: junos_user_class
+                regex: '^class\s+(?P<value>\S+?)\s*;\s*$'
+                path: mgmt.local_user.privilege
+                value: lower
+                note: >
+                  Junos grants privilege by named class, IOS by a 0-15 integer.
+                  The canonical path holds whichever the platform uses and the
+                  rule for each framework compares against that platform's
+                  vocabulary — projecting `super-user` onto 15 would invent a
+                  precision Junos does not have.
+              # `uid` and `full-name` used to be children here, filed under
+              # mgmt.local_user.secret and mgmt.local_user.secret_type. Neither is
+              # a credential: a UID is an inventory integer and a full name is a
+              # display string, and writing them into the two secret paths meant a
+              # rule asking "does this account have a password, and what hashed
+              # it" read 2001 and "Network Operations". They have no canonical
+              # home because they are not hardening posture, so they are ignored
+              # globally instead — see the `ignore:` block. Ignored lines still
+              # count as covered, so this costs nothing in measured coverage.
+
+      - id: junos_services
+        anchor_path: mgmt.access.protocols
+        regex: '^services\s*\{\s*$'
+        anchor_value: true
+        mode: brace
+        children:
+          - id: services_netconf_ssh
+            regex: '^ssh\s*;\s*$'
+            path: mgmt.netconf.enabled
+            value: true
+            note: >
+              A bare `ssh;` directly under `services` is impossible — SSH there
+              always opens a block. Inside `netconf { }` it means NETCONF rides
+              SSH, which is the secure transport the STIG requires; the enclosing
+              netconf block is matched by a line pattern above, so this child of
+              `services` is where the bare form lands.
+          - id: services_https_port
+            regex: '^port\s+(?P<value>\d+)\s*;\s*$'
+            path: mgmt.http.max_connections
+            value: int
+            note: >
+              The J-Web listener port. Recorded because a non-default management
+              port is evidence for the "management plane is separated" control,
+              not because the number itself passes or fails anything.
+        blocks:
+          - id: junos_ssh
+            anchor_path: mgmt.ssh.version
+            regex: '^ssh\s*\{\s*$'
+            anchor_value: true
+            mode: brace
+            note: >
+              Anchoring on mgmt.ssh.version and letting the child overwrite it is
+              wrong, so the anchor is `true` and the version child writes the
+              integer. A block anchor and a leaf fact at one path would give a
+              rule two facts to choose between.
+            children:
+              - id: ssh_protocol_version
+                regex: '^protocol-version\s+v?(?P<value>\d)\s*;\s*$'
+                path: mgmt.ssh.version
+                value: int
+              - id: ssh_root_login
+                regex: '^root-login\s+(?P<value>deny|allow|deny-password)\s*;\s*$'
+                path: mgmt.ssh.acl
+                value: lower
+              - id: ssh_ciphers
+                regex: '^ciphers\s+\[?\s*(?P<value>[^\];]+?)\s*\]?\s*;\s*$'
+                path: mgmt.ssh.cipher
+                value: word_list
+              - id: ssh_macs
+                regex: '^macs\s+\[?\s*(?P<value>[^\];]+?)\s*\]?\s*;\s*$'
+                path: mgmt.ssh.mac
+                value: word_list
+              - id: ssh_key_exchange
+                regex: '^key-exchange\s+\[?\s*(?P<value>[^\];]+?)\s*\]?\s*;\s*$'
+                path: mgmt.ssh.kex
+                value: word_list
+              - id: ssh_connection_limit
+                regex: '^connection-limit\s+(?P<value>\d+)\s*;\s*$'
+                path: aaa.max_sessions
+                value: int
+                note: >
+                  `connection-limit` is the ceiling on *concurrent* SSH sessions
+                  to the routing engine, which is what aaa.max_sessions means on
+                  the ASA (`quota management-session`) and on FortiOS
+                  (`admin-login-max`). It was previously filed at
+                  mgmt.ssh.maxretries, which on IOS and NX-OS holds
+                  `ip ssh authentication-retries` — a retry count, not a session
+                  count. Two different quantities at one path is a rule reading
+                  the wrong number with no way to tell.
+              - id: ssh_client_alive_interval
+                regex: '^client-alive-interval\s+(?P<value>\d+)\s*;\s*$'
+                path: mgmt.ssh.timeout
+                value: int
+              - id: ssh_hostkey_bits
+                regex: '^hostkey-algorithm\s+(?P<value>\S+?)\s*;\s*$'
+                path: mgmt.ssh.hostkey_bits
+                value: str
+              - id: ssh_no_passwords
+                regex: '^no-passwords\s*;\s*$'
+                path: mgmt.ssh.pubkey_chain
+                value: true
+
+      # ── syslog ────────────────────────────────────────────────────────
+      # §26 case 9 of the master prompt cites the `syslog {` line for
+      # logging.remote_syslog. This pack deliberately splits that in two: the
+      # stanza anchors logging.enable, and only a `host <address>` child emits
+      # logging.remote_syslog. A `syslog { file messages { any notice; } }`
+      # stanza is local logging with no remote destination at all, and emitting
+      # a remote-syslog fact from the container would report every locally-logging
+      # device as compliant with "send logs off the box".
+      - id: junos_syslog
+        anchor_path: logging.enable
+        regex: '^syslog\s*\{\s*$'
+        anchor_value: true
+        mode: brace
+        children:
+          - id: syslog_time_format
+            regex: '^time-format\s'
+            path: logging.timestamps
+            value: true
+          - id: syslog_source_address
+            regex: '^source-address\s+(?P<value>\S+?)\s*;\s*$'
+            path: logging.source_interface
+            value: str
+          - id: syslog_log_rotate
+            regex: '^archive\s+(?:size\s+)?(?P<value>\S+?)\s*;?\s*$'
+            path: logging.buffered_size
+            value: str
+        blocks:
+          - id: junos_syslog_host
+            anchor_path: logging.remote_syslog
+            regex: '^host\s+(?P<value>[\d.:a-f]+|\S+)\s*\{\s*$'
+            anchor_value: str
+            mode: brace
+            # A Junos syslog destination names a *message class* and a severity:
+            # `change-log info`, `authorization info`, `interactive-commands any`.
+            # The class used to be filed at logging.facility, which on the other
+            # five packs holds the syslog *facility code* (`local7` on IOS, EOS,
+            # FortiOS, PAN-OS and NX-OS; the bare integer on the ASA). Those are
+            # different quantities that happen to share an English word, and no
+            # rule read either of them, so the collision was invisible - right up
+            # until a rule needed to read one.
+            #
+            # The class is decomposed instead into the booleans four other packs
+            # already emit for the same properties: logging.config_changes (IOS
+            # `archive log config`, FortiOS `set system enable`, PAN-OS config
+            # log), logging.login_success / logging.login_failure (IOS `login
+            # on-success` / `on-failure`, FortiOS `set user enable`), and
+            # logging.commands. That is what lets the Juniper NDM STIG rules for
+            # account auditing read the same conditions as the FortiGate NDM
+            # ones. `any` is Junos for "every class", so it asserts all four -
+            # which is exactly what DISA's own check text says it means.
+            #
+            # Ordered specific-then-general: `any` and each named class first,
+            # then the classes with no boolean of their own, which contribute
+            # only the severity. The first match wins.
+            children:
+              - id: syslog_host_class_any
+                regex: '^any\s+(?P<value>emergency|alert|critical|error|warning|notice|info|any)\s*;\s*$'
+                emits:
+                  - {path: logging.trap_level, value: lower, group: value}
+                  - {path: logging.config_changes, value: true}
+                  - {path: logging.login_success, value: true}
+                  - {path: logging.login_failure, value: true}
+                  - {path: logging.commands, value: true}
+              - id: syslog_host_class_change_log
+                regex: '^change-log\s+(?P<value>emergency|alert|critical|error|warning|notice|info|any)\s*;\s*$'
+                emits:
+                  - {path: logging.trap_level, value: lower, group: value}
+                  - {path: logging.config_changes, value: true}
+              - id: syslog_host_class_authorization
+                # Junos folds successful and failed authentication into one
+                # class, so both booleans come from the one directive. Splitting
+                # them would invent a distinction the platform does not make.
+                regex: '^authorization\s+(?P<value>emergency|alert|critical|error|warning|notice|info|any)\s*;\s*$'
+                emits:
+                  - {path: logging.trap_level, value: lower, group: value}
+                  - {path: logging.login_success, value: true}
+                  - {path: logging.login_failure, value: true}
+              - id: syslog_host_class_interactive
+                regex: '^interactive-commands\s+(?P<value>emergency|alert|critical|error|warning|notice|info|any)\s*;\s*$'
+                emits:
+                  - {path: logging.trap_level, value: lower, group: value}
+                  - {path: logging.commands, value: true}
+              - id: syslog_host_class_other
+                regex: '^(?:daemon|kernel|user|pfe|firewall)\s+(?P<value>emergency|alert|critical|error|warning|notice|info|any)\s*;\s*$'
+                path: logging.trap_level
+                value: lower
+              - id: syslog_host_port
+                regex: '^port\s+(?P<value>\d+)\s*;\s*$'
+                path: logging.host.port
+                value: int
+              - id: syslog_host_transport
+                regex: '^transport\s+(?P<value>\S+?)\s*;\s*$'
+                path: logging.host.transport
+                value: lower
+          - id: junos_syslog_file
+            anchor_path: logging.buffered
+            regex: '^file\s+(?P<value>\S+)\s*\{\s*$'
+            anchor_value: str
+            mode: brace
+            # Same decomposition as the host block above, and for a reason DISA
+            # states outright: "a syslog server can be configured in addition to
+            # or in lieu of logging to a file". A device that records
+            # `change-log` only to a local file has audited the change. What it
+            # has *not* done is send it off the box, and that is a separate
+            # control reading logging.remote_syslog, which only the host block
+            # emits.
+            children:
+              - id: syslog_file_class_any
+                regex: '^any\s+(?P<value>emergency|alert|critical|error|warning|notice|info|any)\s*;\s*$'
+                emits:
+                  - {path: logging.console, value: lower, group: value}
+                  - {path: logging.config_changes, value: true}
+                  - {path: logging.login_success, value: true}
+                  - {path: logging.login_failure, value: true}
+                  - {path: logging.commands, value: true}
+              - id: syslog_file_class_change_log
+                regex: '^change-log\s+(?P<value>emergency|alert|critical|error|warning|notice|info|any)\s*;\s*$'
+                emits:
+                  - {path: logging.console, value: lower, group: value}
+                  - {path: logging.config_changes, value: true}
+              - id: syslog_file_class_authorization
+                regex: '^authorization\s+(?P<value>emergency|alert|critical|error|warning|notice|info|any)\s*;\s*$'
+                emits:
+                  - {path: logging.console, value: lower, group: value}
+                  - {path: logging.login_success, value: true}
+                  - {path: logging.login_failure, value: true}
+              - id: syslog_file_class_interactive
+                regex: '^interactive-commands\s+(?P<value>emergency|alert|critical|error|warning|notice|info|any)\s*;\s*$'
+                emits:
+                  - {path: logging.console, value: lower, group: value}
+                  - {path: logging.commands, value: true}
+              - id: syslog_file_class_other
+                regex: '^(?:daemon|kernel|user|pfe|firewall)\s+(?P<value>emergency|alert|critical|error|warning|notice|info|any)\s*;\s*$'
+                path: logging.console
+                value: lower
+              - id: syslog_file_explicit_priority
+                regex: '^explicit-priority\s*;\s*$'
+                path: logging.sequence_numbers
+                value: true
+
+      # ── ntp ───────────────────────────────────────────────────────────
+      # §26 case 8: the `ntp {` line is the evidence for time.ntp. That row is
+      # reproduced exactly — the stanza anchors time.ntp — because unlike syslog
+      # there is no local-only variant: an `ntp` stanza with no server does
+      # nothing at all, so "NTP is configured here" is a true reading of the
+      # container itself.
+      - id: junos_ntp
+        anchor_path: time.ntp
+        regex: '^ntp\s*\{\s*$'
+        anchor_value: true
+        mode: brace
+        children:
+          - id: ntp_server
+            regex: '^server\s+(?P<value>[\d.:a-f]+|\S+?)\s*[;{]\s*$'
+            emits:
+              - {path: time.ntp.server, value: str, group: value}
+              - {path: time.ntp.enabled, value: true}
+          - id: ntp_boot_server
+            regex: '^boot-server\s+(?P<value>\S+?)\s*;\s*$'
+            emits:
+              - {path: time.ntp.enabled, value: true}
+            note: >
+              `boot-server` is the source Junos queries once, at boot, to set the
+              clock before the NTP daemon starts disciplining it. It is not an
+              ongoing synchronisation source, and it used to also emit
+              time.ntp.server, which two `count >= 2` rules read as the number of
+              *redundant* time sources — CIS Juniper 6.7.1 and DISA V-217334.
+              A device with `boot-server 10.0.0.1; server 10.0.0.1;` has one
+              time source and would have counted as two. It now contributes only
+              the "NTP is configured at all" boolean, which is the part of it
+              that was always true.
+          - id: ntp_authentication_key
+            regex: '^authentication-key\s+(?P<value>\d+)\s'
+            emits:
+              - {path: time.ntp.key_id, value: int, group: value}
+              - {path: time.ntp.authentication, value: true}
+          - id: ntp_trusted_key
+            regex: '^trusted-key\s+\[?\s*(?P<value>[\d\s]+?)\s*\]?\s*;\s*$'
+            path: time.ntp.trusted_keys
+            value: word_list
+          - id: ntp_source_address
+            regex: '^source-address\s+(?P<value>\S+?)\s*;\s*$'
+            path: time.ntp.source_interface
+            value: str
+
+  # ── snmp ──────────────────────────────────────────────────────────────
+
+  - id: junos_snmp
+    anchor_path: snmp.enabled
+    regex: '^snmp\s*\{\s*$'
+    anchor_value: true
+    mode: brace
+    children:
+      - id: snmp_location
+        regex: '^location\s+"?(?P<value>[^";]+)"?\s*;\s*$'
+        path: snmp.location
+        value: str
+      - id: snmp_contact
+        regex: '^contact\s+"?(?P<value>[^";]+)"?\s*;\s*$'
+        path: snmp.contact
+        value: str
+      - id: snmp_engine_id
+        regex: '^engine-id\s'
+        path: snmp.engine_id
+        value: line
+      - id: snmp_interface
+        regex: '^interface\s+(?P<value>\S+?)\s*;\s*$'
+        path: snmp.source_interface
+        value: str
+    blocks:
+      - id: junos_snmp_community
+        anchor_path: snmp.community
+        regex: '^community\s+(?P<value>\S+?)\s*\{\s*$'
+        anchor_value: str
+        mode: brace
+        note: >
+          The community *name* is the fact, and it is the one credential this
+          pack does emit in clear — because the control is "is it a default or
+          guessable string", which cannot be answered from a hash. CIS and the
+          STIG both check for `public` and `private` by name.
+        children:
+          - id: snmp_community_authorization
+            regex: '^authorization\s+(?P<value>read-only|read-write)\s*;\s*$'
+            path: snmp.community_access
+            value: lower
+          - id: snmp_community_clients
+            regex: '^clients\s*\{?\s*(?P<value>\S+)?\s*;?\s*$'
+            path: snmp.acl
+            value: str
+          - id: snmp_community_client_prefix
+            regex: '^(?P<value>\d+\.\d+\.\d+\.\d+/\d+)\s*;\s*$'
+            path: snmp.acl
+            value: str
+            note: >
+              A bare prefix inside `clients { }`. This is the whole of SNMP
+              access control on Junos — a community with no client list is
+              reachable from anywhere the management plane is, which is the
+              finding CIS 3.7 and the STIG both write.
+          - id: snmp_community_view
+            regex: '^view\s+(?P<value>\S+?)\s*;\s*$'
+            path: snmp.community_view
+            value: str
+      - id: junos_snmp_v3
+        anchor_path: snmp.group
+        regex: '^v3\s*\{\s*$'
+        anchor_value: true
+        mode: brace
+        note: >
+          Anchored on snmp.group because a Junos `v3` stanza is where USM users
+          and VACM groups are defined — `security-to-group` and `access group`
+          are its two mandatory halves, so "this stanza exists" and "v3 grouping
+          is configured" are the same statement.
+
+          It deliberately does not anchor `snmp.version`: the trap-group block
+          below writes that path from `version v2;`, and a block anchor sharing a
+          path with a leaf fact would give a rule two facts at one path with no
+          way to choose between them.
+        children:
+          - id: snmp_v3_security_to_group
+            regex: '^security-to-group\s*\{?\s*$'
+            path: snmp.group_security
+            value: true
+          - id: snmp_v3_authentication_sha
+            regex: '^authentication-sha\S*\s*\{?\s*$'
+            path: snmp.v3_auth
+            value: const
+            literal: sha
+          - id: snmp_v3_authentication_md5
+            regex: '^authentication-md5\s*\{?\s*$'
+            path: snmp.v3_auth
+            value: const
+            literal: md5
+          - id: snmp_v3_authentication_none
+            regex: '^authentication-none\s*;\s*$'
+            path: snmp.v3_auth
+            value: const
+            literal: none
+          - id: snmp_v3_privacy_aes
+            regex: '^privacy-aes(?P<value>\d+)\s*\{?\s*$'
+            path: snmp.v3_priv
+            value: str
+          - id: snmp_v3_privacy_des
+            regex: '^privacy-(?:3des|des)\S*\s*\{?\s*$'
+            path: snmp.v3_priv
+            value: const
+            literal: des
+          - id: snmp_v3_privacy_none
+            regex: '^privacy-none\s*;\s*$'
+            path: snmp.v3_priv
+            value: const
+            literal: none
+          - id: snmp_v3_user
+            regex: '^user\s+(?P<value>\S+?)\s*\{?\s*$'
+            path: snmp.user
+            value: str
+          - id: snmp_v3_authentication_key
+            regex: '^authentication-key\s+"?\$(?P<value>\d+)\$'
+            path: snmp.v3_auth
+            value: group_present
+            note: >
+              Records that a v3 authentication key is *set*, never its value. The
+              `$9$` prefix is Junos reversible encryption, not a hash, so the
+              ciphertext is recoverable and must not leave the device — which is
+              exactly why the fact is a boolean.
+          - id: snmp_v3_privacy_key
+            regex: '^privacy-key\s+"?\$(?P<value>\d+)\$'
+            path: snmp.v3_priv
+            value: group_present
+          - id: snmp_v3_group_assignment
+            regex: '^group\s+(?P<value>\S+?)\s*;\s*$'
+            path: snmp.view
+            value: str
+            note: >
+              The VACM group a security name maps to. `snmp.group` is the block
+              anchor, so the assignment goes to `snmp.view` — the two together
+              are what "this user has this level of access" means on Junos.
+      - id: junos_snmp_trap_group
+        anchor_path: snmp.trap_host
+        regex: '^trap-group\s+(?P<value>\S+?)\s*\{\s*$'
+        anchor_value: str
+        mode: brace
+        children:
+          - id: snmp_trap_version
+            regex: '^version\s+(?P<value>v1|v2|v3|all)\s*;\s*$'
+            path: snmp.version
+            value: lower
+          - id: snmp_trap_category
+            regex: '^(?P<value>authentication|chassis|link|remote-operations|routing|startup|rmon-alarm|vrrp-events|configuration|services)\s*;\s*$'
+            path: snmp.traps
+            value: str
+          - id: snmp_trap_target
+            regex: '^(?P<value>\d+\.\d+\.\d+\.\d+)\s*;\s*$'
+            path: snmp.host
+            value: str
+            note: >
+              A bare address inside `targets { }`. Junos writes trap destinations
+              as a nested list of addresses, so without this pattern every NMS
+              the device reports to lands in unparsed_lines.
+
+  # ── interfaces ────────────────────────────────────────────────────────
+  # Junos splits a physical port from its logical units: `disable` and
+  # `description` are physical, an address is on a unit. Both are declared, and
+  # the unit is a nested block so a two-unit interface produces two addresses
+  # that a report can attribute to the right sub-interface.
+
+  - id: junos_interfaces
+    anchor_path: interface.tunnel
+    regex: '^interfaces\s*\{\s*$'
+    anchor_value: true
+    mode: brace
+    note: >
+      A container, not a device concept. Its anchor path is the least-wrong
+      available and nothing reads it; the block exists so `interface.name` below
+      is scoped and cannot match a `ge-0/0/0 {` that appears under `protocols`.
+    blocks:
+      - id: junos_interface
+        anchor_path: interface.name
+        regex: '^(?P<value>(?:ae|em|fe|ge|xe|et|irb|lo|me|st|fxp|vlan|reth)[\w./:-]*)\s*\{\s*$'
+        anchor_value: str
+        mode: brace
+        children:
+          - id: iface_description
+            regex: '^description\s+"?(?P<value>[^";]+)"?\s*;\s*$'
+            path: interface.description
+            value: str
+          - id: iface_disable
+            regex: '^disable\s*;\s*$'
+            path: interface.admin_state
+            value: const
+            literal: shutdown
+          - id: iface_mtu
+            regex: '^mtu\s+(?P<value>\d+)\s*;\s*$'
+            path: interface.mtu
+            value: int
+          - id: iface_speed
+            regex: '^speed\s+(?P<value>\S+?)\s*;\s*$'
+            path: interface.speed
+            value: lower
+          - id: iface_link_mode
+            regex: '^link-mode\s+(?P<value>\S+?)\s*;\s*$'
+            path: interface.duplex
+            value: lower
+          - id: iface_no_gratuitous_arp
+            regex: '^no-gratuitous-arp-reply\s*;\s*$'
+            path: service.gratuitous_arp
+            value: false
+        child_defaults:
+          - path: interface.admin_state
+            value: no-shutdown
+            reason: >
+              a Junos interface with no `disable` statement is administratively
+              up, so silence here is a positive fact rather than a gap
+        blocks:
+          - id: junos_interface_unit
+            anchor_path: interface.native_vlan
+            regex: '^unit\s+(?P<value>\d+)\s*\{\s*$'
+            anchor_value: str
+            mode: brace
+            note: >
+              A logical unit. `interface.native_vlan` is the closest canonical
+              path to "which unit"; nothing reads it, and the block's job is to
+              scope the address and filter children below.
+            children:
+              - id: unit_description
+                regex: '^description\s+"?(?P<value>[^";]+)"?\s*;\s*$'
+                path: interface.description
+                value: str
+              - id: unit_vlan_id
+                regex: '^vlan-id\s+(?P<value>\d+)\s*;\s*$'
+                path: interface.access_vlan
+                value: int
+              - id: unit_address
+                regex: '^address\s+(?P<value>[\d.]+/\d+)\s*[;{]\s*$'
+                path: interface.ip_address
+                value: str
+              - id: unit_filter_input
+                regex: '^input\s+(?P<value>\S+?)\s*;\s*$'
+                path: interface.acl_in
+                value: str
+              - id: unit_filter_output
+                regex: '^output\s+(?P<value>\S+?)\s*;\s*$'
+                path: interface.acl_out
+                value: str
+              - id: unit_no_redirects
+                regex: '^no-redirects\s*;\s*$'
+                path: interface.redirects
+                value: false
+              - id: unit_proxy_arp
+                regex: '^proxy-arp\s*[;{]\s*$'
+                path: interface.proxy_arp
+                value: true
+
+  # ── firewall filters ──────────────────────────────────────────────────
+  # A Junos filter is the ACL. The term structure is richer than an IOS ACE, so
+  # each term's action is one fact and its match conditions are others — which is
+  # what lets an AC-4 information-flow rule ask "does the final term discard"
+  # without parsing the filter itself.
+
+  - id: junos_firewall
+    anchor_path: firewall.policy.name
+    regex: '^firewall\s*\{\s*$'
+    anchor_value: true
+    mode: brace
+    blocks:
+      - id: junos_filter
+        anchor_path: acl.name
+        regex: '^filter\s+(?P<value>\S+?)\s*\{\s*$'
+        anchor_value: str
+        mode: brace
+        children:
+          - id: filter_interface_specific
+            regex: '^interface-specific\s*;\s*$'
+            path: acl.implicit_deny_log
+            value: true
+        blocks:
+          - id: junos_filter_term
+            anchor_path: acl.extended.entry
+            regex: '^term\s+(?P<value>\S+?)\s*\{\s*$'
+            anchor_value: str
+            mode: brace
+            children:
+              - id: term_accept
+                regex: '^accept\s*;\s*$'
+                path: acl.entry.action
+                value: const
+                literal: permit
+              - id: term_discard
+                regex: '^discard\s*;\s*$'
+                path: acl.entry.action
+                value: const
+                literal: deny
+              - id: term_reject
+                regex: '^reject\s*[;{]\s*$'
+                path: acl.entry.action
+                value: const
+                literal: deny
+              - id: term_log
+                regex: '^(?:log|syslog)\s*;\s*$'
+                path: acl.entry.log
+                value: true
+              - id: term_protocol
+                regex: '^protocol\s+\[?\s*(?P<value>[^\];]+?)\s*\]?\s*;\s*$'
+                path: acl.entry.protocol
+                value: word_list
+              - id: term_source_address_inline
+                regex: '^source-address\s+(?P<value>[\d.]+/\d+)\s*;\s*$'
+                path: acl.entry.source
+                value: str
+              - id: term_destination_address_inline
+                regex: '^destination-address\s+(?P<value>[\d.]+/\d+)\s*;\s*$'
+                path: acl.entry.destination
+                value: str
+              - id: term_destination_port
+                regex: '^destination-port\s+\[?\s*(?P<value>[^\];]+?)\s*\]?\s*;\s*$'
+                path: acl.entry.sequence
+                value: word_list
+              - id: term_prefix_member
+                regex: '^(?P<value>\d+\.\d+\.\d+\.\d+/\d+)\s*;\s*$'
+                path: acl.entry.source
+                value: str
+                note: >
+                  A bare prefix inside `from { source-address { ... } }`. Junos
+                  writes multi-prefix matches as a nested block of bare
+                  addresses, and without this pattern every prefix in a
+                  real-world anti-spoofing filter lands in unparsed_lines.
+
+  # ── protocols ─────────────────────────────────────────────────────────
+
+  - id: junos_protocols
+    anchor_path: routing.ip_routing
+    regex: '^protocols\s*\{\s*$'
+    anchor_value: true
+    mode: brace
+    blocks:
+      - id: junos_ospf
+        anchor_path: routing.ospf.process
+        regex: '^ospf3?\s*\{\s*$'
+        anchor_value: true
+        mode: brace
+        children:
+          - id: ospf_authentication_md5
+            regex: '^md5\s+(?P<value>\d+)\s'
+            emits:
+              - {path: routing.ospf.message_digest, value: true}
+              - {path: routing.ospf.auth, value: true}
+          - id: ospf_authentication_simple
+            regex: '^simple-password\s'
+            path: routing.ospf.auth
+            value: true
+          - id: ospf_no_passive
+            regex: '^passive\s*;\s*$'
+            path: routing.ospf.process
+            value: true
+        blocks:
+          - id: junos_ospf_interface
+            anchor_path: interface.name
+            regex: '^interface\s+(?P<value>[\w./:-]+)\s*\{\s*$'
+            anchor_value: str
+            mode: brace
+            note: >
+              An OSPF-enabled interface. It reuses `interface.name` as its anchor
+              rather than inventing a path, because that is what the fact is: an
+              interface participating in the protocol. The scope matters — it is
+              what lets `md5 1 key ...` be read as OSPF authentication on *this*
+              adjacency rather than as a stray key somewhere in the file.
+            children:
+              - id: ospf_iface_md5
+                regex: '^md5\s+(?P<value>\d+)\s'
+                emits:
+                  - {path: routing.ospf.message_digest, value: true}
+                  - {path: routing.ospf.auth, value: true}
+              - id: ospf_iface_passive
+                regex: '^passive\s*;\s*$'
+                path: interface.admin_state
+                value: const
+                literal: passive
+              - id: ospf_iface_metric
+                regex: '^metric\s+(?P<value>\d+)\s*;\s*$'
+                path: interface.speed
+                value: str
+      - id: junos_bgp
+        anchor_path: routing.bgp.asn
+        regex: '^bgp\s*\{\s*$'
+        anchor_value: true
+        mode: brace
+        note: >
+          Anchors the presence of BGP. The local AS number is under
+          routing-options, not here, and the child that reads it writes the
+          integer to the same path — which is why the anchor is `true` rather
+          than a captured value.
+        children:
+          - id: bgp_authentication_key
+            regex: '^authentication-key\s'
+            path: routing.bgp.neighbor_auth
+            value: true
+          - id: bgp_authentication_algorithm
+            regex: '^authentication-algorithm\s+(?P<value>\S+?)\s*;\s*$'
+            path: routing.bgp.neighbor_auth
+            value: true
+          - id: bgp_log_updown
+            regex: '^log-updown\s*;\s*$'
+            path: routing.bgp.log_neighbor_changes
+            value: true
+          - id: bgp_ttl_security
+            regex: '^ttl\s+(?P<value>\d+)\s*;\s*$'
+            path: routing.bgp.ttl_security
+            value: int
+          - id: bgp_prefix_limit
+            regex: '^maximum-prefixes\s+(?P<value>\d+)\s*;?\s*$'
+            path: routing.bgp.max_prefix
+            value: int
+          - id: bgp_peer_as
+            regex: '^peer-as\s+(?P<value>\d+)\s*;\s*$'
+            path: routing.bgp.asn
+            value: int
+            note: >
+              The *remote* AS. It shares a path with the local AS from
+              routing-options, which is a real limitation of a flat canonical
+              vocabulary — a rule that needs to tell them apart must read the
+              provenance. The alternative was inventing a path no framework asks
+              about.
+          - id: bgp_neighbor
+            regex: '^neighbor\s+(?P<value>[\d.]+|[\da-f:]+)\s*[;{]\s*$'
+            path: routing.static_route
+            value: str
+            note: >
+              The neighbour address. `routing.static_route` is the only canonical
+              path that holds a routing peer address; nothing reads it for BGP,
+              and the compliance-relevant facts about a neighbour — is it
+              authenticated, is it TTL-secured, is it prefix-limited — are the
+              siblings above.
+      - id: junos_isis
+        anchor_path: routing.isis.process
+        regex: '^isis\s*\{\s*$'
+        anchor_value: true
+        mode: brace
+        children:
+          - id: isis_authentication_key
+            regex: '^authentication-key\s'
+            path: routing.isis.auth
+            value: true
+      - id: junos_rip
+        anchor_path: routing.rip.process
+        regex: '^rip\s*\{\s*$'
+        anchor_value: true
+        mode: brace
+        children:
+          - id: rip_authentication_key
+            regex: '^authentication-key\s'
+            path: routing.rip.auth
+            value: true
+
+  # ── routing-options ───────────────────────────────────────────────────
+  # Junos's global routing configuration: the local AS, static routes, and the
+  # source-routing and uRPF switches the anti-spoofing controls read. Declared as
+  # a block so `route 0.0.0.0/0 next-hop ...` is scoped to routing rather than
+  # matching a `route` statement inside a policy.
+
+  - id: junos_routing_options
+    anchor_path: routing.vrf
+    regex: '^routing-options\s*\{\s*$'
+    anchor_value: true
+    mode: brace
+    note: >
+      `routing.vrf` is the anchor because the master routing instance *is* the
+      default VRF on Junos, and every routing-instance stanza is a sibling of
+      this one. It cannot anchor `routing.ip_routing` — the `protocols` block
+      above already does, and two anchors at one path would give a rule two facts
+      to choose between.
+    children:
+      - id: ro_autonomous_system
+        regex: '^autonomous-system\s+(?P<value>\d+)\s*;\s*$'
+        path: routing.bgp.asn
+        value: int
+      - id: ro_no_source_route
+        regex: '^no-source-route\s*;\s*$'
+        path: routing.source_routing
+        value: false
+      - id: ro_source_route
+        regex: '^source-route\s*;\s*$'
+        path: routing.source_routing
+        value: true
+      - id: ro_default_route
+        regex: '^route\s+0\.0\.0\.0/0\s+next-hop\s+(?P<value>\S+?)\s*;\s*$'
+        path: routing.default_route
+        value: str
+      - id: ro_static_route
+        regex: '^route\s+(?P<value>\d+\.\d+\.\d+\.\d+/\d+)\s+next-hop\s'
+        path: routing.static_route
+        value: str
+      - id: ro_urpf
+        regex: '^unicast-reverse-path\s+\S+\s*;\s*$'
+        path: routing.urpf
+        value: true
+      - id: ro_instance_type
+        regex: '^instance-type\s+(?P<value>\S+?)\s*;\s*$'
+        path: routing.vrf
+        value: lower
+
+# Facts that follow from a command being absent, each with the reason recorded so
+# the report can say why it believes something that has no line behind it.
+#
+# Every entry here is a Junos platform default, not a guess. Where Junos and IOS
+# genuinely differ the difference is stated: Junos ships with no telnet, no HTTP
+# and no SNMP, which is why a bare Junos config scores better than a bare IOS one
+# on the same benchmark — and the report should show that rather than hide it.
+defaults:
+  mgmt.telnet.enabled:
+    value: false
+    reason: >
+      Junos ships with no `system services telnet` statement and the daemon does
+      not run without one
+  mgmt.http.server_enabled:
+    value: false
+    reason: J-Web cleartext HTTP is off until `web-management http` is configured
+  mgmt.http.secure_server_enabled:
+    value: false
+    reason: J-Web HTTPS is off until `web-management https` is configured
+  mgmt.netconf.enabled:
+    value: false
+    reason: the NETCONF-over-SSH service is off until explicitly configured
+  mgmt.restconf.enabled:
+    value: false
+    reason: the REST API is off until explicitly configured
+  service.finger:
+    value: false
+    reason: the finger service is off unless `system services finger` is present
+  service.telnet:
+    value: false
+    reason: reverse telnet is off unless explicitly configured
+  service.rcmd:
+    value: false
+    reason: rlogin/rsh are off unless explicitly configured
+  service.lldp:
+    value: false
+    reason: LLDP is off until a `protocols lldp` stanza exists
+  snmp.enabled:
+    value: false
+    reason: the SNMP agent starts only when an `snmp` stanza is configured
+  time.ntp.enabled:
+    value: false
+    reason: no NTP server, boot-server or peer is configured
+  time.ntp.authentication:
+    value: false
+    reason: NTP authentication is off until an authentication-key is configured
+  mgmt.login_banner:
+    value: false
+    reason: no `system login message` is configured
+  mgmt.motd_banner:
+    value: false
+    reason: no `system login announcement` is configured
+  logging.enable:
+    value: false
+    reason: no `system syslog` stanza is configured
+  routing.source_routing:
+    value: false
+    reason: >
+      Junos does not forward source-routed packets unless `routing-options
+      source-route` is configured — the opposite of the IOS default, and the
+      reason the same CIS control passes here and fails there
+  file.config_archive:
+    value: false
+    reason: configuration archival is off until `system archival` is configured
+  stp.bpduguard_default:
+    value: false
+    reason: BPDU blocking on edge ports is off until explicitly configured
+  crypto.fips_mode:
+    value: false
+    reason: FIPS mode requires a separate Junos-FIPS image and is not configured here

@@ -1,0 +1,114 @@
+{
+  "generated_at": "2026-09-12T17:36:47+00:00",
+  "counts": {
+    "TODO(verify)": 11,
+    "ASSUMPTION:": 2,
+    "UNVERIFIED": 3
+  },
+  "blocking": [],
+  "register": [
+    {
+      "file": "MANUAL_COMMANDS.md",
+      "line": 48,
+      "marker": "TODO(verify)",
+      "text": "- `TODO(verify):` marks a value I could not confirm from the research corpus. **Resolve it before relying on it** — do not let a guessed filename into a build. "
+    },
+    {
+      "file": "MANUAL_COMMANDS.md",
+      "line": 851,
+      "marker": "TODO(verify)",
+      "text": "# TODO(verify): exact asset filenames for build b10610 (the Windows CUDA zip and the"
+    },
+    {
+      "file": "MANUAL_COMMANDS.md",
+      "line": 866,
+      "marker": "TODO(verify)",
+      "text": "# TODO(verify): exact HuggingFace repo id and GGUF filename for"
+    },
+    {
+      "file": "MANUAL_COMMANDS.md",
+      "line": 873,
+      "marker": "TODO(verify)",
+      "text": "# TODO(verify): the abetlen wheel index URL for llama_cpp_python-0.3.35-py3-none-win_amd64.whl."
+    },
+    {
+      "file": "MANUAL_COMMANDS.md",
+      "line": 1630,
+      "marker": "TODO(verify)",
+      "text": "1. **Step 2 prints three non-zero counts.** `TODO(verify):` `MASTER_PROMPT.md` §10.1 states the allocation as **LOW 149 / MODERATE 287 / HIGH 370**. That figure"
+    },
+    {
+      "file": "MANUAL_COMMANDS.md",
+      "line": 1676,
+      "marker": "UNVERIFIED",
+      "text": "| `reports\\metrics\\*.json` | Step 8a, Step 8c, `scripts\\bench\\*` | any metric in docs/slides/PDF | metric renders as `UNVERIFIED`; CI fails release |"
+    },
+    {
+      "file": "MANUAL_COMMANDS.md",
+      "line": 1730,
+      "marker": "TODO(verify)",
+      "text": "Every byte size, filename, version and count above was probed or parsed during the research phase and recorded under `.research\\synth\\`, with one exception note"
+    },
+    {
+      "file": "praman/README.md",
+      "line": 271,
+      "marker": "TODO(verify)",
+      "text": "both, so this is not load cost. `TODO(verify):` the cause is not established —"
+    },
+    {
+      "file": "praman/backend/frameworks/cis/extract.py",
+      "line": 495,
+      "marker": "UNVERIFIED",
+      "text": "f\"Section recorded as UNVERIFIED.\","
+    },
+    {
+      "file": "praman/backend/frameworks/cis/extract.py",
+      "line": 498,
+      "marker": "UNVERIFIED",
+      "text": "section_num = \"UNVERIFIED\""
+    },
+    {
+      "file": "praman/data/ingest/patterns/cisco_nxos.yaml",
+      "line": 1545,
+      "marker": "ASSUMPTION:",
+      "text": "is a poor fit. `ASSUMPTION:` a device with a non-timer trigger (`event"
+    },
+    {
+      "file": "praman/docs/GAPS.md",
+      "line": 744,
+      "marker": "TODO(verify)",
+      "text": "value set) and flag a path whose emitters disagree. `TODO(verify):` no such"
+    },
+    {
+      "file": "praman/docs/PRODUCTION-ROADMAP.md",
+      "line": 487,
+      "marker": "TODO(verify)",
+      "text": "> re-export byte-identical. §13.3's `TODO(verify)` on the SARIF field names is"
+    },
+    {
+      "file": "praman/docs/PRODUCTION-ROADMAP.md",
+      "line": 532,
+      "marker": "TODO(verify)",
+      "text": "still carrying an explicit `TODO(verify)`."
+    },
+    {
+      "file": "praman/docs/PRODUCTION-ROADMAP.md",
+      "line": 1271,
+      "marker": "TODO(verify)",
+      "text": "No competitor reviewed publishes SARIF. Field names are still `TODO(verify)` in"
+    },
+    {
+      "file": "praman/rules/mappings/disa_stig/cisco_nx_os_switch_ndm_v3r6.yaml",
+      "line": 583,
+      "marker": "ASSUMPTION:",
+      "text": "Blowfish, CAST, and CBC-mode AES. `ASSUMPTION:` this list is treated as"
+    }
+  ],
+  "allowlisted": [
+    {
+      "path": "praman/backend/frameworks/cis/extract.py",
+      "marker": "UNVERIFIED",
+      "reason": "Sentinel *value*, not a note to self. When a CIS section number is unreadable in the PDF text layer, the extractor records the string rather than inventing a number (R1.7). Removing it would mean guessing, so the marker is the correct behaviour and the register exists partly to keep it legible."
+    }
+  ]
+}

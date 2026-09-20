@@ -1,0 +1,243 @@
+# PRAMAN canonical-path → MITRE ATT&CK mapping — PURE DATA, loaded with yaml.safe_load.
+#
+# ─── READ THIS BEFORE QUOTING ANYTHING BELOW ──────────────────────────────────
+#
+# **The path → technique links in this file are PRAMAN's own editorial judgement.
+# MITRE did not write them, and neither did CIS or DISA.** No publisher ships a
+# control → technique crosswalk for network-device benchmarks: scanning all 42
+# normalised catalogs for `T####` tokens returns nothing, and MITRE's own
+# published mappings cover NIST 800-53 and the CIS Critical Security Controls,
+# not CIS Cisco IOS 15 or the DISA network-device STIGs. So the association had
+# to be authored, and it is labelled as authored everywhere it surfaces. A report
+# that presented these as DISA's opinion would be inventing a citation.
+#
+# **Everything else here is the publisher's, and is derived rather than copied.**
+# Technique names, descriptions, URLs, kill-chain phases and the deprecation flag
+# come from the local ATT&CK Enterprise v19.2 STIX bundle at read time.
+#
+# So do the mitigations — which is why this file does not list any. An earlier
+# draft hand-wrote a `mitigations:` list per entry, and checking that draft
+# against the bundle's own `mitigates` relationships found **five wrong IDs**:
+# M1026 was attributed to T1602.001/.002 (the publisher relates M1030, M1031,
+# M1037, M1041, M1051, M1054), M1054 to T1556.004 (M1026, M1032), and M1051 to
+# T1601.001/.002 (M1026, M1027, M1032, M1043, M1045, M1046). Every one of those
+# would have been a plausible-looking invented citation. `mitigations_for()` in
+# `backend/threat/mapping.py` now reads the relationships instead, so the
+# editorial surface is exactly one thing — which paths imply which technique —
+# and nothing else in the output is authored by PRAMAN at all.
+#
+# ─── THE JOIN KEY, AND WHY IT IS NOT EVIDENCE ─────────────────────────────────
+#
+# Entries are keyed on **canonical path prefixes**, and a rule inherits an entry
+# when `Rule.referenced_paths()` contains that path or a child of it. The obvious
+# alternative — joining on a finding's `evidence` — was measured and rejected:
+# 272 of the 561 failing findings across the fixture corpus (48%) have **empty**
+# evidence, because the most common way to fail a hardening control is for the
+# directive to be absent. An evidence join would have dropped half the failures,
+# and dropped exactly the half where the device is least configured.
+#
+# A rule's referenced paths are known statically, before any device is parsed, so
+# this mapping is a property of the rule pack rather than of a particular audit.
+# That is what makes it auditable: `scripts/attack_coverage.py` prints the whole
+# join, and its `--check` mode fails if any prefix below matches no rule — a
+# prefix that matches nothing is a coverage claim with nothing behind it. Three
+# such prefixes were in the first draft (`snmp.engine_id`, `mgmt.ssh.ciphers`,
+# `mgmt.ssh.macs` — the last two simply misspelt, the real paths are singular).
+#
+# ─── WHAT IS DELIBERATELY NOT MAPPED ──────────────────────────────────────────
+#
+# **Logging, accounting and time synchronisation have no technique here.** That
+# is 20 `logging.*` paths and 5 `aaa.accounting_*` paths — by volume the largest
+# unmapped family — and leaving them empty is a decision, not an oversight. A
+# device that does not log is not thereby exposed to a technique; it is exposed
+# to the technique going *unnoticed*. ATT&CK models adversary behaviour, not
+# detection posture, and filing "syslog is not configured" under T1602 would
+# assert the attacker gained something from it. The relationship is real but it
+# runs through detection coverage, which is a different axis and not one ATT&CK
+# has a slot for. `time.ntp.*` is excluded for the same reason at one remove:
+# its security value is that timestamps on the logs can be trusted.
+#
+# Also unmapped, for the same "real control, no technique" reason:
+# `device.hostname`, `interface.description`, `ha.*`, `stp.*`,
+# `control_plane.*`, `acl.*`, `firewall.*`, and the interface hygiene family
+# (`interface.proxy_arp`, `interface.redirects`, `interface.storm_control`, …).
+# Several of those are availability or blast-radius controls; ATT&CK's Impact
+# tactic exists, but mapping a storm-control default to it would be reaching.
+#
+# Every entry carries a `why`. An entry that cannot be argued in one sentence is
+# an entry that should not be here.
+
+version: 1
+attack_bundle: enterprise-attack v19.2
+authored_by: PRAMAN (editorial — not a publisher crosswalk)
+authored_on: "2026-09-11"
+
+mappings:
+  # ── T1602.001 SNMP (MIB Dump) ───────────────────────────────────────────────
+  # The best-grounded entry in this file. SNMP's whole purpose is bulk retrieval
+  # of device state, so a weak community string is not a step toward the
+  # technique — it is the technique's stated precondition.
+  - paths:
+      - snmp.community
+      - snmp.community_access
+      - snmp.version
+      - snmp.v3_auth
+      - snmp.v3_priv
+      - snmp.group_security
+      - snmp.user
+      - snmp.acl
+      - snmp.enabled
+      - snmp.host
+      - snmp.trap_host
+      - snmp.traps
+      - snmp.source_interface
+    techniques: [T1602.001]
+    why: >-
+      SNMPv1/v2c authenticates with a cleartext community string, and SNMPv3
+      without authPriv leaves the payload readable. Either lets an adversary walk
+      the MIB and read the running configuration, which is what T1602.001 is.
+
+  # ── T1602.002 Network Device Configuration Dump ─────────────────────────────
+  # Narrower than it looks: the routes by which a configuration leaves the
+  # device, not every path that reveals something about it.
+  - paths:
+      - file.config_archive
+      - file.archive_path
+      - file.tftp_source_interface
+      - file.write_memory
+      - service.config
+      - service.rcmd
+      - service.bootp
+      - service.boot_network
+    techniques: [T1602.002]
+    why: >-
+      Archive, TFTP and `service config` move a whole configuration over the
+      network, usually unauthenticated and in the clear, and `service.rcmd`
+      (rsh/rcp) is a remote copy channel with host-based trust. Each is a route
+      by which the configuration repository is read.
+
+  # ── T1040 Network Sniffing ──────────────────────────────────────────────────
+  # The entry most at risk of over-claiming, so its scope is stated narrowly:
+  # cleartext *management* channels, where a credential or a configuration is on
+  # the wire. Not "any unencrypted protocol anywhere".
+  - paths:
+      - mgmt.telnet
+      - mgmt.http.server_enabled
+      - mgmt.http.secure_server_enabled
+      - mgmt.http.tls_version
+      - mgmt.http.auth
+      - mgmt.access.protocols
+      - mgmt.ssh.version
+      - mgmt.ssh.cipher
+      - mgmt.ssh.mac
+      - mgmt.ssh.kex
+      - mgmt.ssh.hostkey_bits
+      - service.telnet
+      - service.http
+      - service.finger
+      - service.identd
+      - service.pad
+      - crypto.cipher_suite
+      - crypto.fips_mode
+      - logging.remote_syslog
+      - aaa.server
+    techniques: [T1040]
+    why: >-
+      Telnet, plain HTTP, SSHv1 and weak cipher suites put administrative
+      credentials and configuration on the wire in recoverable form, and syslog
+      and RADIUS/TACACS+ carry device state and shared secrets to a collector —
+      each gives a positioned adversary something worth capturing.
+
+  # ── T1557 Adversary-in-the-Middle ───────────────────────────────────────────
+  # Routing and tunnel authentication, kept separate from T1040 on purpose:
+  # sniffing is passive and needs a position, whereas an unauthenticated routing
+  # adjacency is how the position gets *created*.
+  - paths:
+      - routing.bgp.neighbor_auth
+      - routing.bgp.ttl_security
+      - routing.bgp.max_prefix
+      - routing.ospf.auth
+      - routing.ospf.message_digest
+      - routing.eigrp.auth
+      - routing.eigrp.key_chain
+      - routing.rip.auth
+      - routing.rip.key_chain
+      - routing.source_routing
+      - routing.urpf
+      - interface.ip_verify_source
+      - vpn.tunnel.auth
+    techniques: [T1557]
+    why: >-
+      An unauthenticated OSPF, BGP, EIGRP or RIP adjacency lets an adversary
+      inject routes and pull traffic onto a path they control, and source routing
+      and absent uRPF let them forge the return half — which is the position
+      T1557 describes rather than merely exploits.
+
+  # ── T1556.004 Network Device Authentication ─────────────────────────────────
+  # The broadest entry, and the one whose breadth needs least defending:
+  # T1556.004 is specifically about subverting a network device's own
+  # authentication, so every control over how that authentication is configured
+  # is in scope by construction.
+  - paths:
+      - aaa.new_model
+      - aaa.authentication_login
+      - aaa.authentication_enable
+      - aaa.authentication_attempts
+      - aaa.authentication_order
+      - aaa.authorization_commands
+      - aaa.authorization_exec
+      - aaa.local_fallback
+      - aaa.login_block
+      - aaa.max_sessions
+      - mgmt.local_user
+      - mgmt.password_policy
+      - mgmt.enable_secret
+      - mgmt.http.idle_timeout
+      - mgmt.ssh.timeout
+      - mgmt.ssh.maxretries
+      - service.password_encryption
+      - service.password_recovery
+      - line.vty
+      - line.console
+      - line.aux
+      - line.tty
+      - crypto.pki
+      - crypto.key
+    techniques: [T1556.004]
+    why: >-
+      Reversible type-7 passwords, a local fallback account with no policy behind
+      it, an unauthenticated aux line, a missing enable secret and an exec
+      session that never times out are all ways the device's own authentication
+      is bypassed or recovered.
+
+  # ── T1601.001 / T1601.002 — thin, and marked as thin ────────────────────────
+  # PRAMAN has **no canonical path for image integrity**: no boot-image hash, no
+  # `verify` state, no signed-image flag. This entry maps the family that bears
+  # on how an image is obtained and claims nothing beyond it. It is listed rather
+  # than dropped because "PRAMAN reaches the delivery vector, not the image" is
+  # the honest statement, and an absent entry would read as "no rule is
+  # relevant", which is a different and wronger claim.
+  - paths:
+      - service.boot_network
+      - file.privilege
+    techniques: [T1601.001, T1601.002]
+    why: >-
+      Loading a system image over the network, and unrestricted file-system
+      privilege, are the two configuration states that make replacing or
+      downgrading the running image straightforward; the image itself is beyond
+      what a configuration audit can see.
+
+  # ── T1016 System Network Configuration Discovery ────────────────────────────
+  # Note this technique has **no** `mitigates` relationship in the v19.2 bundle —
+  # zero course-of-action objects relate to it. That is not a gap in the loader:
+  # discovery techniques abuse features working as designed, so the publisher
+  # relates no preventive control. `mitigations_for("T1016")` returning `[]` is
+  # therefore correct output, and worth knowing before someone reads the empty
+  # list as a bug.
+  - paths:
+      - service.cdp
+    techniques: [T1016]
+    why: >-
+      CDP broadcasts the device's identity, model, software version and port map
+      to anything on the segment, which hands an adversary the network
+      configuration detail T1016 describes them going to look for.

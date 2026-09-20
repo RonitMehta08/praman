@@ -1,0 +1,1205 @@
+# Palo Alto Networks PAN-OS pattern pack.
+#
+# PAN-OS is the first shipped pack written against `mode: run`, and it is the
+# reason that mode exists. Every other vendor in this library nests its
+# configuration — Cisco indents, FortiGate brackets `config … end`, Junos braces.
+# PAN-OS `set`-format output is *flat*: the full object path is repeated on every
+# single line, so an interface is not a block of text, it is a run of consecutive
+# lines that happen to share a prefix.
+#
+#   set network interface ethernet ethernet1/1 layer3 ip 198.51.100.10/29
+#   set network interface ethernet ethernet1/1 layer3 interface-management-profile MGMT-PING-ONLY
+#   set network interface ethernet ethernet1/1 link-state auto
+#
+# Five consequences shape this file:
+#
+# 1. **The first line of every run is consumed as the anchor.** `generic.py`
+#    skips a block instance's `line_start` in the line-matching pass, because for
+#    an indented vendor that line is `interface Ethernet1` and carries nothing
+#    else. Under `mode: run` it carries a real payload, which is therefore not
+#    emitted as a fact. That is a deliberate, documented cost, not an oversight:
+#    the alternative — re-matching the anchor line — would double-count the
+#    identity fact on every object. The shipped fixture puts a structurally inert
+#    line first for each run (`layer3 ipv6 enabled no` for an interface,
+#    `interface [ … ]` for a virtual router, `description "…"` for a rule), which
+#    is also the order a real `show config running | set-format` capture produces
+#    on 10.2. A capture whose key order differs loses exactly one fact per object
+#    and reports the rest — degraded, never wrong.
+# 2. **The device does not state its own model or version in `set` format.**
+#    Unlike the ASA (`: Hardware:`) and EOS (`! device:`), a PAN-OS set-format
+#    export has no inventory line at all. Real collectors therefore prepend
+#    `show system info`, and this pack parses that preamble: `comment_prefixes`
+#    is empty and the five `#` inventory keys have explicit patterns, exactly as
+#    `cisco_asa.yaml` treats `:` and `arista_eos.yaml` treats `!`. A file with no
+#    preamble parses cleanly and simply reports no model — CM-8 comes back
+#    `unknown` rather than wrong.
+# 3. **A disabled management service is expressed by absence, not by a negative.**
+#    `disable-ssh yes` is the box saying "SSH is not in the permitted set", which
+#    is the same posture a FortiGate expresses by leaving `ssh` out of
+#    `set allowaccess`. So the enabled services emit `mgmt.access.protocols` and
+#    the disabled ones are ignored: an absent protocol *is* the negative fact, and
+#    inventing a second boolean path for it would let a rule read the same posture
+#    two contradictory ways.
+# 4. **Policy content is not hardening posture.** A security rule's `source`,
+#    `destination`, `application` and `service` describe the traffic it matches.
+#    The canonical vocabulary was built for device hardening and has no path for
+#    per-rule match criteria, so those lines are ignored rather than forced under
+#    a hardening path — the same call `cisco_asa.yaml` makes for `object-group`
+#    members and `arista_eos.yaml` makes for `role` rule bodies. What IS recorded
+#    per rule is what an auditor asks about: zones, action, logging, and whether a
+#    security-profile group is attached.
+# 5. **FIPS-CC mode never appears in the configuration.** It is selected in the
+#    maintenance-mode boot menu, so absence is not evidence of absence. The pack
+#    ships `crypto.fips_mode: false` as a default so the control comes back as a
+#    finding an operator must answer, rather than as `unknown` that nobody reads.
+
+vendor: paloalto_panos
+os_family: panos
+parser_id: paloalto_panos_patterns@1
+
+# Deliberately empty: see note 2. `#` is not a comment prefix here because the
+# collector's `show system info` preamble is the only place a set-format capture
+# states the platform's model, serial and software version, and comment stripping
+# runs before the pattern list.
+comment_prefixes: []
+case_insensitive: true
+
+detect:
+  min_hits: 3
+  markers:
+    - "set deviceconfig system"
+    - "set deviceconfig setting"
+    - "set mgt-config users"
+    - "set mgt-config password-complexity"
+    - "set rulebase security rules"
+    - "set rulebase default-security-rules"
+    - "set rulebase nat rules"
+    - "set network interface ethernet ethernet1/"
+    - "set network profiles interface-management-profile"
+    - "set network profiles zone-protection-profile"
+    - "set network virtual-router"
+    - "set network ike crypto-profiles"
+    - "set shared server-profile"
+    - "set shared log-settings"
+    - "set shared ssl-tls-service-profile"
+    - "set profile-group"
+    - "network layer3 ["
+    - "interface-management-profile"
+    - "log-end yes"
+    - "phash "
+    - "set vsys vsys1"
+    - "# sw-version:"
+  # Only PAN-OS spells the management plane this way, and only PAN-OS has a
+  # rulebase. Requiring both keeps a Junos `set`-format file from ever landing
+  # here on prefix similarity alone.
+  strong_markers:
+    - "set deviceconfig system"
+    - "set rulebase security rules"
+  strong_bonus: 12
+  # A file carrying any of these belongs to another platform. The Junos entries
+  # matter most: Junos `set` format shares this pack's leading keyword and
+  # nothing else.
+  anti_markers:
+    - "\nset system "               # juniper_junos, set format
+    - "\nset interfaces "           # juniper_junos, set format
+    - "\nset security "             # juniper_junos, set format
+    - "\nset protocols "            # juniper_junos, set format
+    - "\nset routing-options "      # juniper_junos, set format
+    - "\nset snmp "                 # juniper_junos, set format
+    - "\nset groups "               # juniper_junos, set format
+    - "host-name "                  # juniper_junos, brace format
+    - "\nversion "                  # cisco_ios / cisco_nxos / juniper_junos
+    - "asa version"                 # cisco_asa
+    - "\nnameif "                   # cisco_asa
+    - "boot-start-marker"           # cisco_ios
+    - "\nfeature "                  # cisco_nxos
+    - "config system global"        # fortinet
+    - "management api http-commands" # arista_eos
+    - "\nsnmp-server "              # every Cisco dialect and arista_eos
+    - "\ninterface "                # every Cisco dialect and arista_eos
+    - "\nrouter bgp "               # cisco_ios / cisco_nxos / arista_eos
+  filename_hints:
+    - "panos"
+    - "pan-os"
+    - "paloalto"
+    - "palo"
+    - "panorama"
+
+# Structural noise, and content the canonical vocabulary deliberately does not
+# model. A line here is neither a fact nor an unparsed line. Anything genuinely
+# unrecognised must stay out of this list so it reaches the training queue (C2).
+ignore:
+  - '^\s*$'
+  # ── show system info preamble, minus the five inventory keys parsed below
+  - '^#\s*show system info\s*$'
+  - '^#\s*-+'
+  - '^#\s*(?:app-version|av-version|threat-version|threat-release-date|url-filtering-version|wildfire-version|global-protect-client-package-version|device-dictionary-version|logdb-version|platform-family|vm-mode|operational-mode|multi-vsys|cloud-mode|device-certificate-status|ip-address|netmask|default-gateway|mac-address|time|family):'
+  # ── deviceconfig plumbing with no compliance meaning
+  - '^set deviceconfig system (?:type|netmask|mac-address|iot-security|device-telemetry|geo-location|route)\b'
+  - '^set deviceconfig system update-(?:server|schedule)\b'
+  - '^set deviceconfig system server-verification\b'
+  - '^set deviceconfig system service disable-(?:ssh|icmp|snmp|userid-service|userid-syslog-listener-ssl|userid-syslog-listener-udp|dhcpv6-client|http-ocsp) yes\s*$'
+  - '^set deviceconfig system ssh regenerate-hostkeys\b'
+  - '^set deviceconfig setting management (?:disable-predefined-reports|enable-log-high-dp-load|initcfg|api)\b'
+  - '^set deviceconfig setting session timeout-(?:udp|icmp|scan|tcphandshake|tcpinit|captive-portal)\b'
+  - '^set deviceconfig setting (?:ctd|wildfire|auto-mac-detect|jumbo-frame)\b'
+  - '^set deviceconfig high-availability (?:interface|group \d+ (?:peer-ip|mode|election-option|monitoring|state-synchronization))\b'
+  # ── password policy: the four character-class minimums and the
+  # username-inclusion switch all describe the same control, and the vocabulary
+  # has exactly one complexity path. Recording four integers and a boolean under
+  # it would make a rule's reading of that path depend on fact ordering, which is
+  # the class of defect tests/test_pattern_packs.py exists to prevent. Complexity
+  # is asserted once, from `password-complexity enabled yes`.
+  - '^set mgt-config password-complexity (?:minimum-uppercase-letters|minimum-lowercase-letters|minimum-numeric-letters|minimum-special-characters|block-username-inclusion|new-password-differs-by-characters|password-change-on-first-login|expiration-warning-period|post-expiration-admin-login-count|post-expiration-grace-period|password-change-period-block)\b'
+  - '^set mgt-config password-profiles \S+ (?:password-change-on-first-login|expiration-warning-period)\b'
+  - '^set mgt-config users \S+ password-profile\b'
+  # ── AAA plumbing: ports, transport options and the admin allow-list are
+  # references, not posture.
+  - '^set shared server-profile \S+ \S+ (?:server \S+ (?:port|protocol|retries)|use-single-connection|protocol|retries|domain|administrator-use-only)\b'
+  - '^set shared authentication-profile \S+ (?:allow-list|single-sign-on|multi-factor-auth|user-domain|username-modifier)\b'
+  # ── certificate revocation checking has no home in the vocabulary, which models
+  # enrollment and trust anchors but not CRL/OCSP policy.
+  - '^set shared certificate-profile \S+ (?:use-crl|use-ocsp|block-unknown-cert|block-timeout-cert|block-expired-cert|crl-receive-timeout|ocsp-receive-timeout|username-field)\b'
+  - '^set shared ssl-tls-service-profile \S+ protocol-settings (?:max-version|keyxchg-algo-\S+|auth-\S+)\b'
+  - '^set shared log-settings \S+ match-list \S+ (?:filter\s+"?All Logs"?|send-email|send-snmptrap|send-http|action-desc|log-type)\s*'
+  - '^set shared log-settings syslog \S+ server \S+ (?:format|escaping)\b'
+  - '^set shared log-settings snmptrap \S+ server \S+ version\b'
+  # ── the object database. Addresses, groups, services and tags name the traffic
+  # a policy matches; they are not device posture. Same call cisco_asa.yaml makes
+  # for object-group members.
+  - '^set address(?:-group)? \S+ '
+  - '^set service(?:-group)? \S+ '
+  - '^set tag \S+ '
+  - '^set application-(?:group|filter) \S+ '
+  - '^set schedule \S+ '
+  - '^set external-list \S+ '
+  # ── security and NAT rule match criteria. See note 4 in the header.
+  - '^set rulebase (?:security|nat) rules (?:"[^"]*"|\S+) (?:description|source|destination|source-user|source-hip|destination-hip|category|application|service|hip-profiles|rule-type|negate-source|negate-destination|disabled|tag|group-tag|log-start|log-setting|schedule|icmp-unreachable|target|to-interface|uuid)\b'
+  - '^set rulebase default-security-rules rules \S+ (?:log-start|log-setting|description|profile-setting)\b'
+  # ── zone and interface plumbing
+  - '^set zone \S+ (?:enable-user-identification|user-acl|device-acl|network (?:log-setting|enable-packet-buffer-protection|net-inspection))\b'
+  - '^set network interface \S+ (?:units )?\S+ (?:layer3 (?:ipv6|ndp-proxy|adjust-tcp-mss|dhcp-client accept-dhcp-domain|arp|untagged-sub-interface|df-ignore|decrypt-forward)|link-state-hold-time|poe|aggregate-group)\b'
+  - '^set network interface ethernet \S+ layer3 lldp profile\b'
+  - '^set network vlan \S+ '
+  - '^set network dhcp interface \S+ server (?:ip-pool|option|lease|probe-ip)\b'
+  # ── routing plumbing: next hops, router-ids, redistribution and ECMP toggles
+  - '^set network virtual-router \S+ routing-table ip static-route \S+ (?:nexthop|metric|admin-dist|interface|bfd|path-monitor|route-table)\b'
+  - '^set network virtual-router \S+ protocol (?:ospf|ospfv3|bgp|rip) router-id\b'
+  - '^set network virtual-router \S+ protocol (?:ospf|bgp|rip) enable\b'
+  - '^set network virtual-router \S+ protocol ospf area \S+ interface \S+ (?:passive|link-type|metric|priority|enable)\b'
+  - '^set network virtual-router \S+ protocol bgp (?:peer-group \S+ (?:type|aggregated-confed-as-path|enable|peer \S+ (?:peer-address|local-address|enable|peer-as|connection-options (?:multihop|keep-alive-interval|hold-time|open-delay-time|idle-hold-time)))|reject-default-route|install-route|allow-redist-default-route|routing-options)\b'
+  - '^set network virtual-router \S+ (?:ecmp|multicast|admin-dists|protocol redist-profile)\b'
+  # ── crypto plumbing: lifetimes have no canonical path, and an AEAD suite's
+  # `authentication none` is correct by construction rather than a weakness.
+  - '^set network ike crypto-profiles \S+ \S+ lifetime\b'
+  - '^set network ike crypto-profiles ipsec-crypto-profiles \S+ esp authentication\b'
+  - '^set network ike gateway \S+ (?:local-address|peer-address|protocol-common|protocol ikev\d (?:ike-crypto-profile-preferred|dpd interval|dpd retry))\b'
+  - '^set network tunnel ipsec \S+ (?:auto-key ike-gateway|tunnel-interface|tunnel-monitor (?:destination-ip|proxy-id|profile)|anti-replay|copy-tos|proxy-id)\b'
+  # ── threat-prevention profile bodies. The profile's existence and action are
+  # recorded; its per-signature severity lists are content, not posture.
+  - '^set profiles \S+ \S+ (?:rules \S+ (?:severity|category|cve|threat-name|vendor-id|host|packet-capture|block-ip)|decoder \S+ (?:wildfire-action|mlav-action)|mlav-engine-filebased-enabled|threat-exception|description)\b'
+  - '^set profiles dos-protection \S+ (?:type|flood \S+ red (?:alarm-rate|maximal-rate|block)|resource)\b'
+  - '^set profile-group \S+ (?:spyware|vulnerability|url-filtering|file-blocking|wildfire-analysis|data-filtering)\b'
+  - '^set network profiles zone-protection-profile \S+ (?:flood \S+ red|strict-ip-check|fragmented-traffic|suppress-icmp-\S+|tcp-reject-non-syn|asymmetric-path|non-ip-protocol|protocol-protection)\b'
+  - '^set network profiles interface-management-profile \S+ [\w-]+ no\s*$'
+  # ── vsys bookkeeping
+  - '^set vsys \S+ (?:display-name|import|address|address-group|service|rulebase)\b'
+  - '^set shared (?:pre-rulebase|post-rulebase|reports|report-group|application|content-preview)\b'
+
+patterns:
+
+  # ── show system info preamble ─────────────────────────────────────
+  # These five keys are the only inventory a PAN-OS capture carries. See note 2.
+  - id: panos_info_hostname
+    regex: '^#\s*hostname:\s*(?P<value>\S+)'
+    path: device.hostname
+    value: str
+  - id: panos_info_model
+    regex: '^#\s*model:\s*(?P<value>\S+)'
+    path: device.model
+    value: str
+    note: >
+      surfaces as Device.hardware, which is what NIST CM-8 asset accountability
+      is answered from
+  - id: panos_info_serial
+    regex: '^#\s*serial:\s*(?P<value>\S+)'
+    path: device.serials
+    value: str
+  - id: panos_info_version
+    regex: '^#\s*sw-version:\s*(?P<value>\S+)'
+    path: device.os_version
+    value: str
+  - id: panos_info_uptime
+    regex: '^#\s*uptime:\s*(?P<value>.+?)\s*$'
+    path: device.uptime
+    value: str
+
+  # ── device identity and management plane ──────────────────────────
+  - id: panos_hostname
+    regex: '^set deviceconfig system hostname (?P<value>\S+)\s*$'
+    path: device.hostname
+    value: str
+  - id: panos_domain
+    regex: '^set deviceconfig system domain (?P<value>\S+)\s*$'
+    path: mgmt.domain_name
+    value: str
+  - id: panos_mgmt_ip
+    regex: '^set deviceconfig system ip-address (?P<value>[\d.]+)\s*$'
+    path: interface.ip_address
+    value: str
+    note: the MGT interface, which never appears under `set network interface`
+  - id: panos_mgmt_default_gateway
+    regex: '^set deviceconfig system default-gateway (?P<value>[\d.]+)\s*$'
+    path: routing.default_route
+    value: str
+  - id: panos_timezone
+    regex: '^set deviceconfig system timezone (?P<value>\S+)\s*$'
+    path: time.timezone
+    value: str
+  - id: panos_dns_primary
+    regex: '^set deviceconfig system dns-setting servers (?:primary|secondary) (?P<value>[\d.:a-f]+)\s*$'
+    path: service.dns
+    value: str
+  - id: panos_login_banner
+    regex: '^set deviceconfig system login-banner "?(?P<text>[^"]+)"?\s*$'
+    emits:
+      - {path: mgmt.login_banner, value: true}
+      - {path: mgmt.banner.text, value: str, group: text}
+  - id: panos_banner_header
+    regex: '^set deviceconfig system motd-and-banner banner-header "?(?P<text>[^"]+)"?\s*$'
+    emits:
+      - {path: mgmt.motd_banner, value: true}
+      - {path: mgmt.banner.text, value: str, group: text}
+
+  # Management services. Enabled protocols join mgmt.access.protocols; disabled
+  # ones are ignored, because an absent protocol is the negative fact (note 3).
+  - id: panos_service_telnet_disabled
+    regex: '^set deviceconfig system service disable-telnet yes\s*$'
+    emits:
+      - {path: mgmt.telnet.enabled, value: const, literal: false}
+      - {path: service.telnet, value: const, literal: false}
+  - id: panos_service_telnet_enabled
+    regex: '^set deviceconfig system service disable-telnet no\s*$'
+    emits:
+      - {path: mgmt.telnet.enabled, value: const, literal: true}
+      - {path: service.telnet, value: const, literal: true}
+      - {path: mgmt.access.protocols, value: const, literal: telnet}
+  - id: panos_service_http_disabled
+    regex: '^set deviceconfig system service disable-http yes\s*$'
+    emits:
+      - {path: mgmt.http.server_enabled, value: const, literal: false}
+      - {path: service.http, value: const, literal: false}
+  - id: panos_service_http_enabled
+    regex: '^set deviceconfig system service disable-http no\s*$'
+    emits:
+      - {path: mgmt.http.server_enabled, value: const, literal: true}
+      - {path: service.http, value: const, literal: true}
+      - {path: mgmt.access.protocols, value: const, literal: http}
+  - id: panos_service_https_enabled
+    regex: '^set deviceconfig system service disable-https no\s*$'
+    emits:
+      - {path: mgmt.http.secure_server_enabled, value: const, literal: true}
+      - {path: mgmt.access.protocols, value: const, literal: https}
+  - id: panos_service_https_disabled
+    regex: '^set deviceconfig system service disable-https yes\s*$'
+    path: mgmt.http.secure_server_enabled
+    value: const
+    literal: false
+  - id: panos_service_ssh_enabled
+    regex: '^set deviceconfig system service disable-ssh no\s*$'
+    path: mgmt.access.protocols
+    value: const
+    literal: ssh
+  - id: panos_service_icmp_enabled
+    regex: '^set deviceconfig system service disable-icmp no\s*$'
+    path: mgmt.access.protocols
+    value: const
+    literal: ping
+  - id: panos_service_snmp_enabled
+    regex: '^set deviceconfig system service disable-snmp no\s*$'
+    emits:
+      - {path: mgmt.access.protocols, value: const, literal: snmp}
+      - {path: snmp.enabled, value: true}
+
+  - id: panos_permitted_ip
+    regex: '^set deviceconfig system permitted-ip (?P<value>[\d./:a-f]+)\b'
+    emits:
+      - {path: mgmt.ssh.acl, value: str}
+      - {path: mgmt.http.acl, value: str}
+      - {path: snmp.acl, value: str}
+    note: >
+      PAN-OS scopes permitted-ip to the whole management plane rather than to one
+      service, so the same list answers the SSH, HTTPS and SNMP source-restriction
+      controls
+
+  # ── SSH server hardening ──────────────────────────────────────────
+  - id: panos_ssh_cipher
+    regex: '^set deviceconfig system ssh ciphers mgmt (?P<value>\S+)\s*$'
+    path: mgmt.ssh.cipher
+    value: lower
+  - id: panos_ssh_mac
+    regex: '^set deviceconfig system ssh mac mgmt (?P<value>\S+)\s*$'
+    path: mgmt.ssh.mac
+    value: lower
+  - id: panos_ssh_kex
+    regex: '^set deviceconfig system ssh kex mgmt (?P<value>\S+)\s*$'
+    emits:
+      - {path: mgmt.ssh.kex, value: lower}
+      - {path: mgmt.ssh.key_exchange_group, value: lower}
+  - id: panos_ssh_hostkey_type
+    regex: '^set deviceconfig system ssh default-hostkey mgmt key-type (?P<value>\S+)\s*$'
+    emits:
+      - {path: crypto.key.type, value: lower}
+      - {path: mgmt.ssh.pubkey_chain, value: lower}
+  - id: panos_ssh_rekey_interval
+    regex: '^set deviceconfig system ssh session-rekey mgmt interval (?P<value>\d+)\s*$'
+    path: mgmt.ssh.rekey_time
+    value: int
+  - id: panos_ssh_rekey_data
+    regex: '^set deviceconfig system ssh session-rekey mgmt data (?P<value>\d+)\s*$'
+    path: mgmt.ssh.rekey_volume
+    value: int
+  - id: panos_ssh_version
+    regex: '^set deviceconfig system ssh protocol-version (?P<value>\d+)\s*$'
+    path: mgmt.ssh.version
+    value: int
+
+  # ── admin session policy ──────────────────────────────────────────
+  - id: panos_idle_timeout
+    regex: '^set deviceconfig setting management idle-timeout (?P<minutes>\d+)\s*$'
+    emits:
+      - {path: line.vty.exec_timeout, value: minutes_seconds}
+      - {path: mgmt.http.idle_timeout, value: minutes_seconds}
+    note: >
+      PAN-OS applies one idle timeout to the web interface and the CLI alike, so
+      the single knob answers both the HTTP-session and the VTY-timeout control
+  - id: panos_admin_lockout_attempts
+    regex: '^set deviceconfig setting management admin-lockout failed-attempts (?P<value>\d+)\s*$'
+    emits:
+      - {path: aaa.authentication_attempts, value: int}
+      - {path: mgmt.ssh.maxretries, value: int}
+  - id: panos_admin_lockout_time
+    regex: '^set deviceconfig setting management admin-lockout lockout-time (?P<minutes>\d+)\s*$'
+    path: aaa.login_block
+    value: minutes_seconds
+    note: >
+      PAN-OS states `lockout-time` in minutes; aaa.login_block is seconds on
+      every other pack, so `minutes_seconds` normalises it on the way in. It was
+      `value: int` until now, which meant a PAN-OS 15 and a FortiGate 15 landed
+      at the same path meaning a sixty-fold difference in lockout.
+  - id: panos_session_timeout_tcp
+    regex: '^set deviceconfig setting session timeout-tcp (?P<value>\d+)\s*$'
+    path: firewall.session_timeout
+    value: int
+  - id: panos_max_sessions
+    regex: '^set deviceconfig setting management max-concurrent-sessions (?P<value>\d+)\s*$'
+    path: aaa.max_sessions
+    value: int
+
+  # ── high availability ─────────────────────────────────────────────
+  - id: panos_ha_enabled
+    regex: '^set deviceconfig high-availability enabled (?P<value>yes)\s*$'
+    path: ha.redundancy
+    value: true
+  - id: panos_ha_config_sync
+    regex: '^set deviceconfig high-availability group \d+ configuration-synchronization enabled (?P<value>yes)\s*$'
+    path: ha.sync
+    value: true
+
+  # ── local administrators ──────────────────────────────────────────
+  # mgmt.local_user.name is emitted from the phash line, which every local
+  # administrator has exactly once. Using a run block here would have consumed
+  # that line as an anchor and lost the hash type, which is the fact IA-5(1) is
+  # actually about.
+  #
+  # `mgmt.local_user.secret` is a presence boolean, not the hash. Five other
+  # packs emit it that way and this one briefly did not — it emitted the
+  # `$5$salt$digest` string, which put real credential material into the fact
+  # store, the PDF and the ledger, and made a boolean path hold a string. The
+  # hash type is retained because it is metadata a control reads; the digest is
+  # not, because no control can do anything with it.
+  - id: panos_user_phash
+    regex: '^set mgt-config users (?P<name>\S+) phash (?P<hash>\$(?P<htype>\d[a-z]?)\$\S+)\s*$'
+    emits:
+      - {path: mgmt.local_user.name, value: str, group: name}
+      - {path: mgmt.local_user.secret, value: true}
+      - {path: mgmt.local_user.hash_type, value: str, group: htype}
+  - id: panos_user_phash_plain
+    regex: '^set mgt-config users (?P<name>\S+) phash (?P<hash>\S+)\s*$'
+    emits:
+      - {path: mgmt.local_user.name, value: str, group: name}
+      - {path: mgmt.local_user.secret, value: true}
+    note: >
+      A `phash` that is not `$id$salt$digest` — the fallback for a stored
+      credential this pack cannot read an algorithm out of. It emits presence and
+      no hash type, because naming one would be a guess. Both rules used to add
+      `mgmt.local_user.secret_type: phash`, which restated the keyword already in
+      the regex and told no control anything the `$id$` in `hash_type` does not.
+  - id: panos_user_role_builtin
+    regex: '^set mgt-config users (?P<name>\S+) permissions role-based (?P<role>superuser|superreader|deviceadmin|devicereader|panorama-admin|vsysadmin|vsysreader) (?:yes|no)\s*$'
+    emits:
+      - {path: mgmt.local_user.privilege, value: lower, group: role}
+      - {path: mgmt.privilege.level, value: lower, group: role}
+  - id: panos_user_role_custom
+    regex: '^set mgt-config users (?P<name>\S+) permissions role-based (?:custom|vsysadmin|devicereader) profile (?P<role>\S+)\s*$'
+    path: mgmt.local_user.privilege
+    value: str
+    group: role
+  - id: panos_user_pubkey
+    regex: '^set mgt-config users (?P<name>\S+) public-key (?P<value>\S+)\s*$'
+    path: mgmt.local_user.ssh_key
+    value: str
+  - id: panos_user_auth_profile
+    regex: '^set mgt-config users (?P<name>\S+) authentication-profile (?P<value>\S+)\s*$'
+    path: aaa.authentication_login
+    value: str
+  - id: panos_user_disabled
+    regex: '^set mgt-config users (?P<value>\S+) disabled yes\s*$'
+    path: mgmt.local_user.name
+    value: str
+
+  # ── password policy ───────────────────────────────────────────────
+  - id: panos_pwd_complexity
+    regex: '^set mgt-config password-complexity enabled (?P<value>yes)\s*$'
+    path: mgmt.password_policy.complexity
+    value: true
+  - id: panos_pwd_min_length
+    regex: '^set mgt-config password-complexity minimum-length (?P<value>\d+)\s*$'
+    path: mgmt.password_policy.min_length
+    value: int
+  - id: panos_pwd_history
+    regex: '^set mgt-config password-complexity password-history-count (?P<value>\d+)\s*$'
+    path: mgmt.password_policy.history
+    value: int
+  - id: panos_pwd_lifetime
+    regex: '^set mgt-config password-complexity expiration-period (?P<value>\d+)\s*$'
+    path: mgmt.password_policy.lifetime
+    value: int
+  - id: panos_pwd_profile
+    regex: '^set mgt-config password-profiles (?P<value>\S+) expiration-period (?P<days>\d+)\s*$'
+    emits:
+      - {path: mgmt.password_policy.name, value: str}
+      - {path: mgmt.password_policy.lifetime, value: int, group: days}
+
+  # ── AAA server profiles ───────────────────────────────────────────
+  # One line carries the whole server tuple, so one pattern emits all of it.
+  # Splitting it would silently drop everything after the first match.
+  - id: panos_aaa_server_host
+    regex: '^set shared server-profile (?P<proto>tacplus|radius|ldap|kerberos) (?P<group>\S+) server (?P<srv>\S+) (?:ip-)?address (?P<addr>\S+)\s*$'
+    emits:
+      - {path: aaa.server.protocol, value: lower, group: proto}
+      - {path: aaa.server.group, value: str, group: group}
+      - {path: aaa.server.name, value: str, group: srv}
+      - {path: aaa.server.host, value: str, group: addr}
+  - id: panos_aaa_server_secret
+    regex: '^set shared server-profile (?:tacplus|radius|ldap|kerberos) (?P<group>\S+) server (?P<srv>\S+) (?:secret|bind-password) (?P<value>\S+)\s*$'
+    path: aaa.server.key_encrypted
+    value: true
+    note: >
+      PAN-OS stores every server secret as an -AQ== master-key blob and offers no
+      plaintext form, so a present secret is by construction an encrypted one
+  - id: panos_aaa_server_timeout
+    regex: '^set shared server-profile (?:tacplus|radius|ldap|kerberos) (?P<group>\S+) timeout (?P<value>\d+)\s*$'
+    path: aaa.server.timeout
+    value: int
+  - id: panos_aaa_auth_profile_method
+    regex: '^set shared authentication-profile (?P<value>\S+) method (?P<method>tacplus|radius|ldap|kerberos|saml-idp|local-database) server-profile (?P<group>\S+)\s*$'
+    emits:
+      - {path: aaa.authentication_login, value: str}
+      - {path: aaa.server.protocol, value: lower, group: method}
+  - id: panos_aaa_auth_profile_local
+    regex: '^set shared authentication-profile (?P<value>\S+) method local-database\s*$'
+    emits:
+      - {path: aaa.authentication_login, value: str}
+      - {path: aaa.local_fallback, value: true}
+  - id: panos_aaa_profile_lockout_attempts
+    regex: '^set shared authentication-profile \S+ lockout failed-attempts (?P<value>\d+)\s*$'
+    path: aaa.authentication_attempts
+    value: int
+  - id: panos_aaa_profile_lockout_time
+    regex: '^set shared authentication-profile \S+ lockout lockout-time (?P<minutes>\d+)\s*$'
+    path: aaa.login_block
+    value: minutes_seconds
+  # Ordered specific-then-general so aaa.local_fallback is only asserted when
+  # `local` is genuinely in the sequence. A single pattern with an optional group
+  # would emit the fallback fact for every sequence.
+  - id: panos_aaa_sequence_with_local
+    regex: '^set shared authentication-sequence (?P<seq>\S+) authentication-profiles \[\s*(?P<value>[^\]]*\blocal\b[^\]]*?)\s*\]\s*$'
+    emits:
+      - {path: aaa.authentication_order, value: word_list}
+      - {path: aaa.local_fallback, value: true}
+  - id: panos_aaa_sequence
+    regex: '^set shared authentication-sequence (?P<seq>\S+) authentication-profiles \[\s*(?P<value>[^\]]+?)\s*\]\s*$'
+    path: aaa.authentication_order
+    value: word_list
+  - id: panos_device_auth_profile
+    regex: '^set deviceconfig system authentication-profile (?P<value>\S+)\s*$'
+    path: aaa.authentication_login
+    value: str
+  - id: panos_aaa_source_interface
+    regex: '^set deviceconfig setting management service-route source-interface (?P<value>\S+)\s*$'
+    path: aaa.source_interface
+    value: str
+
+  # ── NTP ───────────────────────────────────────────────────────────
+  - id: panos_ntp_server
+    regex: '^set deviceconfig system ntp-servers (?:primary|secondary)-ntp-server ntp-server-address (?P<value>\S+)\s*$'
+    emits:
+      - {path: time.ntp.server, value: str}
+      - {path: time.ntp.enabled, value: true}
+      - {path: time.ntp, value: true}
+  - id: panos_ntp_auth_key
+    regex: '^set deviceconfig system ntp-servers (?:primary|secondary)-ntp-server authentication-type (?:symmetric-key|autokey) algorithm (?P<algo>\S+) authentication-key (?P<value>\S+)\s*$'
+    emits:
+      - {path: time.ntp.key, value: lower, group: algo}
+      - {path: time.ntp.authentication, value: true}
+    note: >
+      `time.ntp.key` holds the digest algorithm, not the key. Every other pack
+      reads it that way and the Cisco IOS Router NDM STIG compares it with
+      `ne md5`, so emitting the key material here both leaked the secret and
+      broke the control: an `authentication-key` blob is never equal to `md5`,
+      so a device using MD5 would have passed a check it should fail.
+  - id: panos_ntp_key_id
+    regex: '^set deviceconfig system ntp-servers (?:primary|secondary)-ntp-server authentication-type symmetric-key key-id (?P<value>\d+)\s*$'
+    emits:
+      - {path: time.ntp.key_id, value: int}
+      - {path: time.ntp.authentication, value: true}
+  - id: panos_ntp_auth_none
+    regex: '^set deviceconfig system ntp-servers (?:primary|secondary)-ntp-server authentication-type none\s*$'
+    path: time.ntp.authentication
+    value: false
+
+  # ── SNMP ──────────────────────────────────────────────────────────
+  - id: panos_snmp_location
+    regex: '^set deviceconfig system snmp-setting snmp-system location "?(?P<value>[^"]+?)"?\s*$'
+    path: snmp.location
+    value: str
+  - id: panos_snmp_contact
+    regex: '^set deviceconfig system snmp-setting snmp-system contact "?(?P<value>[^"]+?)"?\s*$'
+    path: snmp.contact
+    value: str
+  - id: panos_snmp_traps
+    regex: '^set deviceconfig system snmp-setting snmp-system send-event-specific-traps (?P<value>yes)\s*$'
+    path: snmp.traps
+    value: true
+  - id: panos_snmp_v3_view
+    regex: '^set deviceconfig system snmp-setting access-setting version v3 views (?P<value>\S+) view \S+ oid (?P<oid>[\d.]+) option (?P<opt>include|exclude)\s*$'
+    emits:
+      - {path: snmp.view, value: str}
+      - {path: snmp.version, value: const, literal: 3}
+  - id: panos_snmp_v3_user_view
+    regex: '^set deviceconfig system snmp-setting access-setting version v3 users (?P<value>\S+) view (?P<view>\S+)\s*$'
+    emits:
+      - {path: snmp.user, value: str}
+      - {path: snmp.community_view, value: str, group: view}
+      - {path: snmp.version, value: const, literal: 3}
+      - {path: snmp.enabled, value: true}
+  # `snmp.v3_auth` and `snmp.v3_priv` hold the algorithm in every other pack, and
+  # the Cisco IOS Router NDM STIG reads them as `^sha` and `^aes`. PAN-OS does not
+  # write an algorithm token: `authpwd`/`privpwd` take the secret directly because
+  # the platform fixes the algorithms — SNMPv3 on PAN-OS 10.x is SHA for
+  # authentication and AES-128 for privacy, with no knob to weaken either.
+  #
+  # So the algorithm is asserted as a constant, the same way `juniper_junos.yaml`
+  # turns `authentication-sha` into `sha`. Emitting the password instead did two
+  # things wrong at once: it put the SNMP credential into the fact store, the PDF
+  # and the ledger, and it made both STIG controls FAIL on a correctly configured
+  # firewall, because a secret never matches `^sha`. A false positive is the
+  # failure mode that ends an auditor's trust.
+  - id: panos_snmp_v3_authpwd
+    regex: '^set deviceconfig system snmp-setting access-setting version v3 users (?P<user>\S+) authpwd (?P<value>\S+)\s*$'
+    path: snmp.v3_auth
+    value: const
+    literal: sha
+  - id: panos_snmp_v3_privpwd
+    regex: '^set deviceconfig system snmp-setting access-setting version v3 users (?P<user>\S+) privpwd (?P<value>\S+)\s*$'
+    path: snmp.v3_priv
+    value: const
+    literal: aes128
+  # Kept for real-world captures: a v2c box is the finding IA-5(1) exists for.
+  - id: panos_snmp_v2c_community
+    regex: '^set deviceconfig system snmp-setting access-setting version v2c snmp-community-string (?P<value>\S+)\s*$'
+    emits:
+      - {path: snmp.community, value: str}
+      - {path: snmp.version, value: const, literal: 2}
+      - {path: snmp.enabled, value: true}
+  - id: panos_snmp_trap_host
+    regex: '^set shared log-settings snmptrap (?P<prof>\S+) server (?P<srv>\S+) manager (?P<value>\S+)\s*$'
+    emits:
+      - {path: snmp.trap_host, value: str}
+      - {path: snmp.host, value: str}
+
+  # ── logging ───────────────────────────────────────────────────────
+  # Ordered longest-first: a syslog server line names the collector, its port and
+  # its transport on separate lines, and each needs a required capture group.
+  - id: panos_syslog_server
+    regex: '^set shared log-settings syslog (?P<prof>\S+) server (?P<srv>\S+) server (?P<value>[\w.:-]+)\s*$'
+    emits:
+      - {path: logging.remote_syslog, value: str}
+      - {path: logging.enable, value: true}
+  - id: panos_syslog_port
+    regex: '^set shared log-settings syslog (?P<prof>\S+) server (?P<srv>\S+) port (?P<value>\d+)\s*$'
+    path: logging.host.port
+    value: int
+  - id: panos_syslog_transport
+    regex: '^set shared log-settings syslog (?P<prof>\S+) server (?P<srv>\S+) transport (?P<value>\S+)\s*$'
+    path: logging.host.transport
+    value: lower
+  - id: panos_syslog_facility
+    regex: '^set shared log-settings syslog (?P<prof>\S+) server (?P<srv>\S+) facility (?P<value>\S+)\s*$'
+    path: logging.facility
+    value: lower
+  - id: panos_log_config_forwarding
+    regex: '^set shared log-settings config match-list (?P<value>\S+) send-syslog \[\s*(?P<targets>[^\]]+?)\s*\]\s*$'
+    emits:
+      - {path: logging.config_changes, value: true}
+      - {path: logging.config_changes_notify, value: str, group: targets}
+  - id: panos_log_system_forwarding
+    regex: '^set shared log-settings system match-list (?P<value>\S+) send-syslog \[\s*(?P<targets>[^\]]+?)\s*\]\s*$'
+    emits:
+      - {path: logging.enable, value: true}
+      - {path: logging.on, value: true}
+  - id: panos_log_userid_forwarding
+    regex: '^set shared log-settings userid match-list (?P<value>\S+) send-syslog \[\s*(?P<targets>[^\]]+?)\s*\]\s*$'
+    path: logging.userinfo
+    value: true
+  - id: panos_log_severity_filter
+    regex: '^set shared log-settings \S+ match-list \S+ filter\s+"?\(severity geq (?P<value>\w+)\)"?\s*$'
+    path: logging.trap_level
+    value: lower
+  - id: panos_log_hostname_in_syslog
+    regex: '^set deviceconfig setting management hostname-type-in-syslog (?P<value>\S+)\s*$'
+    path: logging.origin_id
+    value: lower
+
+  # ── TLS and PKI ───────────────────────────────────────────────────
+  - id: panos_tls_min_version
+    regex: '^set shared ssl-tls-service-profile (?P<prof>\S+) protocol-settings min-version (?P<value>\S+)\s*$'
+    emits:
+      - {path: crypto.tls.version, value: lower}
+      - {path: mgmt.http.tls_version, value: lower}
+  - id: panos_tls_cipher
+    regex: '^set shared ssl-tls-service-profile (?P<prof>\S+) protocol-settings (?P<value>enc-[\w-]+) yes\s*$'
+    path: crypto.cipher_suite
+    value: lower
+  - id: panos_tls_certificate
+    regex: '^set shared ssl-tls-service-profile (?P<prof>\S+) certificate (?P<value>\S+)\s*$'
+    path: crypto.pki.trustpoint
+    value: str
+  - id: panos_cert_profile_ca
+    regex: '^set shared certificate-profile (?P<prof>\S+) CA (?P<value>\S+)\s*$'
+    emits:
+      - {path: crypto.pki.trustpoint, value: str}
+      - {path: crypto.pki.enrollment, value: const, literal: certificate-profile}
+
+  # ── IKE / IPsec ───────────────────────────────────────────────────
+  - id: panos_ike_dh_group
+    regex: '^set network ike crypto-profiles ike-crypto-profiles (?P<prof>\S+) dh-group (?P<value>\S+)\s*$'
+    path: crypto.ikev2.group
+    value: lower
+  - id: panos_ike_encryption
+    regex: '^set network ike crypto-profiles ike-crypto-profiles (?P<prof>\S+) encryption (?P<value>\S+)\s*$'
+    path: crypto.ikev2.proposal
+    value: lower
+  - id: panos_ike_hash
+    regex: '^set network ike crypto-profiles ike-crypto-profiles (?P<prof>\S+) hash (?P<value>\S+)\s*$'
+    path: crypto.cipher_suite
+    value: lower
+  - id: panos_ipsec_encryption
+    regex: '^set network ike crypto-profiles ipsec-crypto-profiles (?P<prof>\S+) esp encryption (?P<value>\S+)\s*$'
+    path: crypto.ipsec.transform
+    value: lower
+  - id: panos_ipsec_dh_group
+    regex: '^set network ike crypto-profiles ipsec-crypto-profiles (?P<prof>\S+) dh-group (?P<value>\S+)\s*$'
+    emits:
+      - {path: crypto.ipsec.pfs, value: lower}
+      - {path: vpn.pfs, value: lower}
+  # The vocabulary models IKEv1 as the thing to switch off, which is the control
+  # auditors actually write: DISA and CIS both ask for IKEv1 to be absent rather
+  # than for IKEv2 to be present. `ikev2` therefore asserts IKEv1 off, and the
+  # gateway's crypto profile is what records the negotiated proposal.
+  - id: panos_ike_gateway_v2
+    regex: '^set network ike gateway (?P<gw>\S+) protocol version ikev2\s*$'
+    path: crypto.ikev1.enabled
+    value: const
+    literal: false
+  - id: panos_ike_gateway_v2_preferred
+    regex: '^set network ike gateway (?P<gw>\S+) protocol version ikev2-preferred\s*$'
+    path: crypto.ikev1.enabled
+    value: const
+    literal: true
+    note: >
+      ikev2-preferred still answers IKEv1 initiations, so the weaker protocol is
+      reachable and the control fails exactly as it would under `ikev1`
+  - id: panos_ike_gateway_v1
+    regex: '^set network ike gateway (?P<gw>\S+) protocol version ikev1\s*$'
+    path: crypto.ikev1.enabled
+    value: const
+    literal: true
+  - id: panos_ike_gateway_profile
+    regex: '^set network ike gateway (?P<gw>\S+) protocol ikev\d ike-crypto-profile (?P<value>\S+)\s*$'
+    path: crypto.isakmp.policy
+    value: str
+  - id: panos_ike_gateway_dpd
+    regex: '^set network ike gateway (?P<gw>\S+) protocol ikev\d dpd enable (?P<value>yes)\s*$'
+    path: vpn.dpd
+    value: true
+  - id: panos_ike_gateway_cert_profile
+    regex: '^set network ike gateway (?P<gw>\S+) authentication certificate certificate-profile (?P<value>\S+)\s*$'
+    path: vpn.tunnel.auth
+    value: str
+  - id: panos_ike_gateway_local_cert
+    regex: '^set network ike gateway (?P<gw>\S+) authentication certificate local-certificate name (?P<value>\S+)\s*$'
+    path: crypto.pki.trustpoint
+    value: str
+  - id: panos_ike_gateway_psk
+    regex: '^set network ike gateway (?P<gw>\S+) authentication pre-shared-key key (?P<key>\S+)\s*$'
+    path: vpn.tunnel.auth
+    value: const
+    literal: pre-shared-key
+  - id: panos_ipsec_tunnel_profile
+    regex: '^set network tunnel ipsec (?P<tun>\S+) auto-key ipsec-crypto-profile (?P<value>\S+)\s*$'
+    path: vpn.tunnel.encryption
+    value: str
+  - id: panos_ipsec_tunnel_monitor
+    regex: '^set network tunnel ipsec (?P<tun>\S+) tunnel-monitor enable (?P<value>yes)\s*$'
+    path: vpn.dpd
+    value: true
+  - id: panos_gp_split_tunnel
+    regex: '^set global-protect global-protect-gateway (?P<gw>\S+) remote-user-tunnel-configs (?P<cfg>\S+) split-tunneling (?P<value>\S+)\b'
+    path: vpn.split_tunnel
+    value: lower
+
+  # ── zones, management profiles and threat prevention ──────────────
+  - id: panos_zone_layer3
+    regex: '^set zone (?P<value>\S+) network layer3 \[\s*(?P<members>[^\]]*?)\s*\]\s*$'
+    path: firewall.zone
+    value: str
+  - id: panos_zone_protection_applied
+    regex: '^set zone (?P<zone>\S+) network zone-protection-profile (?P<value>\S+)\s*$'
+    path: control_plane.service_policy
+    value: str
+  - id: panos_mgmt_profile_service
+    regex: '^set network profiles interface-management-profile (?P<prof>\S+) (?P<value>ssh|https|http|telnet|snmp|ping|response-pages|userid-service) yes\s*$'
+    path: mgmt.access.protocols
+    value: lower
+    note: >
+      the per-interface analogue of a FortiGate `set allowaccess` list; a service
+      left at `no` is absent from the set rather than recorded as a negative
+  - id: panos_mgmt_profile_permitted_ip
+    regex: '^set network profiles interface-management-profile (?P<prof>\S+) permitted-ip (?P<value>[\d./:a-f]+)\s*$'
+    emits:
+      - {path: mgmt.ssh.acl, value: str}
+      - {path: mgmt.http.acl, value: str}
+  - id: panos_zone_protection_flood_syn
+    regex: '^set network profiles zone-protection-profile (?P<value>\S+) flood tcp-syn enable (?P<on>yes)\s*$'
+    path: control_plane.protection
+    value: str
+    note: >
+      a firewall has no CoPP; zone protection is where PAN-OS rate-limits traffic
+      aimed at the box and its zones, so it answers the same control
+  - id: panos_zone_protection_flood_other
+    regex: '^set network profiles zone-protection-profile (?P<value>\S+) flood (?:udp|icmp|icmpv6|other-ip) enable (?P<on>yes)\s*$'
+    path: control_plane.policing
+    value: str
+  - id: panos_zone_protection_spoof
+    regex: '^set network profiles zone-protection-profile (?P<prof>\S+) discard-ip-spoof (?P<value>yes)\s*$'
+    path: routing.urpf
+    value: true
+    note: PAN-OS spells unicast reverse-path forwarding "discard-ip-spoof"
+  - id: panos_zone_protection_scan
+    regex: '^set network profiles zone-protection-profile (?P<prof>\S+) scan (?P<value>ip-sweep|port-scan|host-sweep) action (?P<act>\S+)\s*$'
+    path: firewall.ids_signature
+    value: lower
+  - id: panos_lldp_profile
+    regex: '^set network profiles lldp-profile (?P<prof>\S+) mode (?P<value>\S+)\s*$'
+    path: service.lldp
+    value: true
+  - id: panos_dos_protection
+    regex: '^set profiles dos-protection (?P<value>\S+) flood \S+ red activate-rate (?P<rate>\d+)\s*$'
+    path: control_plane.policing
+    value: str
+  - id: panos_threat_profile_rule
+    regex: '^set profiles (?:vulnerability|spyware|file-blocking|data-filtering) (?P<value>\S+) rules \S+ action \S+\s*$'
+    path: firewall.ids_signature
+    value: str
+  - id: panos_antivirus_profile
+    regex: '^set profiles virus (?P<value>\S+) decoder \S+ action \S+\s*$'
+    path: firewall.ids_signature
+    value: str
+  - id: panos_url_filtering_profile
+    regex: '^set profiles url-filtering (?P<value>\S+) block \[\s*(?P<cats>[^\]]+?)\s*\]\s*$'
+    path: firewall.ids_signature
+    value: str
+  - id: panos_profile_group
+    regex: '^set profile-group (?P<value>\S+) virus \[\s*(?P<members>[^\]]+?)\s*\]\s*$'
+    path: firewall.inspection
+    value: str
+
+  # ── default security rules ────────────────────────────────────────
+  # Listed before nothing in particular, but the interzone log-end rule must come
+  # before the generic default-rule logging pattern, because the implicit deny's
+  # logging state is a control of its own (AU-12) rather than one rule's setting.
+  - id: panos_default_rule_interzone_log
+    regex: '^set rulebase default-security-rules rules interzone-default log-end (?P<value>yes)\s*$'
+    emits:
+      - {path: acl.implicit_deny_log, value: true}
+      - {path: firewall.policy.log, value: const, literal: true}
+  - id: panos_default_rule_interzone_nolog
+    regex: '^set rulebase default-security-rules rules interzone-default log-end no\s*$'
+    emits:
+      - {path: acl.implicit_deny_log, value: false}
+      - {path: firewall.policy.log, value: const, literal: false}
+  - id: panos_default_rule_action
+    regex: '^set rulebase default-security-rules rules (?P<rule>intrazone-default|interzone-default) action (?P<value>allow|deny|drop|reset-both|reset-client|reset-server)\s*$'
+    path: firewall.policy.default_action
+    value: lower
+  - id: panos_default_rule_log
+    regex: '^set rulebase default-security-rules rules \S+ log-end (?P<value>yes)\s*$'
+    path: firewall.policy.log
+    value: true
+  # The `no` half of the pattern above. Without it a silent built-in policy
+  # emitted nothing at all, and CIS 7.4 reads `firewall.policy.log` with
+  # `quantifier: all` — so a firewall whose `intrazone-default` was set to
+  # `log-end no` produced only `true` facts from its other policies and passed
+  # the control that exists to catch exactly that blind spot. `on_missing: fail`
+  # did not cover it, because the path was not missing; it was present and
+  # unanimously wrong. Intrazone traffic is the east-west case, which is the
+  # traffic a perimeter firewall is least likely to be logging elsewhere.
+  # `interzone-default` never hit this because it has its own explicit `no`
+  # pattern above, and first match wins.
+  - id: panos_default_rule_nolog
+    regex: '^set rulebase default-security-rules rules \S+ log-end no\s*$'
+    path: firewall.policy.log
+    value: false
+
+  # ── NAT rules ─────────────────────────────────────────────────────
+  # Flat rather than a run block: firewall.nat.rule is the only NAT path in the
+  # vocabulary, so a block anchored there would leave its children nowhere to
+  # write. Emitting the rule name from the translation line keeps one fact per
+  # translation and loses nothing.
+  - id: panos_nat_source_translation
+    regex: '^set rulebase nat rules (?P<value>"[^"]*"|\S+) source-translation (?P<kind>[\w-]+)\b'
+    path: firewall.nat.rule
+    value: str
+  - id: panos_nat_destination_translation
+    regex: '^set rulebase nat rules (?P<value>"[^"]*"|\S+) destination-translation translated-address (?P<addr>\S+)\b'
+    path: firewall.nat.rule
+    value: str
+  - id: panos_nat_zone_list
+    regex: '^set rulebase nat rules (?:"[^"]*"|\S+) (?:from|to) \[\s*(?P<value>[^\]]+?)\s*\]\s*$'
+    path: firewall.zone
+    value: word_list
+  - id: panos_nat_zone_single
+    regex: '^set rulebase nat rules (?:"[^"]*"|\S+) (?:from|to) (?P<value>[\w.-]+)\s*$'
+    path: firewall.zone
+    value: str
+
+  # ── interfaces outside the ethernet run blocks ────────────────────
+  - id: panos_loopback_ip
+    regex: '^set network interface loopback units (?P<name>\S+) ip (?P<value>[\d./]+)\s*$'
+    path: interface.ip_address
+    value: str
+  - id: panos_tunnel_ip
+    regex: '^set network interface tunnel units (?P<name>\S+) ip (?P<value>[\d./]+)\s*$'
+    emits:
+      - {path: interface.ip_address, value: str}
+      - {path: interface.tunnel, value: str, group: name}
+  - id: panos_virtual_interface_comment
+    regex: '^set network interface (?:loopback|tunnel|vlan) units (?P<name>\S+) comment "?(?P<value>[^"]*?)"?\s*$'
+    path: interface.description
+    value: str
+  - id: panos_virtual_interface_mgmt_profile
+    regex: '^set network interface (?:loopback|tunnel|vlan) units (?P<name>\S+) interface-management-profile (?P<value>\S+)\s*$'
+    path: interface.acl_in
+    value: str
+  - id: panos_dhcp_server
+    regex: '^set network dhcp interface (?P<intf>\S+) server mode (?P<value>enabled|auto)\s*$'
+    path: service.dhcp
+    value: true
+
+blocks:
+
+  # ── ethernet interfaces ───────────────────────────────────────────
+  - id: panos_interface_ethernet
+    regex: '^set network interface ethernet (?P<name>ethernet\d+/\d+|ae\d+)\s'
+    mode: run
+    anchor_path: interface.name
+    anchor_value: str
+    anchor_group: name
+    note: >
+      The first line of each run is consumed as the anchor (see header note 1).
+      A 10.2 set-format capture emits `layer3 ipv6 enabled no` first for a routed
+      interface, which carries no compliance fact, so nothing is lost on a real
+      export. Children re-match the full line, including the `set network
+      interface ethernet <name>` prefix, because PAN-OS repeats it every time.
+    children:
+      - id: panos_if_comment
+        regex: '^set network interface ethernet \S+ comment "?(?P<value>[^"]*?)"?\s*$'
+        path: interface.description
+        value: str
+      - id: panos_if_ip
+        regex: '^set network interface ethernet \S+ layer3 ip (?P<value>[\d./]+)\s*$'
+        path: interface.ip_address
+        value: str
+      - id: panos_if_dhcp_client
+        regex: '^set network interface ethernet \S+ layer3 dhcp-client enable (?P<value>yes)\s*$'
+        path: interface.ip_address
+        value: const
+        literal: dhcp
+      - id: panos_if_mgmt_profile
+        regex: '^set network interface ethernet \S+ layer3 interface-management-profile (?P<value>\S+)\s*$'
+        path: interface.acl_in
+        value: str
+        note: >
+          a management profile is the inbound access control on the interface's own
+          address, which is the control AC-17(2) and the CIS management-plane
+          section are actually asking about
+      - id: panos_if_mtu
+        regex: '^set network interface ethernet \S+ layer3 mtu (?P<value>\d+)\s*$'
+        path: interface.mtu
+        value: int
+      - id: panos_if_lldp
+        regex: '^set network interface ethernet \S+ layer3 lldp enable (?P<value>yes|no)\s*$'
+        path: interface.lldp_enabled
+        value: lower
+      - id: panos_if_link_state
+        regex: '^set network interface ethernet \S+ link-state (?P<value>auto|up|down)\s*$'
+        path: interface.admin_state
+        value: lower
+      - id: panos_if_link_speed
+        regex: '^set network interface ethernet \S+ link-speed (?P<value>\S+)\s*$'
+        path: interface.speed
+        value: lower
+      - id: panos_if_link_duplex
+        regex: '^set network interface ethernet \S+ link-duplex (?P<value>\S+)\s*$'
+        path: interface.duplex
+        value: lower
+      - id: panos_if_layer2_vlan
+        regex: '^set network interface ethernet \S+ layer2 units \S+ (?P<value>\d+)\s*$'
+        path: interface.access_vlan
+        value: int
+      - id: panos_if_tap
+        regex: '^set network interface ethernet \S+ (?P<value>tap|virtual-wire|decrypt-mirror)\b'
+        path: interface.switchport_mode
+        value: lower
+    child_defaults:
+      - path: interface.description
+        value: ""
+        reason: >
+          PAN-OS omits `comment` entirely for an undescribed interface, and an
+          undescribed port is the one nobody can account for at audit time; a rule
+          that counts them needs a fact per interface rather than a gap
+      - path: interface.admin_state
+        value: auto
+        reason: >
+          `link-state` is only written when an operator overrides it, so its
+          absence is the factory default of auto-negotiated link state rather than
+          an unknown; recording it makes CM-2 answerable per port
+
+  # ── security policy rules ─────────────────────────────────────────
+  - id: panos_security_rule
+    regex: '^set rulebase security rules (?P<name>"[^"]*"|\S+)\s'
+    mode: run
+    anchor_path: firewall.policy.name
+    anchor_value: str
+    anchor_group: name
+    note: >
+      No child defaults on purpose. The tempting one — asserting that a rule with
+      no `log-end` line does not log — would be a false positive, because PAN-OS
+      writes the key only when an operator changes it and the schema default is
+      to log. A false positive is the failure mode that ends an auditor's trust,
+      so an un-evidenced rule is left silent rather than guessed at.
+    children:
+      - id: panos_rule_from_list
+        regex: '^set rulebase security rules (?:"[^"]*"|\S+) (?:from|to) \[\s*(?P<value>[^\]]+?)\s*\]\s*$'
+        path: firewall.zone
+        value: word_list
+      - id: panos_rule_from_single
+        regex: '^set rulebase security rules (?:"[^"]*"|\S+) (?:from|to) (?P<value>[\w.-]+)\s*$'
+        path: firewall.zone
+        value: str
+      - id: panos_rule_action
+        regex: '^set rulebase security rules (?:"[^"]*"|\S+) action (?P<value>allow|deny|drop|reset-both|reset-client|reset-server)\s*$'
+        path: firewall.rule.action
+        value: lower
+      - id: panos_rule_log_end_yes
+        regex: '^set rulebase security rules (?:"[^"]*"|\S+) log-end yes\s*$'
+        path: firewall.policy.log
+        value: const
+        literal: true
+      - id: panos_rule_log_end_no
+        regex: '^set rulebase security rules (?:"[^"]*"|\S+) log-end no\s*$'
+        path: firewall.policy.log
+        value: const
+        literal: false
+      - id: panos_rule_profile_group
+        regex: '^set rulebase security rules (?:"[^"]*"|\S+) profile-setting group \[\s*(?P<value>[^\]]+?)\s*\]\s*$'
+        path: firewall.inspection
+        value: word_list
+      - id: panos_rule_profile_none
+        regex: '^set rulebase security rules (?:"[^"]*"|\S+) profile-setting profiles \S+ \[\s*(?P<value>[^\]]+?)\s*\]\s*$'
+        path: firewall.inspection
+        value: word_list
+
+  # ── virtual routers ───────────────────────────────────────────────
+  - id: panos_virtual_router
+    regex: '^set network virtual-router (?P<name>\S+)\s'
+    mode: run
+    anchor_path: routing.vrf
+    anchor_value: str
+    anchor_group: name
+    note: >
+      A virtual router is PAN-OS's VRF. Its first line in a 10.2 export is the
+      member-interface list, which the vocabulary does not model, so the anchor
+      costs nothing here either.
+    children:
+      - id: panos_vr_default_route
+        regex: '^set network virtual-router \S+ routing-table ip static-route (?P<rt>\S+) destination (?P<value>0\.0\.0\.0/0)\s*$'
+        path: routing.default_route
+        value: str
+      - id: panos_vr_static_route
+        regex: '^set network virtual-router \S+ routing-table ip static-route (?P<rt>\S+) destination (?P<value>[\d./]+)\s*$'
+        path: routing.static_route
+        value: str
+      - id: panos_vr_ospf_process
+        regex: '^set network virtual-router (?P<value>\S+) protocol ospf area (?P<area>[\d.]+) type normal\s*$'
+        path: routing.ospf.process
+        value: str
+      - id: panos_vr_ospf_auth
+        regex: '^set network virtual-router \S+ protocol ospf area \S+ interface \S+ authentication (?P<value>\S+)\s*$'
+        path: routing.ospf.auth
+        value: str
+      - id: panos_vr_ospf_md5
+        regex: '^set network virtual-router \S+ protocol ospf auth-profile (?P<value>\S+) md5 \d+ key (?P<key>\S+)\s*$'
+        path: routing.ospf.message_digest
+        value: str
+      - id: panos_vr_bgp_asn
+        regex: '^set network virtual-router \S+ protocol bgp local-as (?P<value>\d+)\s*$'
+        path: routing.bgp.asn
+        value: int
+      - id: panos_vr_bgp_auth_profile
+        regex: '^set network virtual-router \S+ protocol bgp auth-profile (?P<value>\S+) secret (?P<key>\S+)\s*$'
+        path: routing.bgp.neighbor_auth
+        value: str
+      - id: panos_vr_bgp_peer_auth
+        regex: '^set network virtual-router \S+ protocol bgp peer-group \S+ peer \S+ connection-options authentication (?P<value>\S+)\s*$'
+        path: routing.bgp.neighbor_auth
+        value: str
+      - id: panos_vr_bgp_max_prefix
+        regex: '^set network virtual-router \S+ protocol bgp peer-group \S+ peer \S+ max-prefixes (?P<value>\d+)\s*$'
+        path: routing.bgp.max_prefix
+        value: int
+      - id: panos_vr_rip_process
+        regex: '^set network virtual-router (?P<value>\S+) protocol rip interface \S+ enable yes\s*$'
+        path: routing.rip.process
+        value: str
+      - id: panos_vr_rip_auth
+        regex: '^set network virtual-router \S+ protocol rip auth-profile (?P<value>\S+) (?:md5|password)\b'
+        path: routing.rip.auth
+        value: str
+      - id: panos_vr_ospf_process_enable
+        regex: '^set network virtual-router (?P<value>\S+) protocol ospf reject-default-route no\s*$'
+        path: routing.ospf.process
+        value: str
+
+# Platform facts that follow from PAN-OS being PAN-OS. Each is suppressed the
+# moment the file produces the same path, so a pack can state its whole platform
+# baseline without defensive pruning.
+defaults:
+  - path: mgmt.ssh.version
+    value: 2
+    reason: >
+      PAN-OS has never shipped an SSHv1 server, so an SSH-reachable management
+      interface on this platform is SSHv2 by construction. Recording it lets a
+      cross-platform rule written for IOS's `ip ssh version 2` read a firewall
+      correctly instead of returning unknown.
+  - path: crypto.ipsec.mode
+    value: tunnel
+    reason: >
+      PAN-OS site-to-site IPsec is tunnel mode only; transport mode is not
+      configurable, so the mode is a platform property rather than a setting.
+  - path: crypto.fips_mode
+    value: false
+    reason: >
+      FIPS-CC mode is selected in the maintenance-mode boot menu and never
+      appears in the running-config, so its absence here is not evidence that it
+      is off. Asserting false turns the control into a question an operator must
+      answer rather than an `unknown` nobody reads. See header note 5.
+  - path: routing.source_routing
+    value: false
+    reason: >
+      the PAN-OS dataplane discards packets carrying IP source-route options and
+      offers no command to accept them, so the platform never honours them
+  - path: routing.ip_routing
+    value: true
+    reason: >
+      a PAN-OS firewall forwards between zones by design; there is no global
+      switch equivalent to `no ip routing`
+  - path: service.cdp
+    value: false
+    reason: PAN-OS implements no Cisco Discovery Protocol agent at all
+  - path: service.finger
+    value: false
+    reason: >
+      PAN-OS exposes no finger service, so the CIS control that asks for it to be
+      disabled is satisfied by the platform rather than by configuration
+  - path: service.bootp
+    value: false
+    reason: PAN-OS has no BOOTP server
+  - path: service.pad
+    value: false
+    reason: PAN-OS has no X.25 PAD service
+  - path: service.rcmd
+    value: false
+    reason: PAN-OS has no rsh/rcp server
+  - path: service.tcp_small_servers
+    value: false
+    reason: PAN-OS has no echo/discard/chargen/daytime services
+  - path: service.udp_small_servers
+    value: false
+    reason: PAN-OS has no echo/discard/chargen/daytime services
+  - path: service.password_encryption
+    value: true
+    reason: >
+      every credential in a PAN-OS configuration is either a salted hash (phash)
+      or an -AQ== master-key blob; the platform has no plaintext form to disable
+  - path: service.password_recovery
+    value: false
+    reason: >
+      PAN-OS has no password-recovery bypass; a lost superuser credential
+      requires a factory reset, which is the posture the control asks for
+  - path: aaa.new_model
+    value: true
+    reason: >
+      there is no `aaa new-model` toggle on PAN-OS — authentication profiles are
+      the only path to the management plane, so the AAA subsystem is always active
+  - path: logging.on
+    value: true
+    reason: >
+      PAN-OS always writes to its local log database; the configurable part is
+      forwarding, which is recorded separately as logging.remote_syslog
+  - path: logging.timestamps
+    value: true
+    reason: >
+      every PAN-OS log record carries a receive time; there is no equivalent of
+      `no service timestamps` to turn it off
+  - path: service.telnet
+    value: false
+    reason: >
+      the telnet management service ships disabled on PAN-OS and only appears in
+      the configuration when an operator turns it on
+  - path: mgmt.telnet.enabled
+    value: false
+    reason: same as service.telnet, stated at the management-plane path a rule reads
+  - path: ha.sync
+    value: false
+    reason: >
+      configuration synchronisation is off until an HA pair is built, so a
+      standalone firewall is honestly reported as unsynchronised rather than
+      unknown
+  - path: stp.bpduguard_default
+    value: false
+    reason: >
+      PAN-OS runs no spanning tree even in Layer 2 mode; it forwards BPDUs
+      without participating, so no BPDU guard exists to enable

@@ -1,0 +1,188 @@
+{
+  "model": "TF-IDF char-ngram + LogisticRegression",
+  "calibration": "sigmoid",
+  "split_strategy": "StratifiedGroupKFold",
+  "split_group_by": "device",
+  "n_splits": 5,
+  "n_samples": 1943,
+  "n_classes": 15,
+  "n_devices": 54,
+  "classes": [
+    "aaa.authentication_order",
+    "acl.extended.entry",
+    "control_plane.copp",
+    "device.hostname",
+    "interface.admin_state",
+    "line.aux.exec_timeout",
+    "line.console.exec_timeout",
+    "logging.remote_syslog",
+    "mgmt.enable_secret.hash_type",
+    "mgmt.http.secure_server_enabled",
+    "mgmt.http.server_enabled",
+    "mgmt.ssh.version",
+    "service.timestamps",
+    "time.ntp",
+    "time.ntp.server"
+  ],
+  "fold_metrics": [
+    {
+      "fold": 1,
+      "accuracy": 0.9248,
+      "f1_macro": 0.7825,
+      "f1_weighted": 0.8925,
+      "train_size": 1810,
+      "test_size": 133,
+      "train_devices": 43,
+      "test_devices": 11
+    },
+    {
+      "fold": 2,
+      "accuracy": 0.901,
+      "f1_macro": 0.8362,
+      "f1_weighted": 0.8729,
+      "train_size": 1458,
+      "test_size": 485,
+      "train_devices": 43,
+      "test_devices": 11
+    },
+    {
+      "fold": 3,
+      "accuracy": 0.9966,
+      "f1_macro": 0.8949,
+      "f1_weighted": 0.9959,
+      "train_size": 1051,
+      "test_size": 892,
+      "train_devices": 43,
+      "test_devices": 11
+    },
+    {
+      "fold": 4,
+      "accuracy": 0.984,
+      "f1_macro": 0.8716,
+      "f1_weighted": 0.9793,
+      "train_size": 1693,
+      "test_size": 250,
+      "train_devices": 45,
+      "test_devices": 9
+    },
+    {
+      "fold": 5,
+      "accuracy": 0.9891,
+      "f1_macro": 0.9048,
+      "f1_weighted": 0.9854,
+      "train_size": 1760,
+      "test_size": 183,
+      "train_devices": 42,
+      "test_devices": 12
+    }
+  ],
+  "mean_accuracy": 0.9591,
+  "mean_f1_macro": 0.858,
+  "mean_f1_weighted": 0.9452,
+  "per_class": {
+    "aaa.authentication_order": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 10.0
+    },
+    "acl.extended.entry": {
+      "precision": 1.0,
+      "recall": 0.5217391304347826,
+      "f1-score": 0.6857142857142857,
+      "support": 92.0
+    },
+    "control_plane.copp": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 30.0
+    },
+    "device.hostname": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 57.0
+    },
+    "interface.admin_state": {
+      "precision": 0.9663814180929096,
+      "recall": 1.0,
+      "f1-score": 0.9829033260801989,
+      "support": 1581.0
+    },
+    "line.aux.exec_timeout": {
+      "precision": 0.5,
+      "recall": 0.3333333333333333,
+      "f1-score": 0.4,
+      "support": 12.0
+    },
+    "line.console.exec_timeout": {
+      "precision": 0.5,
+      "recall": 0.6666666666666666,
+      "f1-score": 0.5714285714285714,
+      "support": 12.0
+    },
+    "logging.remote_syslog": {
+      "precision": 1.0,
+      "recall": 0.9523809523809523,
+      "f1-score": 0.975609756097561,
+      "support": 21.0
+    },
+    "mgmt.enable_secret.hash_type": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 7.0
+    },
+    "mgmt.http.secure_server_enabled": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 12.0
+    },
+    "mgmt.http.server_enabled": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 12.0
+    },
+    "mgmt.ssh.version": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 30.0
+    },
+    "service.timestamps": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 24.0
+    },
+    "time.ntp": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 11.0
+    },
+    "time.ntp.server": {
+      "precision": 1.0,
+      "recall": 0.90625,
+      "f1-score": 0.9508196721311475,
+      "support": 32.0
+    },
+    "macro avg": {
+      "precision": 0.8644254278728607,
+      "recall": 0.8253580055210491,
+      "f1-score": 0.837765040763451,
+      "support": 1943.0
+    },
+    "weighted avg": {
+      "precision": 0.9628661976350438,
+      "recall": 0.9655172413793104,
+      "f1-score": 0.9601786155748312,
+      "support": 1943.0
+    }
+  },
+  "model_artifact": "C:\\Users\\ronit\\Desktop\\TEST1\\praman\\data\\models\\classifier\\tfidf_pipeline.joblib",
+  "timestamp": "2026-08-27T15:11:43+0530"
+}

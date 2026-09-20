@@ -1,0 +1,1675 @@
+# Arista EOS pattern pack.
+#
+# EOS looks like IOS at a glance and diverges in five places that matter to a
+# compliance parser:
+#
+# 1. **The chassis model is in a comment.** `show running-config` opens with
+#    `! device: <host> (DCS-7050SX3-48YC8, EOS-4.30.3M)` and that line is the only
+#    place an EOS configuration states its own hardware and software version. So
+#    `comment_prefixes` is deliberately EMPTY and the `!` separators are handled by
+#    `ignore:` instead — comment stripping runs before the pattern list, so declaring
+#    `!` a comment would throw away the platform's entire inventory. This is the same
+#    decision the ASA pack makes about its `:` header, for the same reason: CM-8 asset
+#    accountability is answered by exactly one line, and it happens to look like noise.
+#    The trade is explicit — an unrecognised `! something` line is reported as unparsed
+#    rather than silently dropped, which is the direction this project prefers to err.
+# 2. **The management plane is a set of named stanzas, not a set of lines.**
+#    `management ssh`, `management api http-commands`, `management telnet`,
+#    `management console`, `management defaults` and `management security` each open an
+#    indented block, and the same child text (`no shutdown`, `idle-timeout 15`) means
+#    something different in each. So the three service stanzas share one anchor path,
+#    `mgmt.access.protocols`, and each maps its own `shutdown` state to the path that
+#    describes *that* service.
+# 3. **There is no `no shutdown` on an enabled interface.** Unlike the ASA, EOS omits
+#    the line entirely when a port is up, so `interface.admin_state` comes from a
+#    child default on nearly every port. That default is what makes the CM-2 unused-port
+#    check answerable at all on this platform.
+# 4. **Banners are `EOF`-delimited, not sentinel-delimited.** `banner login` opens a
+#    block that runs to a bare `EOF`, so the two banner stanzas are `delimited` blocks
+#    whose child captures the verbatim text — which is what an AC-8 reviewer reads.
+# 5. **Roles are a full RBAC language.** `role <name>` with `10 permit mode exec
+#    command …` rules expresses per-command authorisation in a grammar PRAMAN's
+#    canonical vocabulary does not model. Rather than mangle it, the role *bodies* are
+#    ignored explicitly and the compliance-relevant fact — which role each account
+#    holds — is captured from the `username … role <name>` line, where it is
+#    unambiguous. The gap is recorded in `ignore:` with this reasoning beside it.
+
+vendor: arista_eos
+os_family: eos
+parser_id: arista_eos_patterns@1
+description: >
+  Arista EOS 4.2x/4.3x configuration as produced by `show running-config`. Covers the
+  CIS Arista EOS benchmark surface and the DISA Layer-2 / NDM STIG check surfaces for
+  a datacentre leaf switch.
+
+# Deliberately empty — see note 1 in the header. `!` is handled by `ignore:` so the
+# `! device:` inventory line survives to reach the pattern list.
+comment_prefixes: []
+
+case_insensitive: true
+
+detect:
+  min_hits: 3
+  markers:
+    - "management api http-commands"
+    - "service routing protocols model"
+    - "aaa root secret sha512"
+    - "\nno aaa root"
+    - "daemon terminattr"
+    - "role network-admin"
+    - "eos-4"
+    - "transceiver qsfp default-mode"
+    - "\nmanagement ssh"
+    - "\nmanagement console"
+    - "\nmanagement defaults"
+    - "\nmanagement security"
+    - "spanning-tree portfast bpduguard default"
+    - "errdisable recovery cause"
+    - "\nvrf instance "
+    - "queue-monitor length"
+    - "switchport trunk group"
+    - "maximum-routes "
+    - "logging vrf "
+    - "ip tacacs vrf"
+    - "boot system flash:/eos"
+    - "! device:"
+  # `management api http-commands` is the eAPI stanza and `management ssh` is the SSH
+  # stanza; no other platform in the corpus spells either, and every EOS switch that
+  # can be managed at all has one of them.
+  strong_markers:
+    - "management api http-commands"
+    - "\nmanagement ssh"
+  strong_bonus: 12
+  anti_markers:
+    - "boot-start-marker"             # cisco_ios / cisco_xe
+    - "asa version"                   # cisco_asa
+    - "\nnameif "                     # cisco_asa
+    - "\nfeature "                    # cisco_nxos
+    - "host-name"                     # juniper_junos
+    - "config system global"          # fortinet
+    - "set deviceconfig"              # paloalto_panos
+  filename_hints:
+    - "arista"
+    - "eos"
+    - "leaf"
+    - "spine"
+
+ignore:
+  # `!` separators and the capture headers. Narrow on purpose: `^!` as a blanket rule
+  # would also swallow `! device:`, which is the only inventory this platform emits.
+  - '^!\s*$'
+  - '^! Command:'
+  - '^! Startup-config'
+  - '^! Running-config'
+  - '^! Time:'
+  - '^!! '
+  - '^\s*$'
+  - '^end\s*$'
+  - '^exit\s*$'
+  # The `EOF` terminator of an EOS banner. The block that opens at `banner login`
+  # counts to it; consuming it here keeps it out of the unparsed report.
+  - '^EOF\s*$'
+  # The role RBAC grammar. See note 5 in the header: `role <name>` bodies express
+  # per-command authorisation in a language PRAMAN's canonical vocabulary has no path
+  # for, and the compliance-relevant binding (which role an account holds) is read off
+  # the `username … role <name>` line instead. Filing a regex-matching rule body under
+  # some approximate path would be a misreport; this is an acknowledged gap, and adding
+  # a `mgmt.rbac.*` family later is a vocabulary change rather than a code change.
+  - '^role\s+\S+\s*$'
+  - '^no role\s+\S+\s*$'
+  - '^\d+\s+(?:permit|deny)\s+mode\b'
+  - '^\d+\s+(?:permit|deny)\s+command\b'
+  # BGP and OSPF topology: which peer, which network, which router-id. PRAMAN derives
+  # topology from interface addresses, and none of these change whether the session is
+  # well-configured.
+  - '^neighbor\s+\S+\s+remote-as\s+\d+\s*$'
+  - '^neighbor\s+\S+\s+peer group(?:\s+\S+)?\s*$'
+  - '^neighbor\s+\S+\s+send-community\b'
+  - '^neighbor\s+\S+\s+description\b'
+  - '^network\s+[\d./]+\s*$'
+  - '^router-id\s+[\d.]+\s*$'
+  - '^maximum-paths\s+\d+'
+  - '^passive-interface\b'
+  - '^max-lsa\s+\d+'
+  - '^log-adjacency-changes\b'
+  - '^\s*address-family\s'
+  # Forwarding-plane sizing and telemetry. Capacity and observability engineering; no
+  # framework asks about TCAM partitioning or sFlow sample rates.
+  - '^platform\s'
+  - '^hardware counter\b'
+  - '^transceiver qsfp default-mode\b'
+  - '^queue-monitor\b'
+  - '^event-monitor\b'
+  - '^sflow\b'
+  - '^service routing protocols model\b'
+  - '^service unsupported-transceiver\b'
+  - '^errdisable recovery\b'
+  - '^lldp timer\b'
+  - '^lldp holdtime\b'
+  - '^spanning-tree mst\b'
+  - '^spanning-tree pathcost\b'
+  - '^ip domain-list\b'
+  - '^dns domain-list\b'
+  # `entropy source` names the RNG the crypto stack draws from. It is a genuine crypto
+  # setting with no canonical path: filing it under `crypto.fips_mode` (a boolean) or
+  # `crypto.cipher_suite` (a cipher name) would put the wrong kind of value where a
+  # rule expects a specific one, so it is skipped explicitly rather than mismapped.
+  - '^entropy source\b'
+  # The listening port of a management service is reachability, not posture — a rule
+  # asks whether SSH is restricted and encrypted, not which socket it binds.
+  - '^server-port\s+\d+\s*$'
+  # CloudVision's TerminAttr streaming agent (`daemon TerminAttr` with an `exec …` and
+  # its own `no shutdown`) is deliberately NOT handled. Its enable state has no honest
+  # canonical path, and the obvious shortcut — ignoring `^no shutdown` globally — would
+  # be catastrophic here, because `_is_ignored` runs before `_match_line` and would
+  # therefore swallow every interface's admin state as well. A real CVP-managed switch
+  # will report three unparsed lines for it, which is precisely the signal the training
+  # module (C2) exists to let an operator resolve without a redeploy.
+
+patterns:
+  # ── device identity and image ─────────────────────────────────────────────────
+  - id: eos_device_comment
+    regex: '^! device:\s+(?P<host>\S+)\s+\((?P<model>[^,)]+),\s*EOS-(?P<ver>[\w.]+)\)'
+    emits:
+      - {path: device.hostname, value: str, group: host}
+      - {path: device.model, value: str, group: model}
+      - {path: device.os_version, value: str, group: ver}
+    note: >
+      The only line in an EOS configuration that names the chassis. EOS has no `show
+      version` equivalent inside the running-config and no `hardware` statement, so
+      without this the platform reports no model at all — which is why `!` is not
+      declared a comment prefix in this pack.
+
+  - id: eos_hostname
+    regex: '^hostname\s+(?P<value>\S+)\s*$'
+    path: device.hostname
+    value: str
+
+  - id: eos_dns_domain
+    regex: '^dns domain\s+(?P<value>\S+)\s*$'
+    path: mgmt.domain_name
+    value: str
+
+  - id: eos_boot_system_versioned
+    regex: '^boot system\s+(?P<value>\S*EOS-(?P<ver>[\w.]+)\.swi)\s*$'
+    emits:
+      - {path: device.boot_system, value: str, group: value}
+      - {path: image.file, value: str, group: value}
+      - {path: device.os_version, value: str, group: ver}
+    note: >
+      EOS names its own release in the image filename and nowhere else in the
+      configuration proper. Listed before the general form so a conventionally-named
+      image contributes a version fact rather than only a path.
+
+  - id: eos_boot_system
+    regex: '^boot system\s+(?P<value>\S+)\s*$'
+    emits:
+      - {path: device.boot_system, value: str}
+      - {path: image.file, value: str}
+
+  - id: eos_boot_secret
+    regex: '^aboot password sha512\s+\S+'
+    emits:
+      - {path: image.boot_secure, value: true}
+      - {path: service.password_recovery, value: false}
+    note: >
+      An Aboot password is the only thing standing between physical console access and
+      a full configuration bypass on this platform, so setting it simultaneously
+      answers the boot-integrity control and closes password recovery.
+
+  # ── AAA ───────────────────────────────────────────────────────────────────────
+  - id: eos_aaa_root_secret
+    regex: '^aaa root secret\s+(?P<value>sha512|md5|5|0)\s+\S+'
+    emits:
+      - {path: mgmt.enable_secret.hash_type, value: lower}
+      - {path: mgmt.enable_secret.value, value: true}
+    note: >
+      `sha512` is the only non-reversible form EOS offers for the root secret; `5` is
+      unsalted MD5 and `0` is cleartext. The hash itself is never recorded — only its
+      form, which is the whole of what IA-5(1) asks.
+
+  - id: eos_no_aaa_root
+    regex: '^no aaa root\s*$'
+    path: mgmt.enable_password.present
+    value: false
+    note: >
+      Disables the root account outright, which is stronger than any secret: there is
+      no credential to steal. Recorded as the absence of an enable password so a rule
+      written against IOS's `enable secret` reads the state correctly.
+
+  - id: eos_aaa_lockout
+    regex: '^aaa authentication policy lockout failure\s+(?P<value>\d+)(?:\s+window\s+\d+)?\s+duration\s+(?P<dur>\d+)'
+    emits:
+      - {path: aaa.authentication_attempts, value: int, group: value}
+      - {path: aaa.login_block, value: int, group: dur}
+    note: >
+      Listed before the general `aaa authentication policy` pattern because
+      `_match_line` stops at the first match and the lockout thresholds are the two
+      numbers AC-7 actually asks for.
+
+  - id: eos_aaa_auth_policy
+    regex: '^aaa authentication policy\s+(?P<value>.+?)\s*$'
+    path: aaa.authentication_login
+    value: str
+    note: >
+      Records each policy verbatim rather than interpreting it, because the one that
+      matters — `local allow-nopassword-remote-login` — permits a remote login to a
+      local account that has no password at all, and a rule needs to see the exact
+      words to say so.
+
+  - id: eos_aaa_auth_login_local
+    regex: '^aaa authentication login\s+(?P<value>.+?\blocal)\s*$'
+    emits:
+      - {path: aaa.authentication_login, value: str}
+      - {path: aaa.local_fallback, value: true}
+    note: >
+      A method list ending in `local` is the fallback that keeps the switch reachable
+      when TACACS+ is unavailable. Its presence is the availability requirement and its
+      *only* being local is the finding, so both facts come from one match.
+
+  - id: eos_aaa_auth_login
+    regex: '^aaa authentication login\s+(?P<value>.+?)\s*$'
+    path: aaa.authentication_login
+    value: str
+
+  - id: eos_aaa_auth_enable
+    regex: '^aaa authentication enable\s+(?P<value>.+?)\s*$'
+    path: aaa.authentication_enable
+    value: str
+
+  - id: eos_aaa_authz_commands
+    regex: '^aaa authorization commands\s+(?P<value>.+?)\s*$'
+    path: aaa.authorization_commands
+    value: str
+
+  - id: eos_aaa_authz_config_commands
+    regex: '^aaa authorization config-commands\s*$'
+    path: aaa.authorization_commands
+    value: const
+    literal: config-commands
+    note: >
+      Without it, configuration-mode commands bypass TACACS+ authorisation entirely
+      while exec-mode commands are still checked — an asymmetry that reads as compliant
+      on a superficial review and is exactly the AC-6(9) gap.
+
+  - id: eos_aaa_authz_exec
+    regex: '^aaa authorization exec\s+(?P<value>.+?)\s*$'
+    path: aaa.authorization_exec
+    value: str
+
+  - id: eos_aaa_acct_commands
+    regex: '^aaa accounting commands\s+(?P<value>.+?)\s*$'
+    path: aaa.accounting_commands
+    value: str
+
+  - id: eos_aaa_acct_exec
+    regex: '^aaa accounting exec\s+(?P<value>.+?)\s*$'
+    path: aaa.accounting_exec
+    value: str
+
+  - id: eos_aaa_acct_system
+    regex: '^aaa accounting system\s+(?P<value>.+?)\s*$'
+    path: aaa.accounting_system
+    value: str
+
+  - id: eos_aaa_acct_dot1x
+    regex: '^aaa accounting dot1x\s+(?P<value>.+?)\s*$'
+    path: aaa.accounting_network
+    value: str
+
+  - id: eos_aaa_acct_connection
+    regex: '^aaa accounting connection\s+(?P<value>.+?)\s*$'
+    path: aaa.accounting_connection
+    value: str
+
+  - id: eos_tacacs_host_key
+    regex: '^tacacs-server host\s+(?P<value>[\w.:]+)(?:\s+vrf\s+\S+)?(?:\s+single-connection)?\s+key\s+(?P<enc>\d+)\s+\S+'
+    emits:
+      - {path: aaa.server.host, value: str, group: value}
+      - {path: aaa.server.key_encrypted, value: true}
+      - {path: aaa.server.protocol, value: const, literal: "tacacs+"}
+
+  - id: eos_tacacs_host
+    regex: '^tacacs-server host\s+(?P<value>[\w.:]+)'
+    emits:
+      - {path: aaa.server.host, value: str}
+      - {path: aaa.server.key_encrypted, value: false}
+      - {path: aaa.server.protocol, value: const, literal: "tacacs+"}
+    note: >
+      Listed after the keyed form: a host line reaching this pattern has no shared
+      secret, so the credential travels the wire unprotected. The `false` is observed,
+      not assumed, which is what lets a rule name the specific server at fault.
+
+  - id: eos_tacacs_timeout
+    regex: '^tacacs-server timeout\s+(?P<value>\d+)\s*$'
+    path: aaa.server.timeout
+    value: int
+
+  - id: eos_tacacs_source_interface
+    regex: '^ip tacacs(?:\s+vrf\s+\S+)?\s+source-interface\s+(?P<value>\S+)'
+    path: aaa.source_interface
+    value: str
+
+  - id: eos_radius_host_key
+    regex: '^radius-server host\s+(?P<value>[\w.:]+)(?:\s+vrf\s+\S+)?.*?\s+key\s+(?P<enc>\d+)\s+\S+'
+    emits:
+      - {path: aaa.server.host, value: str, group: value}
+      - {path: aaa.server.key_encrypted, value: true}
+      - {path: aaa.server.protocol, value: const, literal: radius}
+
+  - id: eos_radius_source_interface
+    regex: '^ip radius(?:\s+vrf\s+\S+)?\s+source-interface\s+(?P<value>\S+)'
+    path: aaa.source_interface
+    value: str
+
+  # ── local accounts ────────────────────────────────────────────────────────────
+  - id: eos_username_secret
+    regex: '^username\s+(?P<name>\S+)\s+privilege\s+(?P<priv>\d+)\s+role\s+(?P<role>\S+)\s+secret\s+(?P<hash>\S+)\s+\S+'
+    emits:
+      - {path: mgmt.local_user.name, value: str, group: name}
+      - {path: mgmt.local_user.privilege, value: int, group: priv}
+      - {path: mgmt.local_user.hash_type, value: lower, group: hash}
+      - {path: mgmt.local_user.secret, value: true}
+      - {path: aaa.authorization_commands, value: str, group: role}
+    note: >
+      The role name is filed under command authorisation rather than under the user,
+      because on EOS the role *is* the command-authorisation policy for that account —
+      and it is the only place PRAMAN can read the binding, since the role body itself
+      is not modelled.
+
+      The algorithm named after `secret` used to be filed at
+      `mgmt.local_user.secret_type`, a second path for the same quantity that no
+      rule ever read. It lands at `mgmt.local_user.hash_type` with the
+      `management defaults` value below, on purpose: a rule quantified `all` over
+      that path then sees the default *and* every existing account, which is the
+      only form that catches the drift the `management defaults` note describes.
+
+  - id: eos_username_nopassword
+    regex: '^username\s+(?P<name>\S+)\s+privilege\s+(?P<priv>\d+)\s+role\s+(?P<role>\S+)\s+nopassword\s*$'
+    emits:
+      - {path: mgmt.local_user.name, value: str, group: name}
+      - {path: mgmt.local_user.privilege, value: int, group: priv}
+      - {path: mgmt.local_user.secret, value: false}
+      - {path: aaa.authorization_commands, value: str, group: role}
+    note: >
+      An account that authenticates with nothing. On its own that is already the
+      IA-5(1) finding; combined with `aaa authentication policy local
+      allow-nopassword-remote-login` it is a remote unauthenticated shell.
+
+  - id: eos_username_sshkey
+    regex: '^username\s+(?P<name>\S+)\s+ssh-key\s+(?P<value>.+?)\s*$'
+    emits:
+      - {path: mgmt.local_user.ssh_key, value: str}
+      - {path: mgmt.local_user.name, value: str, group: name}
+
+  - id: eos_username_secret_no_privilege
+    regex: '^username\s+(?P<name>\S+)\s+role\s+(?P<role>\S+)\s+secret\s+(?P<hash>\S+)\s+\S+'
+    emits:
+      - {path: mgmt.local_user.name, value: str, group: name}
+      - {path: mgmt.local_user.hash_type, value: lower, group: hash}
+      - {path: mgmt.local_user.secret, value: true}
+      - {path: aaa.authorization_commands, value: str, group: role}
+    note: >
+      The same account with `privilege` omitted, which EOS allows — the level then
+      defaults to 1. Deliberately emits no `mgmt.local_user.privilege`, because none
+      was configured, and inventing the default here would be the parser answering a
+      question the operator never did.
+
+      Without this shape the line parsed to nothing at all, which was worse than
+      either. V-255957 is scoped `requires_paths: [mgmt.local_user.name]`, so a
+      switch whose accounts all omit `privilege` produced no name fact, failed the
+      precondition and came back `notapplicable` — the one configuration the control
+      is asking about was the one configuration it declined to judge. The pack
+      already conceded the field is optional in `eos_username_sshkey` above, which
+      matches a bare `username NAME ssh-key …`; this makes the secret and nopassword
+      forms agree with it.
+
+  - id: eos_username_nopassword_no_privilege
+    regex: '^username\s+(?P<name>\S+)\s+nopassword\s*$'
+    emits:
+      - {path: mgmt.local_user.name, value: str, group: name}
+      - {path: mgmt.local_user.secret, value: false}
+    note: >
+      An account with neither a privilege level nor any credential. Both halves are
+      findings on their own; see `eos_username_secret_no_privilege` for why the
+      missing privilege has to be visible rather than assumed.
+
+  - id: eos_username_bare
+    regex: '^username\s+(?P<value>\S+)\s+privilege\s+\d+\s+role\s+\S+\s*$'
+    path: mgmt.local_user.name
+    value: str
+
+  # ── SSH / eAPI / console details that live outside their stanzas ──────────────
+  - id: eos_ip_ssh_client_source
+    regex: '^ip ssh client source-interface\s+(?P<value>\S+)'
+    path: mgmt.ssh.source_interface
+    value: str
+
+  # ── logging ───────────────────────────────────────────────────────────────────
+  - id: eos_logging_host_port_proto
+    regex: '^logging(?:\s+vrf\s+\S+)?\s+host\s+(?P<value>[\w.:]+)\s+(?P<port>\d+)\s+protocol\s+(?P<proto>\S+)\s*$'
+    emits:
+      - {path: logging.remote_syslog, value: str, group: value}
+      - {path: logging.host.port, value: int, group: port}
+      - {path: logging.host.transport, value: lower, group: proto}
+      - {path: logging.enable, value: true}
+    note: >
+      Listed first of the three collector forms because `_match_line` stops at the first
+      match: only this pattern can record the transport, and `tcp` versus the default
+      `udp` is the difference between a log stream that can be relied on and one that
+      silently drops under load — the AU-4 concern.
+
+  - id: eos_logging_host_port
+    regex: '^logging(?:\s+vrf\s+\S+)?\s+host\s+(?P<value>[\w.:]+)\s+(?P<port>\d+)\s*$'
+    emits:
+      - {path: logging.remote_syslog, value: str, group: value}
+      - {path: logging.host.port, value: int, group: port}
+      - {path: logging.enable, value: true}
+
+  - id: eos_logging_host
+    regex: '^logging(?:\s+vrf\s+\S+)?\s+host\s+(?P<value>[\w.:]+)\s*$'
+    emits:
+      - {path: logging.remote_syslog, value: str}
+      - {path: logging.enable, value: true}
+    note: >
+      Listed last of the three so an explicit port and transport are recorded when
+      present; reaching this pattern means 514/UDP, the unauthenticated cleartext
+      default SC-8 asks about.
+
+  - id: eos_logging_source_interface
+    regex: '^logging(?:\s+vrf\s+\S+)?\s+source-interface\s+(?P<value>\S+)'
+    path: logging.source_interface
+    value: str
+
+  - id: eos_logging_format_timestamp
+    regex: '^logging format timestamp\s+(?P<value>\S+)'
+    path: logging.timestamps
+    value: lower
+    note: >
+      `high-resolution` gives sub-second, RFC3339-style stamps; the EOS default is a
+      whole-second local timestamp with no timezone, which cannot be correlated across
+      devices — the AU-8 requirement.
+
+  - id: eos_logging_format_hostname
+    regex: '^logging format hostname\s+(?P<value>\S+)'
+    path: logging.origin_id
+    value: lower
+
+  - id: eos_logging_format_sequence
+    regex: '^logging format sequence-numbers\s*$'
+    path: logging.sequence_numbers
+    value: true
+    note: >
+      Sequence numbers are how a reviewer detects that messages were deleted rather
+      than merely absent, which is the AU-9 integrity question.
+
+  - id: eos_logging_trap
+    regex: '^logging trap\s+(?P<value>\S+)\s*$'
+    path: logging.trap_level
+    value: lower
+
+  - id: eos_logging_buffered
+    regex: '^logging buffered\s+(?P<value>\d+)(?:\s+(?P<level>\S+))?\s*$'
+    emits:
+      - {path: logging.buffered_size, value: int, group: value}
+      - {path: logging.buffered, value: true}
+
+  - id: eos_logging_buffered_level
+    regex: '^logging buffered\s+(?P<value>[a-z]+)\s*$'
+    path: logging.buffered
+    value: lower
+
+  - id: eos_no_logging_console
+    regex: '^no logging console\s*$'
+    path: logging.console
+    value: false
+
+  - id: eos_logging_console
+    regex: '^logging console\s+(?P<value>\S+)\s*$'
+    path: logging.console
+    value: lower
+
+  - id: eos_logging_monitor
+    regex: '^logging monitor\s+(?P<value>\S+)\s*$'
+    path: logging.monitor
+    value: lower
+
+  - id: eos_logging_level
+    regex: '^logging level\s+(?P<value>\S+\s+\S+)\s*$'
+    path: logging.facility
+    value: str
+
+  - id: eos_logging_on
+    regex: '^(?P<neg>no\s+)?logging on\s*$'
+    path: logging.on
+    value: negated_bool
+
+  - id: eos_logging_persistent
+    regex: '^logging persistent(?:\s+\d+)?\s*$'
+    path: logging.persistent
+    value: true
+
+  - id: eos_logging_repeat
+    regex: '^logging repeat-messages\s*$'
+    path: logging.count
+    value: true
+
+  - id: eos_logging_event_link
+    regex: '^logging event link-status\s+(?P<value>\S+)\s*$'
+    path: logging.userinfo
+    value: lower
+
+  # ── time ──────────────────────────────────────────────────────────────────────
+  - id: eos_ntp_authenticate
+    regex: '^ntp authenticate\s*$'
+    emits:
+      - {path: time.ntp.authentication, value: true}
+      - {path: time.ntp.enabled, value: true}
+
+  - id: eos_ntp_auth_key
+    regex: '^ntp authentication-key\s+(?P<value>\d+)\s+(?P<algo>\S+)\s+\S+'
+    emits:
+      - {path: time.ntp.key_id, value: int, group: value}
+      - {path: time.ntp.key, value: str, group: algo}
+    note: >
+      The algorithm is recorded and the key material is not. `md5` here is the same
+      broken construction NTP has always used; `sha1` is what EOS offers instead, and
+      the difference is the whole of what a rule can act on.
+
+  - id: eos_ntp_trusted_key
+    regex: '^ntp trusted-key\s+(?P<value>[\d,]+)\s*$'
+    path: time.ntp.trusted_keys
+    value: str
+
+  - id: eos_ntp_server_key
+    regex: '^ntp server(?:\s+vrf\s+\S+)?\s+(?P<value>[\w.:-]+)(?:\s+prefer)?\s+key\s+(?P<key>\d+)\s*$'
+    emits:
+      - {path: time.ntp.server, value: str, group: value}
+      - {path: time.ntp.key_id, value: int, group: key}
+      - {path: time.ntp.authentication, value: true}
+      - {path: time.ntp, value: true}
+
+  - id: eos_ntp_server
+    regex: '^ntp server(?:\s+vrf\s+\S+)?\s+(?P<value>[\w.:-]+)'
+    emits:
+      - {path: time.ntp.server, value: str}
+      - {path: time.ntp, value: true}
+    note: >
+      Listed after the keyed variant because `_match_line` stops at the first match: an
+      authenticated peer must reach the pattern that records its key, not this one,
+      which would report it as unauthenticated.
+
+  - id: eos_ntp_local_interface
+    regex: '^ntp local-interface(?:\s+vrf\s+\S+)?\s+(?P<value>\S+)'
+    emits:
+      - {path: time.ntp.source_interface, value: str}
+      - {path: time.ntp.source, value: str}
+
+  - id: eos_clock_timezone
+    regex: '^clock timezone\s+(?P<value>\S+)\s*$'
+    path: time.timezone
+    value: str
+
+  # ── SNMP ──────────────────────────────────────────────────────────────────────
+  - id: eos_snmp_community
+    regex: '^snmp-server community\s+(?P<value>\S+)\s+(?P<access>ro|rw)(?:\s+(?P<acl>\S+))?\s*$'
+    emits:
+      - {path: snmp.community, value: str, group: value}
+      - {path: snmp.community_access, value: lower, group: access}
+      - {path: snmp.version, value: const, literal: "2c"}
+      - {path: snmp.enabled, value: true}
+    note: >
+      A community string is SNMPv1/v2c, which authenticates with a shared secret sent
+      in the clear and offers no integrity or confidentiality at all. Recording the
+      version alongside it lets one rule cover "no v1/v2c anywhere" without inspecting
+      each community.
+
+  - id: eos_snmp_community_acl
+    regex: '^snmp-server community\s+\S+\s+(?:ro|rw)\s+(?P<value>\S+)\s*$'
+    path: snmp.acl
+    value: str
+
+  - id: eos_snmp_view
+    regex: '^snmp-server view\s+(?P<value>\S+)\s+\S+\s+(?:included|excluded)'
+    path: snmp.view
+    value: str
+
+  - id: eos_snmp_group
+    regex: '^snmp-server group\s+(?P<value>\S+)\s+(?P<ver>v1|v2c|v3)\s+(?P<sec>auth|noauth|priv)'
+    emits:
+      - {path: snmp.group, value: str, group: value}
+      - {path: snmp.group_security, value: lower, group: sec}
+      - {path: snmp.version, value: lower, group: ver}
+
+  - id: eos_snmp_user
+    regex: '^snmp-server user\s+(?P<value>\S+)\s+\S+\s+v3\s+auth\s+(?P<auth>\S+)\s+\S+\s+priv\s+(?P<priv>aes\s+\d+|\S+)\s+\S+'
+    emits:
+      - {path: snmp.user, value: str, group: value}
+      - {path: snmp.v3_auth, value: lower, group: auth}
+      - {path: snmp.v3_priv, value: lower, group: priv}
+      - {path: snmp.version, value: const, literal: v3}
+      - {path: snmp.enabled, value: true}
+
+  - id: eos_snmp_user_auth_only
+    regex: '^snmp-server user\s+(?P<value>\S+)\s+\S+\s+v3\s+auth\s+(?P<auth>\S+)\s+\S+\s*$'
+    emits:
+      - {path: snmp.user, value: str, group: value}
+      - {path: snmp.v3_auth, value: lower, group: auth}
+      - {path: snmp.version, value: const, literal: v3}
+    note: >
+      A v3 user with `auth` and no `priv` signs its packets but does not encrypt them,
+      so the polled data — interface names, ARP tables, running processes — crosses the
+      network readable. Reachable whenever an operator stops at authNoPriv.
+
+  - id: eos_snmp_host_v3
+    regex: '^snmp-server host\s+(?P<value>[\w.:]+)(?:\s+vrf\s+\S+)?\s+version\s+3\s+(?P<sec>auth|noauth|priv)\s+(?P<user>\S+)'
+    emits:
+      - {path: snmp.host, value: str, group: value}
+      - {path: snmp.trap_host, value: str, group: value}
+      - {path: snmp.version, value: const, literal: v3}
+      - {path: snmp.group_security, value: lower, group: sec}
+      - {path: snmp.enabled, value: true}
+
+  - id: eos_snmp_host
+    regex: '^snmp-server host\s+(?P<value>[\w.:]+)'
+    emits:
+      - {path: snmp.host, value: str}
+      - {path: snmp.trap_host, value: str}
+      - {path: snmp.enabled, value: true}
+
+  - id: eos_snmp_location
+    regex: '^snmp-server location\s+(?P<value>.+?)\s*$'
+    path: snmp.location
+    value: str
+
+  - id: eos_snmp_contact
+    regex: '^snmp-server contact\s+(?P<value>.+?)\s*$'
+    path: snmp.contact
+    value: str
+
+  - id: eos_snmp_engine_id
+    regex: '^snmp-server engineID local\s+(?P<value>\S+)'
+    path: snmp.engine_id
+    value: str
+
+  - id: eos_snmp_source_interface
+    regex: '^snmp-server(?:\s+vrf\s+\S+)?\s+source-interface\s+(?P<value>\S+)'
+    path: snmp.source_interface
+    value: str
+
+  - id: eos_snmp_vrf
+    regex: '^snmp-server vrf\s+(?P<value>\S+)\s*$'
+    emits:
+      - {path: snmp.enabled, value: true}
+      - {path: routing.vrf, value: str}
+    note: >
+      On EOS the agent listens in no VRF until one is named, so this line is both the
+      enable switch and the statement of which routing table the poller reaches it
+      through — and an agent reachable from the data-plane VRF is the SC-7 finding.
+
+  - id: eos_snmp_traps
+    regex: '^snmp-server enable traps\s*(?P<value>.*?)\s*$'
+    path: snmp.traps
+    value: str
+
+  - id: eos_snmp_notify_filter
+    regex: '^snmp-server notify-filter\s+(?P<value>\S+)'
+    path: snmp.notify_filter
+    value: str
+
+  # ── services ──────────────────────────────────────────────────────────────────
+  - id: eos_lldp_run
+    regex: '^(?P<neg>no\s+)?lldp run\s*$'
+    path: service.lldp
+    value: negated_bool
+
+  - id: eos_dhcp_snooping_vlan
+    regex: '^ip dhcp snooping vlan\s+(?P<value>[\d,\-]+)\s*$'
+    emits:
+      - {path: service.dhcp_snooping, value: true}
+      - {path: vlan.id, value: str}
+
+  - id: eos_dhcp_snooping
+    regex: '^(?P<neg>no\s+)?ip dhcp snooping\s*$'
+    path: service.dhcp_snooping
+    value: negated_bool
+
+  - id: eos_dhcp_relay_always_on
+    regex: '^ip dhcp relay always-on\s*$'
+    path: service.dhcp
+    value: true
+
+  - id: eos_domain_lookup
+    regex: '^(?P<neg>no\s+)?ip domain-lookup\s*$'
+    path: service.dns
+    value: negated_bool
+
+  - id: eos_name_server
+    regex: '^ip name-server(?:\s+vrf\s+\S+)?\s+(?P<value>[\w.:]+)'
+    emits:
+      - {path: service.dns, value: true}
+      - {path: mgmt.domain_name, value: str}
+
+  - id: eos_ip_routing
+    regex: '^(?P<neg>no\s+)?ip routing\s*$'
+    path: routing.ip_routing
+    value: negated_bool
+
+  - id: eos_no_ip_routing_vrf
+    regex: '^no ip routing vrf\s+(?P<value>\S+)\s*$'
+    path: routing.vrf
+    value: str
+    note: >
+      EOS writes this for the management VRF on every switch: the VRF exists and its
+      interface is reachable, but it does not forward. Recording the VRF without the
+      routing fact is the accurate reading — and a management VRF that *does* route is
+      the SC-7 separation failure this distinction exists to catch.
+
+  - id: eos_ip_routing_vrf
+    regex: '^ip routing vrf\s+(?P<value>\S+)\s*$'
+    emits:
+      - {path: routing.ip_routing, value: true}
+      - {path: routing.vrf, value: str}
+
+  - id: eos_vrf_instance
+    regex: '^vrf instance\s+(?P<value>\S+)\s*$'
+    path: routing.vrf
+    value: str
+
+  - id: eos_route_default
+    regex: '^ip route(?:\s+vrf\s+\S+)?\s+0\.0\.0\.0/0\s+(?P<value>\S+)'
+    path: routing.default_route
+    value: str
+
+  - id: eos_route_static
+    regex: '^ip route(?:\s+vrf\s+\S+)?\s+(?P<value>[\d./]+)\s+\S+'
+    path: routing.static_route
+    value: str
+
+  # ── spanning tree ─────────────────────────────────────────────────────────────
+  - id: eos_stp_mode
+    regex: '^spanning-tree mode\s+(?P<value>\S+)\s*$'
+    path: stp.mode
+    value: lower
+
+  - id: eos_stp_loopguard
+    regex: '^spanning-tree loopguard default\s*$'
+    path: stp.loopguard_default
+    value: true
+
+  - id: eos_stp_bpduguard_default
+    regex: '^spanning-tree portfast(?:\s+edge)?\s+bpduguard default\s*$'
+    path: stp.bpduguard_default
+    value: true
+    note: >
+      Turns BPDU guard on for every edge port at once, which is the only form of the
+      control that survives an operator adding a port next quarter — a per-port
+      `bpduguard enable` protects only the ports someone remembered.
+
+  - id: eos_stp_portfast_default
+    regex: '^spanning-tree portfast(?:\s+edge)?\s+default\s*$'
+    path: stp.portfast_default
+    value: true
+
+  - id: eos_stp_rootguard
+    regex: '^spanning-tree rootguard default\s*$'
+    path: stp.rootguard
+    value: true
+
+  - id: eos_stp_extend_system_id
+    regex: '^spanning-tree(?:\s+\S+)?\s+extend system-id\s*$'
+    path: stp.extend_system_id
+    value: true
+
+  # ── management security (block children live in `blocks:`) ────────────────────
+  - id: eos_fips_restrictions
+    regex: '^(?P<neg>no\s+)?fips restrictions\s*$'
+    path: crypto.fips_mode
+    value: negated_bool
+
+  # ── routing processes ─────────────────────────────────────────────────────────
+  # Neither `router bgp` nor `router ospf` is modelled as a block. EOS writes their
+  # settings as flat lines inside the stanza, every question asked of them is answered
+  # by the statement itself, and making the ASN a block anchor would put it on the same
+  # canonical path as the peer facts underneath it — which is the collision that breaks
+  # per-instance rule evaluation. Flat patterns are both simpler and more correct here.
+  - id: eos_router_bgp
+    regex: '^router bgp\s+(?P<value>\d+)\s*$'
+    path: routing.bgp.asn
+    value: int
+
+  - id: eos_router_ospf
+    regex: '^router ospf\s+(?P<value>\d+)(?:\s+vrf\s+\S+)?\s*$'
+    path: routing.ospf.process
+    value: int
+
+  - id: eos_bgp_log_neighbor_changes
+    regex: '^bgp log-neighbor-changes\s*$'
+    path: routing.bgp.log_neighbor_changes
+    value: true
+
+  - id: eos_bgp_neighbor_password
+    regex: '^neighbor\s+\S+\s+password\s+(?P<enc>\d+)\s+\S+'
+    path: routing.bgp.neighbor_auth
+    value: true
+    note: >
+      Which peer this is stays in the fact's own evidence line rather than becoming a
+      second emit, because the peer name would land on `routing.bgp.asn` — the same path
+      the `router bgp` statement writes — and a rule cannot tell an ASN from a peer-group
+      name once both are values at one path.
+
+  - id: eos_bgp_neighbor_maximum_routes
+    regex: '^neighbor\s+\S+\s+maximum-routes\s+(?P<value>\d+)'
+    path: routing.bgp.max_prefix
+    value: int
+
+  - id: eos_bgp_neighbor_ttl
+    regex: '^neighbor\s+\S+\s+ttl maximum-hops\s+(?P<value>\d+)'
+    path: routing.bgp.ttl_security
+    value: int
+    note: >
+      One hop means a forged packet from anywhere but the directly-attached peer
+      arrives with a TTL the switch rejects before BGP ever parses it — cheaper and
+      harder to defeat than the MD5 password beside it.
+
+  - id: eos_ospf_area_message_digest
+    regex: '^area\s+\S+\s+authentication message-digest\s*$'
+    emits:
+      - {path: routing.ospf.message_digest, value: true}
+      - {path: routing.ospf.auth, value: true}
+
+  - id: eos_ospf_area_auth
+    regex: '^area\s+\S+\s+authentication\s*$'
+    path: routing.ospf.auth
+    value: true
+
+  # ── banners ───────────────────────────────────────────────────────────────────
+  - id: eos_banner_motd_inline
+    regex: '^banner motd\s+(?P<value>.+?)\s*$'
+    path: mgmt.motd_banner
+    value: str
+
+  # ── control plane ─────────────────────────────────────────────────────────────
+  # `control-plane` is a block (see `blocks:`) so its anchor path stays anchor-only.
+
+  # ── high availability ─────────────────────────────────────────────────────────
+  - id: eos_mlag_domain
+    regex: '^domain-id\s+(?P<value>\S+)\s*$'
+    path: ha.redundancy
+    value: str
+
+  - id: eos_mlag_peer_link
+    regex: '^peer-link\s+(?P<value>\S+)\s*$'
+    path: ha.sync
+    value: str
+
+blocks:
+  # ── interfaces ────────────────────────────────────────────────────────────────
+  - id: eos_interface
+    anchor_path: interface.name
+    regex: '^interface\s+(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    note: >
+      EOS omits `no shutdown` from the running-config for an interface that is up, so
+      unlike the ASA this block's admin-state child fires only on the *disabled* ports
+      and the default below carries every other one. That inversion is the reason the
+      default exists at all.
+    children:
+      - id: eos_if_description
+        regex: '^description\s+(?P<value>.+?)\s*$'
+        path: interface.description
+        value: str
+
+      # Two patterns rather than `negated_bool`, for both of the reasons given on
+      # `eos_telnet_shutdown`: the polarity was inverted, and the type was wrong.
+      # `interface.admin_state` carries the string `shutdown`/`no-shutdown` in
+      # every other pack and in this pack's own `child_defaults` below, so
+      # `negated_bool` put a bool on a path whose other values are strings — the
+      # same fixture emitted `'no-shutdown'` for a port with no line and `True`
+      # for a port explicitly shut. A rule comparing against either vocabulary
+      # would silently miss half the ports.
+      - id: eos_if_shutdown
+        regex: '^shutdown\s*$'
+        path: interface.admin_state
+        value: const
+        literal: shutdown
+
+      - id: eos_if_no_shutdown
+        regex: '^no shutdown\s*$'
+        path: interface.admin_state
+        value: const
+        literal: no-shutdown
+
+      - id: eos_if_mtu
+        regex: '^mtu\s+(?P<value>\d+)\s*$'
+        path: interface.mtu
+        value: int
+
+      - id: eos_if_no_switchport
+        regex: '^no switchport\s*$'
+        path: interface.switchport_mode
+        value: const
+        literal: routed
+
+      - id: eos_if_switchport_mode
+        regex: '^switchport mode\s+(?P<value>\S+)\s*$'
+        path: interface.switchport_mode
+        value: lower
+
+      - id: eos_if_access_vlan
+        regex: '^switchport access vlan\s+(?P<value>\d+)\s*$'
+        path: interface.access_vlan
+        value: int
+
+      - id: eos_if_native_vlan
+        regex: '^switchport trunk native vlan\s+(?P<value>\d+)\s*$'
+        path: interface.native_vlan
+        value: int
+        note: >
+          A trunk whose native VLAN is also a user VLAN lets an untagged frame reach
+          that VLAN from any access port on the link — the VLAN-hopping condition the
+          L2S STIG exists to close.
+
+      - id: eos_if_trunk_allowed
+        regex: '^switchport trunk allowed vlan\s+(?P<value>[\d,\-]+)\s*$'
+        path: interface.trunk_allowed_vlan
+        value: str
+
+      - id: eos_if_trunk_group
+        regex: '^switchport trunk group\s+(?P<value>\S+)\s*$'
+        path: vlan.trunk_pruning
+        value: str
+
+      - id: eos_if_port_security_max
+        regex: '^switchport port-security maximum\s+(?P<value>\d+)\s*$'
+        path: interface.mac_limit
+        value: int
+
+      - id: eos_if_port_security
+        regex: '^switchport port-security\s*$'
+        path: interface.port_security
+        value: true
+
+      - id: eos_if_ip_address
+        regex: '^ip address\s+(?P<value>[\d./]+)\s*$'
+        path: interface.ip_address
+        value: str
+
+      - id: eos_if_redirects
+        regex: '^(?P<neg>no\s+)?ip redirects\s*$'
+        path: interface.redirects
+        value: negated_bool
+
+      - id: eos_if_proxy_arp
+        regex: '^(?P<neg>no\s+)?ip proxy-arp\s*$'
+        path: interface.proxy_arp
+        value: negated_bool
+
+      - id: eos_if_directed_broadcast
+        regex: '^(?P<neg>no\s+)?ip directed-broadcast\s*$'
+        path: interface.directed_broadcast
+        value: negated_bool
+
+      - id: eos_if_unreachables
+        regex: '^(?P<neg>no\s+)?ip unreachables\s*$'
+        path: interface.unreachables
+        value: negated_bool
+
+      - id: eos_if_urpf
+        regex: '^ip verify unicast source reachable-via\s+(?P<value>\S+)'
+        path: interface.ip_verify_source
+        value: lower
+
+      - id: eos_if_acl_in
+        regex: '^ip access-group\s+(?P<value>\S+)\s+in\s*$'
+        path: interface.acl_in
+        value: str
+
+      - id: eos_if_acl_out
+        regex: '^ip access-group\s+(?P<value>\S+)\s+out\s*$'
+        path: interface.acl_out
+        value: str
+
+      - id: eos_if_helper_address
+        regex: '^ip helper-address\s+(?P<value>[\d.]+)'
+        path: interface.helper_address
+        value: str
+
+      - id: eos_if_vrf
+        regex: '^vrf\s+(?P<value>\S+)\s*$'
+        path: interface.vrf
+        value: str
+
+      - id: eos_if_portfast
+        regex: '^spanning-tree portfast(?:\s+edge)?\s*$'
+        path: interface.portfast
+        value: true
+
+      - id: eos_if_bpduguard
+        regex: '^spanning-tree bpduguard\s+(?P<value>\S+)\s*$'
+        path: interface.bpdu_guard
+        value: lower
+
+      - id: eos_if_rootguard
+        regex: '^spanning-tree guard root\s*$'
+        path: stp.rootguard
+        value: true
+        note: >
+          Per-interface root guard writes to the global path because PRAMAN's
+          vocabulary has no interface-level root-guard entry; the fact still carries
+          this interface's line span, so a report points at the right port.
+
+      - id: eos_if_storm_control
+        regex: '^storm-control\s+(?P<kind>\S+)\s+level\s+(?P<value>[\d.]+)'
+        path: interface.storm_control
+        value: str
+
+      - id: eos_if_lldp_transmit
+        regex: '^(?P<neg>no\s+)?lldp transmit\s*$'
+        path: interface.lldp_enabled
+        value: negated_bool
+
+      - id: eos_if_dhcp_snooping_trust
+        regex: '^ip dhcp snooping trust\s*$'
+        path: interface.dhcp_snooping_trust
+        value: true
+
+      - id: eos_if_speed
+        regex: '^speed(?:\s+forced)?\s+(?P<value>\S+)\s*$'
+        path: interface.speed
+        value: lower
+
+      - id: eos_if_tunnel_source
+        regex: '^tunnel source\s+(?P<value>\S+)\s*$'
+        path: interface.tunnel
+        value: str
+
+      - id: eos_if_tunnel_destination
+        regex: '^tunnel destination\s+(?P<value>\S+)\s*$'
+        path: interface.tunnel
+        value: str
+
+    child_defaults:
+      - path: interface.admin_state
+        value: no-shutdown
+        reason: >
+          EOS omits `no shutdown` from the running-config entirely for an enabled
+          interface, so on this platform the *absence* of the line is the up state.
+          Without this default the CM-2 unused-port control has nothing to read on the
+          majority of ports — and the port that is dangerous is the one nobody wrote a
+          line about
+      - path: interface.description
+        value: ""
+        reason: >
+          an undescribed port is the one nobody can account for at audit time; a rule
+          that counts them needs a fact per port rather than a gap
+
+  # ── VLANs ─────────────────────────────────────────────────────────────────────
+  - id: eos_vlan
+    anchor_path: vlan.id
+    regex: '^vlan\s+(?P<value>\d+)\s*$'
+    anchor_value: int
+    mode: indent
+    children:
+      - id: eos_vlan_name
+        regex: '^name\s+(?P<value>\S+)\s*$'
+        path: vlan.name
+        value: str
+
+      - id: eos_vlan_state
+        regex: '^state\s+(?P<value>\S+)\s*$'
+        path: vlan.state
+        value: lower
+
+      - id: eos_vlan_trunk_group
+        regex: '^trunk group\s+(?P<value>\S+)\s*$'
+        path: vlan.trunk_pruning
+        value: str
+
+    child_defaults:
+      - path: vlan.name
+        value: ""
+        reason: >
+          an unnamed VLAN cannot be tied to a business purpose at audit time, and a
+          rule that counts them needs one fact per VLAN rather than the absence of one
+
+  # ── ACLs ──────────────────────────────────────────────────────────────────────
+  - id: eos_ip_access_list
+    anchor_path: acl.name
+    regex: '^ip access-list(?:\s+standard)?\s+(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    note: >
+      Standard and extended lists share one block: they differ only in which entry
+      forms are legal, and the compliance question — what does this named list permit,
+      and does it record what it drops — is identical for both.
+    children:
+      - id: eos_acl_remark
+        regex: '^(?P<seq>\d+)\s+remark\s+(?P<value>.+?)\s*$'
+        emits:
+          - {path: acl.entry.remark, value: str}
+          - {path: acl.entry.sequence, value: int, group: seq}
+
+      - id: eos_acl_standard_entry_log
+        regex: '^(?P<seq>\d+)\s+(?P<action>permit|deny)\s+(?:host\s+[\d.]+|[\d.]+(?:/\d+)?|any)\s+log\s*$'
+        emits:
+          - {path: acl.standard.entry, value: line}
+          - {path: acl.entry.sequence, value: int, group: seq}
+          - {path: acl.entry.action, value: lower, group: action}
+          - {path: acl.entry.log, value: true}
+        note: >
+          A standard list names no protocol, so it gets its own pair of patterns rather
+          than borrowing the extended ones — which would file the address literal `host`
+          or `any` under `acl.entry.protocol` and hand a rule a protocol that does not
+          exist. Listed before the extended forms because it is the more specific shape.
+
+      - id: eos_acl_standard_entry
+        regex: '^(?P<seq>\d+)\s+(?P<action>permit|deny)\s+(?:host\s+[\d.]+|[\d.]+(?:/\d+)?|any)\s*$'
+        emits:
+          - {path: acl.standard.entry, value: line}
+          - {path: acl.entry.sequence, value: int, group: seq}
+          - {path: acl.entry.action, value: lower, group: action}
+
+      - id: eos_acl_entry_log
+        regex: '^(?P<seq>\d+)\s+(?P<action>permit|deny)\s+(?P<proto>\S+)\s+.*\blog\b'
+        emits:
+          - {path: acl.extended.entry, value: line}
+          - {path: acl.entry.sequence, value: int, group: seq}
+          - {path: acl.entry.action, value: lower, group: action}
+          - {path: acl.entry.protocol, value: lower, group: proto}
+          - {path: acl.entry.log, value: true}
+        note: >
+          Listed first because `_match_line` stops at the first match, and the `log`
+          keyword on the terminating deny is the difference between an ACL that can
+          answer "what was blocked" and one that cannot — the AU-12 requirement.
+
+      - id: eos_acl_entry
+        regex: '^(?P<seq>\d+)\s+(?P<action>permit|deny)\s+(?P<proto>\S+)'
+        emits:
+          - {path: acl.extended.entry, value: line}
+          - {path: acl.entry.sequence, value: int, group: seq}
+          - {path: acl.entry.action, value: lower, group: action}
+          - {path: acl.entry.protocol, value: lower, group: proto}
+
+    child_defaults:
+      - path: acl.entry.remark
+        value: ""
+        reason: >
+          an access list with no remark anywhere in it is one whose intent exists only
+          in the head of whoever wrote it, which is the CM-3 documentation gap — and it
+          has to be per list, because one undocumented list among six is the finding
+
+  # ── management service stanzas (three blocks, one shared anchor path) ─────────
+  - id: eos_management_ssh
+    anchor_path: mgmt.access.protocols
+    regex: '^management\s+(?P<value>ssh)\s*$'
+    anchor_value: str
+    mode: indent
+    note: >
+      Anchored on the access-protocol path it shares with the eAPI and telnet stanzas,
+      so one rule can ask "which management protocols are configured on this device"
+      without knowing the platform's stanza names.
+    children:
+      - id: eos_ssh_login_timeout
+        regex: '^login timeout\s+(?P<value>\d+)\s*$'
+        path: mgmt.ssh.timeout
+        value: int
+        note: >
+          Left as a raw integer deliberately, unlike `eos_ssh_idle_timeout` two lines
+          below. EOS states `login timeout` in seconds and `idle-timeout` in minutes,
+          both under `management ssh`, and both land on this canonical path — so one
+          of the two needs converting and the other must not be. Getting this
+          backwards would double-convert an already-correct value.
+
+      - id: eos_ssh_idle_timeout
+        regex: '^idle-timeout\s+(?P<minutes>\d+)\s*$'
+        path: mgmt.ssh.timeout
+        value: minutes_seconds
+        note: >
+          Minutes on the wire, seconds in the canonical model — the unit this path
+          carries on Cisco IOS, where `exec-timeout <min> <sec>` is normalised the
+          same way. Emitting the raw operand, as this pattern first did, made an EOS
+          switch configured for a 15-minute idle timeout record 15, which then
+          compared against a 300-second ceiling and passed. That failure is silent
+          and one-directional: it never rejects a compliant device, it only accepts
+          a non-compliant one, which is the worst shape a bug in a compliance tool
+          can take. The threshold lives in the rule pack and is written once in
+          seconds, so the conversion has to happen here.
+
+      - id: eos_ssh_authentication_mode
+        regex: '^authentication mode\s+(?P<value>\S+)\s*$'
+        path: aaa.authentication_order
+        value: lower
+        note: >
+          Declares which method the SSH server offers before AAA is consulted;
+          `keyboard-interactive` is what lets a TACACS+ challenge reach the user at
+          all, and `password` alone silently defeats two-factor prompts.
+
+      - id: eos_ssh_cipher
+        regex: '^cipher\s+(?P<value>.+?)\s*$'
+        path: mgmt.ssh.cipher
+        value: str
+
+      - id: eos_ssh_key_exchange
+        regex: '^key-exchange\s+(?P<value>.+?)\s*$'
+        path: mgmt.ssh.kex
+        value: str
+
+      - id: eos_ssh_mac
+        regex: '^mac\s+(?P<value>.+?)\s*$'
+        path: mgmt.ssh.mac
+        value: str
+
+      - id: eos_ssh_hostkey
+        regex: '^hostkey server\s+(?P<value>.+?)\s*$'
+        path: crypto.key.type
+        value: str
+        note: >
+          Names the host-key algorithms the server will present. Filed as a key type
+          rather than a cipher because that is what it is: `ssh-rsa` here means a
+          SHA-1-signed host key regardless of how strong the negotiated cipher is.
+
+      - id: eos_ssh_acl
+        regex: '^ip access-group\s+(?P<value>\S+)\s+(?:in|vrf\s+\S+\s+in)\s*$'
+        path: mgmt.ssh.acl
+        value: str
+
+      - id: eos_ssh_vrf
+        regex: '^vrf\s+(?P<value>\S+)\s*$'
+        path: routing.vrf
+        value: str
+
+      - id: eos_ssh_log_level
+        regex: '^log-level\s+(?P<value>\S+)\s*$'
+        path: mgmt.ssh.logging
+        value: lower
+
+      - id: eos_ssh_enabled
+        regex: '^no shutdown\s*$'
+        path: mgmt.ssh.version
+        value: const
+        literal: 2
+        note: >
+          EOS has never implemented SSHv1, so an enabled SSH server on this platform is
+          SSHv2 by construction. Recording the version here rather than leaving it
+          absent lets a cross-platform rule written for IOS's `ip ssh version 2` read
+          an EOS switch correctly.
+
+  - id: eos_management_api
+    anchor_path: mgmt.access.protocols
+    regex: '^management api\s+(?P<value>http-commands)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: eos_api_protocol_https
+        regex: '^protocol https(?:\s+ssl profile\s+\S+)?\s*$'
+        path: mgmt.http.secure_server_enabled
+        value: true
+
+      - id: eos_api_no_protocol_https
+        regex: '^no protocol https\s*$'
+        path: mgmt.http.secure_server_enabled
+        value: false
+
+      - id: eos_api_no_protocol_http
+        regex: '^no protocol http(?:\s+localhost)?(?:\s+port\s+\d+)?\s*$'
+        path: mgmt.http.server_enabled
+        value: false
+
+      - id: eos_api_protocol_http
+        regex: '^protocol http(?:\s+port\s+\d+)?\s*$'
+        path: mgmt.http.server_enabled
+        value: true
+        note: >
+          Cleartext eAPI. Every configuration command and every credential in it
+          crosses the network readable, which is the SC-8 finding — and it is easy to
+          leave on because the HTTPS listener beside it works.
+
+      - id: eos_api_idle_timeout
+        regex: '^idle-timeout\s+(?P<minutes>\d+)\s*$'
+        path: mgmt.http.idle_timeout
+        value: minutes_seconds
+        note: >
+          Seconds, for the reason given on `eos_ssh_idle_timeout`. eAPI states the
+          idle timeout in minutes.
+
+      - id: eos_api_acl
+        regex: '^ip access-group\s+(?P<value>\S+)\s+(?:in|vrf\s+\S+\s+in)\s*$'
+        path: mgmt.http.acl
+        value: str
+
+      - id: eos_api_vrf
+        regex: '^vrf\s+(?P<value>\S+)\s*$'
+        path: routing.vrf
+        value: str
+
+      # Split for the same reason as `eos_telnet_shutdown` below: the directive's
+      # polarity is the inverse of the path's. Read with `negated_bool` this
+      # reported the fixture's `no shutdown` eAPI listener — enabled, reachable,
+      # accepting configuration commands — as `restconf.enabled = false`.
+      - id: eos_api_shutdown
+        regex: '^shutdown\s*$'
+        path: mgmt.restconf.enabled
+        value: false
+        note: >
+          eAPI is EOS's programmatic configuration channel — JSON-RPC rather than
+          RESTCONF, but the same class of always-on management API, and the closest
+          canonical path. A rule asking whether a programmatic config interface is
+          exposed reads this.
+
+      - id: eos_api_no_shutdown
+        regex: '^no shutdown\s*$'
+        path: mgmt.restconf.enabled
+        value: true
+        note: >
+          Usually written under a `vrf` child rather than at the top of the stanza,
+          which `mode: indent` reaches; the fixture configures it exactly that way.
+
+  - id: eos_management_telnet
+    anchor_path: mgmt.access.protocols
+    regex: '^management\s+(?P<value>telnet)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      # `shutdown` and `no shutdown` are split into two patterns rather than read
+      # with `negated_bool`, because the polarity of this line is the opposite of
+      # the polarity of the path. `negated_bool` returns "the line was not
+      # negated", which is the right answer for a path named after the directive
+      # (`vlan.shutdown`) and exactly backwards for one named after the service:
+      # a bare `shutdown` means telnet is *off*, and reading it as
+      # `enabled = true` reports a hardened switch as non-compliant while
+      # reporting one that actually runs telnet — `no shutdown` — as clean. That
+      # is a false pass on this pack's highest-value finding, so the two states
+      # are now written out explicitly and neither depends on a negation group.
+      - id: eos_telnet_shutdown
+        regex: '^shutdown\s*$'
+        path: mgmt.telnet.enabled
+        value: false
+        note: >
+          `shutdown` inside `management telnet` is the disabled state: the stanza
+          exists but the listener is down, which is what a switch looks like when
+          telnet was deliberately turned off rather than never configured.
+
+      - id: eos_telnet_no_shutdown
+        regex: '^no shutdown\s*$'
+        path: mgmt.telnet.enabled
+        value: true
+        note: >
+          The line that makes the finding real. Telnet carries the administrative
+          password in cleartext across the fabric, and this is the only evidence
+          that the listener is actually up. A stanza carrying neither line emits
+          nothing here and falls through to the pack-level
+          `mgmt.telnet.enabled: false` default — the same behaviour as before this
+          pattern was split, which required an explicit line to emit anything at
+          all.
+
+      - id: eos_telnet_idle_timeout
+        regex: '^idle-timeout\s+(?P<minutes>\d+)\s*$'
+        path: line.vty.exec_timeout
+        value: minutes_seconds
+        note: >
+          Seconds, matching the IOS pack at the same path — see
+          `eos_ssh_idle_timeout`.
+
+      - id: eos_telnet_acl
+        regex: '^ip access-group\s+(?P<value>\S+)\s+(?:in|vrf\s+\S+\s+in)\s*$'
+        path: line.vty.access_class
+        value: str
+
+  - id: eos_management_console
+    anchor_path: line.console.id
+    regex: '^management\s+(?P<value>console)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: eos_console_idle_timeout
+        regex: '^idle-timeout\s+(?P<minutes>\d+)\s*$'
+        path: line.console.exec_timeout
+        value: minutes_seconds
+        note: >
+          Seconds, matching the IOS pack at the same path — see
+          `eos_ssh_idle_timeout`. The `child_defaults` entry below emits 0 for a
+          console with no timeout at all, which is already unit-neutral.
+
+    child_defaults:
+      - path: line.console.exec_timeout
+        value: 0
+        reason: >
+          EOS leaves a console session open indefinitely when `idle-timeout` is absent,
+          and 0 is the value the platform itself reports for "never" — so the default
+          states the device's own behaviour rather than guessing at intent
+
+  # ── banners (EOF-delimited; see header note 4) ─────────────────────────────────
+  - id: eos_banner_login
+    anchor_path: mgmt.login_banner
+    regex: '^banner\s+(?P<value>login)\s*$'
+    anchor_value: str
+    mode: delimited
+    end_regex: '^EOF\s*$'
+    note: >
+      The one place on this platform where the exact wording matters rather than the
+      presence of a setting: AC-8 requires specific consent-to-monitor language, so the
+      child captures the verbatim text for a reviewer to read.
+    children:
+      - id: eos_banner_login_text
+        regex: '^.+$'
+        path: mgmt.banner.text
+        value: line
+
+  - id: eos_banner_motd
+    anchor_path: mgmt.motd_banner
+    regex: '^banner\s+(?P<value>motd)\s*$'
+    anchor_value: str
+    mode: delimited
+    end_regex: '^EOF\s*$'
+    children:
+      - id: eos_banner_motd_text
+        regex: '^.+$'
+        path: mgmt.banner.text
+        value: line
+
+  # ── control plane ─────────────────────────────────────────────────────────────
+  - id: eos_control_plane
+    anchor_path: control_plane.protection
+    regex: '^(?P<value>control-plane)\s*$'
+    anchor_value: str
+    mode: indent
+    note: >
+      Anchored on `control_plane.protection` and nothing else writes to that path, so a
+      rule can ask "is the control plane protected at all" from the presence of the
+      stanza and then read what protects it from the children.
+    children:
+      - id: eos_cp_acl
+        regex: '^ip access-group\s+(?P<value>\S+)\s+in\s*$'
+        path: control_plane.service_policy
+        value: str
+        note: >
+          The only thing standing between a flood aimed at the switch's own CPU and the
+          BGP session that keeps the fabric up. An unprotected control plane fails
+          quietly — the data plane keeps forwarding while the routing protocols starve.
+
+      - id: eos_cp_copp_policy
+        regex: '^service-policy type copp\s+(?P<value>\S+)\s*$'
+        path: control_plane.copp
+        value: str
+
+      - id: eos_cp_shape
+        regex: '^shape rate\s+(?P<value>\d+)'
+        path: control_plane.policing
+        value: int
+
+  - id: eos_aaa_group_server
+    anchor_path: aaa.server.group
+    regex: '^aaa group server\s+\S+\s+(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: eos_aaa_group_member
+        regex: '^server\s+(?P<value>[\w.:]+)'
+        path: aaa.server.host
+        value: str
+
+  - id: eos_management_security
+    anchor_path: mgmt.password_policy.name
+    regex: '^management\s+(?P<value>security)\s*$'
+    anchor_value: str
+    mode: indent
+    note: >
+      The `ssl profile` sub-stanza nests inside this one, and `indent` mode captures
+      every line more indented than the anchor — so the TLS version, cipher list and
+      certificate children below belong to the profile they follow, on this block's
+      line span. That is a deliberate flattening: PRAMAN asks "is TLS 1.2 or better in
+      use" rather than "which of three profiles configured it", and the profile name is
+      recorded beside the answer either way.
+    children:
+      - id: eos_mgmt_sec_password_min
+        regex: '^password minimum length\s+(?P<value>\d+)\s*$'
+        path: mgmt.password_policy.min_length
+        value: int
+
+      - id: eos_mgmt_sec_password_complexity
+        regex: '^password complexity\s+(?P<value>.+?)\s*$'
+        path: mgmt.password_policy.complexity
+        value: str
+
+      - id: eos_mgmt_sec_password_history
+        regex: '^password history\s+(?P<value>\d+)\s*$'
+        path: mgmt.password_policy.history
+        value: int
+
+      - id: eos_mgmt_sec_password_max_age
+        regex: '^password max-age\s+(?P<value>\d+)\s*$'
+        path: mgmt.password_policy.lifetime
+        value: int
+
+      - id: eos_mgmt_sec_password_reuse
+        regex: '^password reuse-limit\s+(?P<value>\d+)\s*$'
+        path: mgmt.password_policy.history
+        value: int
+
+      - id: eos_mgmt_sec_encryption_key
+        regex: '^password encryption-key common\s*$'
+        emits:
+          - {path: file.config_encryption, value: true}
+          - {path: service.password_encryption, value: true}
+        note: >
+          Re-encrypts stored secrets under a key derived from a shared passphrase
+          rather than the per-switch default, which is what lets a configuration be
+          restored to replacement hardware without the secrets going cleartext in
+          transit.
+
+      - id: eos_ssl_profile
+        regex: '^ssl profile\s+(?P<value>\S+)\s*$'
+        path: crypto.pki.trustpoint
+        value: str
+
+      - id: eos_ssl_tls_versions
+        regex: '^tls versions\s+(?P<value>[\d. ]+?)\s*$'
+        path: crypto.tls.version
+        value: str
+
+      - id: eos_ssl_cipher_list
+        regex: '^cipher-list\s+(?P<value>.+?)\s*$'
+        path: crypto.cipher_suite
+        value: str
+
+      - id: eos_ssl_certificate
+        regex: '^certificate\s+\S+\s+key\s+\S+'
+        path: crypto.pki.enrollment
+        value: line
+
+      - id: eos_ssl_trust_certificate
+        regex: '^trust certificate\s+(?P<value>\S+)\s*$'
+        path: crypto.pki.enrollment
+        value: str
+
+  - id: eos_management_defaults
+    anchor_path: mgmt.password_policy.name
+    regex: '^management\s+(?P<value>defaults)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: eos_management_defaults_secret
+        regex: '^secret hash\s+(?P<value>\S+)\s*$'
+        path: mgmt.local_user.hash_type
+        value: lower
+        note: >
+          Sets the hash every subsequently-created local account gets. Recorded
+          globally rather than per user because it governs accounts that do not exist
+          yet, which is precisely the drift a periodic assessment is meant to catch —
+          a switch whose existing users are all sha512 but whose default is md5 will
+          quietly acquire a weak credential the next time someone adds an operator.
+
+# EOS is a Linux-based platform with several services on by default that IOS leaves
+# off, and several settings that have no command at all. These defaults state the
+# platform's actual behaviour so a rule written once reads every vendor.
+defaults:
+  aaa.new_model:
+    value: true
+    reason: >
+      EOS has no `aaa new-model` toggle — the AAA subsystem is always active and every
+      login goes through it. Stating that explicitly lets a rule written for IOS read
+      an EOS switch instead of reporting a gap that cannot exist on this platform
+  service.lldp:
+    value: true
+    reason: >
+      LLDP is running unless `no lldp run` is configured, so an EOS switch advertises
+      its hostname, model, software version and port names to anything on the wire
+      until told otherwise — the CM-7 information-disclosure finding
+  crypto.fips_mode:
+    value: false
+    reason: >
+      no `fips restrictions` line, so the crypto stack will negotiate algorithms the
+      FIPS 140-3 module set excludes
+  logging.on:
+    value: true
+    reason: >
+      EOS logs by default and omits `logging on` from the running-config; only an
+      explicit `no logging on` disables it, so the absence of the line is the enabled
+      state rather than an unknown
+  mgmt.telnet.enabled:
+    value: false
+    reason: >
+      no `management telnet` stanza at all, and the EOS telnet server does not listen
+      until one is created — so on this platform silence really is a closed port
+  service.password_recovery:
+    value: true
+    reason: >
+      without an `aboot password`, anyone with physical console access can interrupt
+      Aboot and reach an unauthenticated shell with the flash mounted, which is a full
+      configuration and credential bypass
+  routing.ip_routing:
+    value: false
+    reason: >
+      an EOS switch does not forward between VLANs until `ip routing` is configured, so
+      the absence is the closed state and a switch that routes is making a deliberate
+      SC-7 statement
+  snmp.enabled:
+    value: false
+    reason: >
+      no `snmp-server host`, `snmp-server community`, `snmp-server user` or
+      `snmp-server vrf` line, so the agent is not listening
+  time.ntp.authentication:
+    value: false
+    reason: >
+      no `ntp authenticate` line, so the switch accepts time from whichever peer
+      answers first — and every certificate expiry, log timestamp and Kerberos ticket
+      on the network downstream of it inherits that trust
+  ha.sync:
+    value: false
+    reason: >
+      no `mlag configuration` peer-link, so this switch shares no forwarding state with
+      a partner and is a single point of failure for everything single-homed to it
+  stp.bpduguard_default:
+    value: false
+    reason: >
+      no global `spanning-tree portfast bpduguard default`, so BPDU guard protects only
+      the ports someone remembered to configure individually — which is every port
+      today and not the one added next quarter
+  routing.source_routing:
+    value: false
+    reason: >
+      EOS has no `ip source-route` command at all — the platform never honours the IP
+      source-route option — so a rule written for IOS's `no ip source-route` reads the
+      platform's real behaviour here instead of reporting an unanswerable gap

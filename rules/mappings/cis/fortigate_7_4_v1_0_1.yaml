@@ -1,0 +1,385 @@
+# CIS FortiGate 7.4.x Benchmark v1.0.1 — canonical mappings
+#
+# The point this file exists to prove: a rule is written against the *canonical
+# model*, never against FortiOS syntax. Nothing below mentions `set`, `config
+# system global`, or a VDOM. The FortiGate pattern pack already turned
+# `set admintimeout 5` into `mgmt.ssh.timeout = 300`, and this file compares that
+# number to the benchmark's threshold — the same comparison the Cisco IOS pack
+# makes against the same path. That is what makes adding a vendor a data change.
+#
+# Conventions are inherited from cisco_ios_15_v4_1_1.yaml and are not restated:
+# no `presence` on a defaulted path, feature-conditional controls use
+# `applies_to.requires_paths`, every timeout is `all_of[lte N, gt 0]`, and every
+# rule carries a `severity_override` because CIS publishes no severity.
+#
+# Two FortiOS-specific hazards were hit while authoring and are worth naming:
+#
+# 1. **The timeout unit is seconds in the canonical model and minutes in the
+#    benchmark.** `set admintimeout 5` is five *minutes*; the pack normalises it
+#    to 300 seconds so that a FortiGate and an IOS router can be compared on one
+#    axis. Every threshold below is therefore written in seconds. Writing `lte 5`
+#    would have passed a device with a five-second timeout and failed a compliant
+#    one — the exact inversion.
+#
+# 2. **FortiOS expresses "off" by omission far more than IOS does.** There is no
+#    `set telnet disable` line on a hardened FortiGate; the administrative access
+#    list simply does not contain `telnet`. The pack handles this with
+#    platform defaults, so `mgmt.telnet.enabled` is a decided `false` rather than
+#    missing evidence, and these rules can use `eq false` instead of `presence`.
+#
+# Controls not mapped here need runtime state (firmware currency, signature
+# freshness, certificate validity) or a policy-object graph the canonical model
+# does not carry. They render `notchecked`, never as a pass.
+
+rules:
+
+  # ══ 1 System settings ══════════════════════════════════════════════════
+
+  - id: cis-fgt74-1.1
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: '1.1'}
+    severity_override: low
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      A resolver must be configured for FortiGuard rating lookups and for any
+      FQDN address object to resolve; the control asks only that one exists.
+    condition: {type: presence, path: service.dns, must_be_present: true}
+
+  - id: cis-fgt74-1.3
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: '1.3'}
+    severity_override: high
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      The control is about the management plane being reachable in the clear. On
+      FortiOS that question cannot be answered by one boolean, and the pattern
+      pack says so explicitly: there is no switch that turns the HTTP GUI off, so
+      `mgmt.http.server_enabled` means only "an HTTP port is configured" — which
+      is true on every FortiGate ever shipped. What decides the control is
+      `admin-https-redirect`, recorded at mgmt.http.secure_server_enabled: with it
+      on, the HTTP listener answers with a 301 to HTTPS and never serves content.
+      Reading the listener alone marked every FortiGate non-compliant, including
+      one configured exactly as the benchmark prescribes.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.telnet.enabled, operator: eq, expected: false, on_missing: fail}
+        - {type: fact_check, path: mgmt.http.secure_server_enabled, operator: eq, expected: true, on_missing: fail}
+
+  # ══ 2.1 Global system ══════════════════════════════════════════════════
+
+  - id: cis-fgt74-2.1.1
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.1.1}
+    severity_override: low
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      The pre-login banner is FortiOS's name for the notice presented before
+      authentication, which the pack files at mgmt.login_banner — the same path
+      an IOS `banner login` lands on.
+    condition: {type: presence, path: mgmt.login_banner, must_be_present: true}
+
+  - id: cis-fgt74-2.1.2
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.1.2}
+    severity_override: low
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      The post-login banner is the message-of-the-day equivalent, shown after a
+      successful authentication.
+    condition: {type: presence, path: mgmt.motd_banner, must_be_present: true}
+
+  - id: cis-fgt74-2.1.3
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.1.3}
+    severity_override: low
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      An explicit timezone is what makes a log timestamp comparable with another
+      device's; the control does not prescribe which zone.
+    condition: {type: presence, path: time.timezone, must_be_present: true}
+
+  - id: cis-fgt74-2.1.4
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.1.4}
+    severity_override: medium
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      "Correct system time through NTP" needs both the subsystem enabled and at
+      least one server to synchronise against; either alone leaves the clock
+      free-running, and a free-running clock invalidates every log timestamp and
+      certificate lifetime on the device.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: time.ntp.enabled, operator: eq, expected: true, on_missing: fail}
+        - {type: count, path: time.ntp.server, operator: gte, expected: 1}
+
+  - id: cis-fgt74-2.1.5
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.1.5}
+    severity_override: low
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      A hostname is the only field that ties a log line or a report back to a
+      physical device, so it is checked for presence and for not being the
+      shipped default.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: device.hostname, must_be_present: true}
+        - {type: fact_check, path: device.hostname, operator: regex_not_match, expected: '(?i)\A(FortiGate|FGT)[-0-9]*\Z', on_missing: fail}
+
+  - id: cis-fgt74-2.1.9
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.1.9}
+    severity_override: high
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Global strong encryption restricts the device's own TLS client and server
+      to modern suites. The canonical evidence is the negotiated cipher suite
+      policy; FIPS mode implies it, so either satisfies the control.
+    condition:
+      type: any_of
+      conditions:
+        - {type: presence, path: crypto.cipher_suite, must_be_present: true}
+        - {type: fact_check, path: crypto.fips_mode, operator: eq, expected: true, on_missing: fail}
+
+  - id: cis-fgt74-2.1.10
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.1.10}
+    severity_override: high
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      TLS 1.2 is the floor the benchmark sets for the administrative GUI. FortiOS
+      offers a *list* of versions (`set admin-https-ssl-versions tlsv1-2 tlsv1-3`)
+      and the pack records it as one list-valued fact, so the check is stated as
+      "the offered set and the deprecated set are disjoint" rather than as a
+      pattern each element must match. That is both the correct shape for a
+      set-valued fact and the correct reading of the control: offering 1.3
+      alongside 1.0 is not compliance, so absence of the weak versions — not
+      presence of a strong one — is what has to be asserted.
+    condition:
+      type: fact_check
+      path: mgmt.http.tls_version
+      operator: disjoint_from
+      expected: [tlsv1-0, tlsv1-1, sslv3, 'TLSv1.0', 'TLSv1.1', SSLv3]
+      case_sensitive: false
+      on_missing: fail
+
+  # ══ 2.2 Password policy ════════════════════════════════════════════════
+
+  - id: cis-fgt74-2.2.1
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.2.1}
+    severity_override: medium
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      A FortiOS password policy is a named object; the control asks that one be
+      in force with complexity requirements. `mgmt.password_policy.complexity` is
+      one fact per `set min-<class>` directive and the recorded value is the
+      directive line itself rather than its number — the pack files it that way
+      because DISA rates each character class as a separate control and a bare
+      integer cannot say which class it came from. This benchmark only asks
+      whether classes are enforced at all, so the leaf matches a trailing
+      non-zero count on every recorded directive: `set min-number 0` is FortiOS's
+      way of switching a class off, and a policy that switches all four off is
+      not a complexity policy however many directives it lists.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: mgmt.password_policy.name, must_be_present: true}
+        - type: fact_check
+          path: mgmt.password_policy.complexity
+          operator: regex_match
+          expected: '\s+[1-9]\d*$'
+          quantifier: all
+          on_missing: fail
+
+  - id: cis-fgt74-2.2.2
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.2.2}
+    severity_override: medium
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Retries and lockout are one control because either alone is defeated:
+      unlimited retries with a lockout still permits unlimited guessing, and a
+      retry cap with no lockout period lets the attacker resume immediately. The
+      benchmark's cap is three attempts.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.authentication_attempts, operator: lte, expected: 3, on_missing: fail}
+        - {type: presence, path: aaa.login_block, must_be_present: true}
+
+  # ══ 2.3 SNMP ═══════════════════════════════════════════════════════════
+
+  - id: cis-fgt74-2.3.1
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.3.1}
+    severity_override: high
+    applies_to:
+      vendors: [fortinet]
+      os_families: [fortios]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      "Only SNMPv3" is two assertions and the second is the one that matters: v3
+      configured, and no v1/v2c community present. A device can have both, and
+      checking only for v3 would pass it while a cleartext community string is
+      still readable off the wire. requires_paths scopes the rule to devices
+      running SNMP at all — a device with SNMP off is not applicable, not
+      compliant.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: snmp.version, operator: contains, expected: '3', on_missing: fail}
+        - {type: presence, path: snmp.community, must_be_present: false}
+
+  - id: cis-fgt74-2.3.2
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.3.2}
+    severity_override: medium
+    applies_to:
+      vendors: [fortinet]
+      os_families: [fortios]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      An SNMPv3 user with no host restriction can be polled from anywhere the
+      management interface is reachable; the ACL is what narrows that.
+    condition: {type: presence, path: snmp.acl, must_be_present: true}
+
+  # ══ 2.4 Administrative accounts ════════════════════════════════════════
+
+  - id: cis-fgt74-2.4.1
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.4.1}
+    severity_override: high
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      The shipped account is named `admin` and is the first thing an attacker
+      tries, because it needs no discovery. The control is satisfied when no
+      account by that name exists; quantifier `all` is required so that a device
+      with `admin` plus three renamed accounts still fails.
+    condition:
+      type: fact_check
+      path: mgmt.local_user.name
+      operator: ne
+      expected: admin
+      quantifier: all
+      case_sensitive: false
+      on_missing: unknown
+
+  - id: cis-fgt74-2.4.4
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.4.4}
+    severity_override: medium
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      FortiOS states the administrative idle timeout as `admintimeout`, in
+      minutes; the pack converts it to seconds at line.vty.exec_timeout, the same
+      path and the same units an IOS `exec-timeout` lands on, so the benchmark's
+      five-minute threshold is one comparison for both platforms.
+
+      This rule used to read mgmt.ssh.timeout and passed on every FortiGate that
+      set `admin-ssh-grace-time`. That path holds the SSH *authentication* grace
+      period — how long a connecting client has to present a credential — which
+      IOS spells `ip ssh time-out` and files at the same place. It is a different
+      quantity from an idle timeout and is typically 30 seconds, so it satisfied
+      `lte 300` unconditionally: a device with `admintimeout 60` and no session
+      timeout worth the name still passed this control.
+
+      The `gt 0` half is load-bearing: FortiOS accepts 0 for "never expire", and a
+      bare `lte 300` would pass the least secure setting the platform offers.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: line.vty.exec_timeout, operator: lte, expected: 300, on_missing: fail}
+        - {type: fact_check, path: line.vty.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-fgt74-2.4.5
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.4.5}
+    severity_override: high
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Only encrypted channels means Telnet may not be enabled and the HTTP
+      listener must redirect rather than serve — the same pair of facts as 1.3,
+      which the benchmark states once per-interface and once per-account. Kept as
+      a separate rule with the same condition rather than an alias, because the
+      two controls have different remediation text and an auditor tracing one of
+      them should not be sent to the other's finding.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.telnet.enabled, operator: eq, expected: false, on_missing: fail}
+        - {type: fact_check, path: mgmt.http.secure_server_enabled, operator: eq, expected: true, on_missing: fail}
+
+  # ══ 2.5 High availability ══════════════════════════════════════════════
+
+  - id: cis-fgt74-2.5.1
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 2.5.1}
+    severity_override: low
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      An HA mode other than standalone is the canonical evidence that a cluster
+      is configured. This is availability rather than confidentiality, hence low
+      severity — a single FortiGate is a design decision, not a misconfiguration.
+    condition: {type: presence, path: ha.redundancy, must_be_present: true}
+
+  # ══ 3 Firewall policy ══════════════════════════════════════════════════
+
+  - id: cis-fgt74-3.4
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: '3.4'}
+    severity_override: medium
+    applies_to:
+      vendors: [fortinet]
+      os_families: [fortios]
+      requires_paths: [firewall.policy.name]
+    mapping_rationale: >
+      A policy that permits traffic without logging it leaves no record that the
+      traffic was permitted, which is the evidentiary gap this control closes.
+      Scoped by requires_paths so a device with no policies is not applicable.
+    condition: {type: presence, path: acl.entry.log, must_be_present: true}
+
+  # ══ 4 Security profiles ════════════════════════════════════════════════
+
+  - id: cis-fgt74-4.1.2
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 4.1.2}
+    severity_override: medium
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      An IPS sensor referenced by a policy is the canonical trace of intrusion
+      prevention being in the traffic path. Whether the sensor's signature set is
+      current is runtime state the configuration cannot answer, and that half of
+      the control is deliberately not claimed here.
+    condition: {type: presence, path: firewall.ids_signature, must_be_present: true}
+
+  # ══ 7 Logging ══════════════════════════════════════════════════════════
+
+  - id: cis-fgt74-7.1.1
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 7.1.1}
+    severity_override: medium
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Event logging is the base of every other logging control in this section;
+      without it the rest have nothing to transmit.
+    condition:
+      type: fact_check
+      path: logging.enable
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-fgt74-7.2.1
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 7.2.1}
+    severity_override: medium
+    applies_to: {vendors: [fortinet], os_families: [fortios]}
+    mapping_rationale: >
+      Centralised logging means at least one off-box collector. Local-only logs
+      are lost with the device, which is precisely what an attacker with
+      administrative access arranges.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 1}
+
+  - id: cis-fgt74-7.3.2
+    catalog: {catalog_id: cis_fortigate_7_4_x_v1_0_1, control_id: 7.3.2}
+    severity_override: medium
+    applies_to:
+      vendors: [fortinet]
+      os_families: [fortios]
+      requires_paths: [logging.remote_syslog]
+    mapping_rationale: >
+      Syslog over UDP is cleartext and unauthenticated. The canonical evidence
+      for encrypted transmission is the transport recorded for the collector;
+      `reliable` is FortiOS's name for syslog over TCP with TLS. requires_paths
+      makes a device with no collector not applicable rather than passing.
+    condition:
+      type: fact_check
+      path: logging.host.transport
+      operator: not_in
+      expected: [udp]
+      case_sensitive: false
+      on_missing: fail

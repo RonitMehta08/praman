@@ -1,0 +1,181 @@
+{
+  "attack_bundle": "enterprise-attack v19.2",
+  "authored_by": "PRAMAN (editorial \u2014 not a publisher crosswalk)",
+  "bundle_loaded": true,
+  "dead_prefixes": [],
+  "map_loaded": true,
+  "paths_mapped": 103,
+  "paths_total": 177,
+  "rules_mapped": 272,
+  "rules_total": 454,
+  "techniques": {
+    "T1016": {
+      "deprecated": false,
+      "mitigations": [],
+      "name": "System Network Configuration Discovery",
+      "rules": 2
+    },
+    "T1040": {
+      "deprecated": false,
+      "mitigations": [
+        "M1018",
+        "M1030",
+        "M1032",
+        "M1041"
+      ],
+      "name": "Network Sniffing",
+      "rules": 89
+    },
+    "T1556.004": {
+      "deprecated": false,
+      "mitigations": [
+        "M1026",
+        "M1032"
+      ],
+      "name": "Network Device Authentication",
+      "rules": 119
+    },
+    "T1557": {
+      "deprecated": false,
+      "mitigations": [
+        "M1017",
+        "M1030",
+        "M1031",
+        "M1035",
+        "M1037",
+        "M1041",
+        "M1042"
+      ],
+      "name": "Adversary-in-the-Middle",
+      "rules": 18
+    },
+    "T1601.001": {
+      "deprecated": false,
+      "mitigations": [
+        "M1026",
+        "M1027",
+        "M1032",
+        "M1043",
+        "M1045",
+        "M1046"
+      ],
+      "name": "Patch System Image",
+      "rules": 4
+    },
+    "T1601.002": {
+      "deprecated": false,
+      "mitigations": [
+        "M1026",
+        "M1027",
+        "M1032",
+        "M1043",
+        "M1045",
+        "M1046"
+      ],
+      "name": "Downgrade System Image",
+      "rules": 4
+    },
+    "T1602.001": {
+      "deprecated": false,
+      "mitigations": [
+        "M1030",
+        "M1031",
+        "M1037",
+        "M1041",
+        "M1051",
+        "M1054"
+      ],
+      "name": "SNMP (MIB Dump)",
+      "rules": 37
+    },
+    "T1602.002": {
+      "deprecated": false,
+      "mitigations": [
+        "M1030",
+        "M1031",
+        "M1037",
+        "M1041",
+        "M1051",
+        "M1054"
+      ],
+      "name": "Network Device Configuration Dump",
+      "rules": 12
+    }
+  },
+  "unmapped_paths": [
+    "aaa.accounting_commands",
+    "aaa.accounting_connection",
+    "aaa.accounting_exec",
+    "aaa.accounting_network",
+    "aaa.accounting_system",
+    "aaa.source_interface",
+    "acl.entry.action",
+    "acl.entry.log",
+    "acl.entry.source",
+    "acl.implicit_deny_log",
+    "control_plane.copp",
+    "control_plane.policing",
+    "control_plane.service_policy",
+    "device.hostname",
+    "firewall.ids_signature",
+    "firewall.policy.log",
+    "ha.redundancy",
+    "ha.sync",
+    "interface.access_vlan",
+    "interface.acl_in",
+    "interface.description",
+    "interface.directed_broadcast",
+    "interface.ip_address",
+    "interface.name",
+    "interface.native_vlan",
+    "interface.proxy_arp",
+    "interface.redirects",
+    "interface.storm_control",
+    "interface.switchport_mode",
+    "interface.trunk_allowed_vlan",
+    "logging.buffered",
+    "logging.buffered_size",
+    "logging.commands",
+    "logging.config_changes",
+    "logging.console",
+    "logging.enable",
+    "logging.host.transport",
+    "logging.login_failure",
+    "logging.login_success",
+    "logging.on",
+    "logging.origin_id",
+    "logging.source_interface",
+    "logging.timestamps",
+    "logging.timestamps_debug",
+    "logging.trap_level",
+    "logging.userinfo",
+    "mgmt.banner.text",
+    "mgmt.domain_name",
+    "mgmt.exec_banner",
+    "mgmt.http.acl",
+    "mgmt.http.max_connections",
+    "mgmt.login_banner",
+    "mgmt.motd_banner",
+    "mgmt.ssh.acl",
+    "routing.bgp.log_neighbor_changes",
+    "service.dhcp",
+    "service.dhcp_snooping",
+    "service.dns",
+    "service.tcp_keepalives_in",
+    "service.tcp_keepalives_out",
+    "service.tcp_small_servers",
+    "service.udp_small_servers",
+    "stp.bpduguard_default",
+    "stp.loopguard_default",
+    "stp.mode",
+    "stp.rootguard",
+    "time.ntp.authentication",
+    "time.ntp.enabled",
+    "time.ntp.key",
+    "time.ntp.key_id",
+    "time.ntp.server",
+    "time.ntp.source",
+    "time.ntp.trusted_keys",
+    "time.timezone"
+  ]
+}

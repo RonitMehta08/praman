@@ -1,0 +1,727 @@
+{
+  "benchmark": "Juniper SRX Services Gateway IDPS Security Technical Implementation Guide",
+  "benchmark_version": "V2R1",
+  "catalog_id": "disa_stig_juniper_srx_services_gateway_idps_security_technical_implementation_guide_v2r1",
+  "controls": [
+    {
+      "automated": null,
+      "cci": [
+        "CCI-000169"
+      ],
+      "check_text": "To verify that the configuration is working properly, use the following command:\n\n[edit]\nshow security alarms\n\nView the configured alarms to verify at least one option for potential-violation is set to “idp”.\n\nIf a potential-violation alarm is not defined for “idp”, this is a finding.",
+      "control_id": "V-214610",
+      "default_value": "",
+      "discussion": "Without the capability to generate audit records, it would be difficult to establish, correlate, and investigate the events relating to an incident, or identify those responsible for one.\n\nWhile auditing and logging are closely related, they are not the same. Logging is recording data about events that take place in a system, while auditing is the use of log records to identify security-relevant information such as system or user accesses. In short, log records are audited to establish an accurate history. Without logging, it would be impossible to establish an audit trail.\n\nThe Juniper SRX with IDP-enabled policies has the capability to capture and log detected security violations and potential security violations.",
+      "fix_text": "A Routing Engine configuration option allows the enabling and disabling of IDP alarms.\n\nBy default, the IDP attack event triggers the current logs without raising any alarms. When the option is set and the system is configured appropriately, the IDP logs on the Packet Forwarding Engine will be forwarded to Routing Engine, which then parses the IDP attack logs and raises IDP alarms as necessary.\n\nTo enable an IDP alarm, use the set security alarms potential-violation idp command.\n\nTo turn on logging, you must first turn on notification to log attacks:\nset security idp idp-policy recommended rulebase-ips rule-1 then notification log-attacks\n\nConfigure Syslog (adding to the firewall stanza).\nsyslog {\n file IDP_Log {\n any any;\n match RT_IDP;",
+      "impact": "",
+      "iso_27001": [
+        "A.8.15"
+      ],
+      "legacy_ids": [
+        "SV-80867",
+        "V-66377"
+      ],
+      "nist_800_53": [
+        "AU-12"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000001",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must provide audit record generation capability for detecting events based on implementation of policy filters, rules, and signatures."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-001368"
+      ],
+      "check_text": "Review the list of authorized Junos applications, endpoints, services, and protocols that are installed on the PPSM CAL.\n\nUse the following command to show the IDP-specific policies:\n\n[edit]\nshow security idp\n\nNext, use the show security policies command to display a summary of all the security policies.\n\n[edit]\nshow security policies\n\nNote: Also inspect the organization's central events log server (e.g., syslog server) for Deny events that match the restrictions in the PPSM CAL.\n\nIf security policies do not exist to block or restrict communications traffic that is identified as harmful or suspicious by the PPSM and vulnerability assessment, this is a finding.",
+      "control_id": "V-214611",
+      "default_value": "",
+      "discussion": "The flow of all communications traffic must be monitored and controlled so it does not introduce any unacceptable risk to the network infrastructure or data.\n\nRestricting the flow of communications traffic, also known as Information flow control, regulates where information is allowed to travel as opposed to who is allowed to access the information and without explicit regard to subsequent accesses to that information.\n\nThe IDPS will include policy filters, rules, signatures, and behavior analysis algorithms that inspects and restricts traffic based on the characteristics of the information and/or the information path as it crosses internal network boundaries. The IDPS monitors for harmful or suspicious information flows and restricts or blocks this traffic based on attribute- and content-based inspection of the source, destination, headers, and/or content of the communications traffic.\n\nThe PPSM CAL addresses internal network boundaries restrictions based on traffic type and content such as ports, protocols and services. The Juniper SRX denies all traffic.\n\nIDPS inspection will only be performed on the traffic matching the security policies where IDPS is enabled.",
+      "fix_text": "Specify an active IDP policy prior to enabling IDP within a security policy. To configure the active IDP policy, execute the following command in configuration mode:\n\n[edit]\nset security idp active-policy <policy name>\n\nConfigure Security Policies for IDP inspection. Once the IDP policy is configured, IDP must be enabled on a security policy in order for IDP inspection to be performed. IDP inspection will only be performed on the traffic matching the security policies where IDP is enabled.\n\nTo enable IDP on a security policy, enter the following command:\n\n[edit]\nset security policies from-zone <FROM ZONE NAME> to-zone <TO ZONE NAME> policy <POLICY\nNAME> then permit application-services idp",
+      "impact": "",
+      "iso_27001": [
+        "A.5.14",
+        "A.8.22",
+        "A.8.23"
+      ],
+      "legacy_ids": [
+        "SV-80873",
+        "V-66383"
+      ],
+      "nist_800_53": [
+        "AC-04"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000002",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must enforce approved authorizations by restricting or blocking the flow of harmful or suspicious communications traffic within the network as defined in the PPSM CAL and vulnerability assessments."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-001414"
+      ],
+      "check_text": "Verify custom rules exist to drop packets or terminate sessions upon detection of malicious code.\n\n[edit]\nshow security idp policy\n\nView the rulebase action option for the IDP policies. View the action options of the zone configurations with the IDP option.\n\nIf rulebases in active policies are configured for No-Action or Ignore when harmful or suspicious content is detected by signatures, rules, or policies, this is a finding.",
+      "control_id": "V-214612",
+      "default_value": "",
+      "discussion": "The IDPS enforces approved authorizations by controlling the flow of information between interconnected networks to prevent harmful or suspicious traffic does spread to these interconnected networks.\n\nInformation flow control policies and restrictions govern where information is allowed to travel as opposed to who is allowed to access the information. The IDPS includes policy filters, rules, signatures, and behavior analysis algorithms that inspects and restricts traffic based on the characteristics of the information and/or the information path as it crosses external/perimeter boundaries. IDPS components are installed and configured such that they restrict or block detected harmful or suspect information flows based on attribute- and content-based inspection of the source, destination, headers, and/or content of the communications traffic.\n\nOnce an attack object in the IPS policy is matched, the SRX can execute an action on that specific session, along with actions on future sessions. The ability to execute an action on that particular session is known as an IDPS action. IDPS actions can be one of the following: No-Action, Drop-Packet, Drop-Connection, Close-Client, Close-Server, Close-Client-and-Server, DSCP-Marking, Recommended, or Ignore. IP actions are actions that can be enforced on future sessions. These actions include IP-Close, IP-Block, and IP-Notify\n\nThis includes traffic between interfaces that are associated within the same security zone (intra-zone traffic). Traffic is permitted between security zones by configuring security policies from a source security zone to the destination security zone. IDPS inspection will only be performed on the traffic matching the security policies where IDPS is enabled.",
+      "fix_text": "Specify an active IDP policy prior to enabling IDP within a security policy. To configure the active IDP policy, execute the following command in configuration mode:\n\n[edit]\nset security idp active-policy <policy name>\n\nConfigure Security Policies for IDP inspection. Once the IDP policy is configured, IDP must be enabled on a security policy in order for IDP inspection to be performed. IDP inspection will only be performed on the traffic matching the security policies where IDP is enabled.\n\nTo enable IDP on a security policy, enter the following command:\n\n[edit]\nset security policies from-zone <FROM ZONE NAME> to-zone <TO ZONE NAME> policy <POLICY NAME> then permit application-services idp",
+      "impact": "",
+      "iso_27001": [
+        "A.5.14",
+        "A.8.22",
+        "A.8.23"
+      ],
+      "legacy_ids": [
+        "SV-80875",
+        "V-66385"
+      ],
+      "nist_800_53": [
+        "AC-04"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000003",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must restrict or block harmful or suspicious communications traffic between interconnected networks based on attribute- and content-based inspection of the source, destination, headers, and/or content of the communications traffic."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-000169"
+      ],
+      "check_text": "Use the following command to view the IDP rules:\n\n[edit]\nshow security idp status\n\nThe IDP traffic log can also be inspected to verify that IDP detection events contain a severity level in the log record.\n\nIf active IDP rules exist that do not include a severity level, this is a finding.",
+      "control_id": "V-214613",
+      "default_value": "",
+      "discussion": "Without the capability to generate audit records with a severity code it is difficult to track and handle detection events.\n\nWhile auditing and logging are closely related, they are not the same. Logging is recording data about events that take place in a system, while auditing is the use of log records to identify security-relevant information such as system or user accesses. In short, log records are audited to establish an accurate history. Without logging, it would be impossible to establish an audit trail.\n\nThe IDPS must have the capability to collect and log the severity associated with the policy, rule, or signature. IDPS products often have either pre-configured and/or a configurable method for associating an impact indicator or severity code with signatures and rules, at a minimum.",
+      "fix_text": "Example configuration to set the severity level on the IDP rules:\n\nDefine an attack as match criteria.\n[edit security idp idp-policy base-policy rulebase-ips rule R1]\nset match attacks predefined-attack-groups \"TELNET-Critical\"\n\nSpecify an action for the rule.\n[edit security idp idp-policy base-policy rulebase-ips rule R1]\nset then action drop-connection\n\nSpecify notification and logging options for the rule.\n[edit security idp idp-policy base-policy rulebase-ips rule R1]\nset then notification log-attacks alert\n\nSet the severity level for the rule.\n\n[edit security idp idp-policy base-policy rulebase-ips rule R1]\n\nset then severity critical",
+      "impact": "",
+      "iso_27001": [
+        "A.8.15"
+      ],
+      "legacy_ids": [
+        "SV-80877",
+        "V-66387"
+      ],
+      "nist_800_53": [
+        "AU-12"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000004",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must provide audit record generation with a configurable severity and escalation level capability."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-001095",
+        "CCI-004866"
+      ],
+      "check_text": "Determine the names of the IDP policies by asking the site representative. From operational mode, enter the following command to verify outbound zones are configured with an IDP policy.\n\nshow security policies\n\nIf zones bound to the outbound interfaces, including VPN zones, are not configured with an IDP policy, this is a finding.",
+      "control_id": "V-214614",
+      "default_value": "",
+      "discussion": "The IDPS must include protection against DoS attacks that originate from inside the enclave which can affect either internal or external systems. These attacks may use legitimate or rogue endpoints from inside the enclave.\n\nInstallation of IDPS detection and prevention components (i.e., sensors) at key boundaries in the architecture mitigates the risk of DoS attacks. These attacks can be detected by matching observed communications traffic with patterns of known attacks and monitoring for anomalies in traffic volume/type.\n\nTo comply with this requirement, the IDPS must inspect outbound traffic for indications of known and unknown DoS attacks. Sensor log capacity management along with techniques which prevent the logging of redundant information during an attack also guard against DoS attacks. This requirement is used in conjunction with other requirements which require configuration of security policies, signatures, rules, and anomaly detection techniques and are applicable to both inbound and outbound traffic.",
+      "fix_text": "To enable IDP services on outbound traffic on the device, first create a security policy for the traffic flowing in one direction, then specify the action to be taken on traffic that matches conditions specified in the policy.\n\n[edit security policies from-zone <trusted-zone1-name> to-zone <untrusted-zone-name> policy idp-app-policy-1]\nset match source-address any destination-address any application any\n\n[edit security policies from-zone <trusted-zone-name> to-zone untrusted-zone-name> policy <idp-app-policy-name>]\nset then permit application-services idp",
+      "impact": "",
+      "iso_27001": [
+        "A.8.6"
+      ],
+      "legacy_ids": [
+        "SV-80885",
+        "V-66395"
+      ],
+      "nist_800_53": [
+        "SC-05",
+        "SC-05(02)"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000005",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must block outbound traffic containing known and unknown DoS attacks by ensuring that rules are applied to outbound communications traffic."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-001095",
+        "CCI-004866"
+      ],
+      "check_text": "From operational mode, enter the following command to verify that the signature-based attack object was created:\n\nshow security idp policies\n\nIf signature-based attack objects are not created, bound to a zone, and active, this is a finding.",
+      "control_id": "V-214615",
+      "default_value": "",
+      "discussion": "The IDPS must include protection against DoS attacks that originate from inside the enclave which can affect either internal or external systems. These attacks may use legitimate or rogue endpoints from inside the enclave.\n\nTo perform signature-based attacks on the Juniper SRX IDPS device, create a signature-based attack object.",
+      "fix_text": "Specify a name for the attack. Specify common properties for the attack. Specify the attack type and context. Specify the attack direction and the shellcode flag. Set the protocol and its fields. Specify the protocol binding and ports. Specify the direction.\n\n[edit]\nedit security idp custom-attack sig1\nset severity major\nset recommended-action drop-packet\nset time-binding scope source count 10\nset attack-type signature context packet\nset attack-type signature <signature object name>\nset attack-type signature protocol ip ttl value 128 match equal\nset attack-type signature protocol-binding tcp minimum-port 50 maximum-port 100\nset attack-type signature direction any",
+      "impact": "",
+      "iso_27001": [
+        "A.8.6"
+      ],
+      "legacy_ids": [
+        "SV-80889",
+        "V-66399"
+      ],
+      "nist_800_53": [
+        "SC-05",
+        "SC-05(02)"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000006",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must block outbound traffic containing known and unknown DoS attacks by ensuring that signature-based objects are applied to outbound communications traffic."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-001095"
+      ],
+      "check_text": "From operational mode, enter the following command to verify that the anomaly-based attack object was created.\n\nshow idp security policies\n\nIf anomaly-based attack objects are not created, bound to a zone, and active, this is a finding.",
+      "control_id": "V-214616",
+      "default_value": "",
+      "discussion": "The IDPS must include protection against DoS attacks that originate from inside the enclave which can affect either internal or external systems. These attacks may use legitimate or rogue endpoints from inside the enclave.\n\nTo perform anomaly-based attacks on the Juniper SRX IDPS device, create an anomaly-based attack object.",
+      "fix_text": "Create a protocol anomaly-based attack object:\n\nSpecify a name for the attack.\n[edit]\nsecurity idp custom-attack anomaly1\n\nSpecify common properties for the attack.\n[edit security idp custom-attack anomaly1]\nset severity info\nset time-binding scope peer count 2\n\nSpecify the attack type and test condition.\n[edit]\nsecurity idp custom-attack anomaly1\nset attack-type anomaly test OPTIONS_UNSUPPORTED\n\nSpecify other properties for the anomaly attack.\n[edit]\nsecurity idp custom-attack anomaly1\nset attack-type anomaly service TCP\nu set attack-type anomaly direction any\nattack-type anomaly shellcode spark",
+      "impact": "",
+      "iso_27001": [
+        "A.8.6"
+      ],
+      "legacy_ids": [
+        "SV-80891",
+        "V-66401"
+      ],
+      "nist_800_53": [
+        "SC-05(02)"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000007",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must block outbound traffic containing known and unknown DoS attacks by ensuring that anomaly-based attack objects are applied to outbound communications traffic."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-001166"
+      ],
+      "check_text": "From operational mode, enter the following command to verify that the signature-based attack object was created:\n\nshow security idp policies\n\nIf signature-based attack objects are not created and used, this is a finding.",
+      "control_id": "V-214617",
+      "default_value": "",
+      "discussion": "Mobile code is defined as software modules obtained from remote systems, transferred across a network, and then downloaded and executed on a local system without explicit installation or execution by the recipient. Examples of mobile code include JavaScript, VBScript, Java applets, ActiveX controls, Flash animations, Shockwave videos, and macros embedded within Microsoft Office documents. Mobile code can be exploited to attack a host. It can be sent as an email attachment or embedded in other file formats not traditionally associated with executable code.\n\nWhile the IDPS cannot replace the anti-virus and host-based IDS (HIDS) protection installed on the network's endpoints, vendor or locally created sensor rules can be implemented, which provide preemptive defense against both known and zero-day vulnerabilities. Many of the protections may provide defenses before vulnerabilities are discovered and rules or blacklist updates are distributed by anti-virus or malicious code solution vendors.\n\nTo monitor for and detect known prohibited mobile code or approved mobile code that violates permitted usage requirements, the IDPS must implement policy filters, rules, signatures, and anomaly analysis.",
+      "fix_text": "Specify a name for the attack. Specify common properties for the attack. Specify the attack type and context. Specify the attack direction and the shellcode flag. Set the protocol and its fields. Specify the protocol binding and ports. Specify the direction.\n\n[edit]\nedit security idp custom-attack <signature-name>\nset severity major\nset recommended-action drop-packet\nset time-binding scope source count 10\nset attack-type signature context packet\nset attack-type signature shellcode intel\nset attack-type signature protocol ip ttl value 128 match equal\nset attack-type signature protocol-binding tcp minimum-port 50 maximum-port 100\nset attack-type signature direction any",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80893",
+        "V-66403"
+      ],
+      "nist_800_53": [
+        "SC-18(01)"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000008",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must detect, at a minimum, mobile code that is unsigned or exhibiting unusual behavior, has not undergone a risk assessment, or is prohibited for use based on a risk assessment."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-001662"
+      ],
+      "check_text": "From operational mode, enter the following command to verify outbound zones are configured with an IDP policy:\n\nshow security idp policies\n\nIf zones bound to the outbound interfaces, including VPN zones, are not configured with policy filters, rules, signatures, and anomaly analysis, this is a finding.",
+      "control_id": "V-214618",
+      "default_value": "",
+      "discussion": "Mobile code is defined as software modules obtained from remote systems, transferred across a network, and then downloaded and executed on a local system without explicit installation or execution by the recipient. Examples of mobile code include JavaScript, VBScript, Java applets, ActiveX controls, Flash animations, Shockwave videos, and macros embedded within Microsoft Office documents. Mobile code can be exploited to attack a host. It can be sent as an email attachment or embedded in other file formats not traditionally associated with executable code.\n\nWhile the IDPS cannot replace the anti-virus and host-based IDS (HIDS) protection installed on the network's endpoints, vendor or locally created sensor rules can be implemented, which provide preemptive defense against both known and zero-day vulnerabilities. Many of the protections may provide defenses before vulnerabilities are discovered and rules or blacklist updates are distributed by anti-virus or malicious code solution vendors.\n\nTo block known prohibited mobile code or approved mobile code that violates permitted usage requirements, the IDPS must implement policy filters, rules, signatures, and anomaly analysis.",
+      "fix_text": "To enable IDP services to drop traffic when there is a detection event on a zone based on the IDP policy:\n\nOnce the IDP policy is configured, IDP must be enabled on a security policy in order for IDP inspection to be performed.\n\nKeep in mind that IDP inspection will only be performed on the traffic matching the security policies where IDP is enabled.\n\nTo enable IDP on a security policy, enter the following command:\n\nset security policies from-zone <FROM ZONE NAME> to-zone <TO ZONE NAME> policy <POLICY\nNAME> then permit application-services idp",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80895",
+        "V-66405"
+      ],
+      "nist_800_53": [
+        "SC-18(01)"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000009",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must block any prohibited mobile code at the enclave boundary when it is detected."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-004965"
+      ],
+      "check_text": "To check the version of the security package installed, enter the following command from the root on the device:\n\nshow security idp security-package-version\n\nCompare the installed release with the latest available and approved release.\n\nIf a new release is available and not installed, this is a finding.",
+      "control_id": "V-214619",
+      "default_value": "",
+      "discussion": "Failing to update malicious code protection mechanisms, including application software files, signature definitions, and vendor-provided rules, leaves the system vulnerable to exploitation by recently developed attack methods and programs.\n\nThe IDPS is a key malicious code protection mechanism in the enclave infrastructure. To ensure this protection is responsive to changes in malicious code threats, IDPS components must be updated, including application software files, anti-virus signatures, detection heuristics, vendor-provided rules, and vendor-provided signatures.\n\nUpdates must be installed in accordance with the CCB procedures for the local organization. However, at a minimum:\n\n1. Updates designated as critical security updates by the vendor must be installed immediately.\n\n2. Updates for predefined signature objects, applications signatures, IDPS policy templates, and device software must be installed immediately.\n\n3. Updates for application software are installed in accordance with the CCB procedures.\n\n4. Prior to automatically installing updates, either manual or automated integrity and authentication checking is required, at a minimum, for application software updates.",
+      "fix_text": "Since DoD does not allow the management port of security devices to be connected directly to the Internet, the required security package must be uploaded using the Juniper SRX offline process.\n\nDirections are available in the document “How to perform offline IDP and Application signature database update in SRX” on the Juniper Networks support site. DoD network policy requires a local file repository be used to automate the update for network devices.\n\nBefore uploading updates, the IDP administrator must verify the updates are approved by the site's CCB procedures and are authorized for installation. Once all files have been downloaded and approved, install the security package on SRX from root.\n\nRequest security idp security-package install source-path /var/db/idpd/sec-download",
+      "impact": "",
+      "iso_27001": [
+        "A.8.7"
+      ],
+      "legacy_ids": [
+        "SV-80499",
+        "V-66009"
+      ],
+      "nist_800_53": [
+        "SI-03"
+      ],
+      "profile": null,
+      "severity": "high",
+      "stig_id": "JUSX-IP-000010",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must install updates for predefined signature objects, applications signatures, IDPS policy templates, and device software when new releases are available in accordance with organizational configuration management policy and procedures."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002346"
+      ],
+      "check_text": "Verify attack group is configured.\n\n[edit]\nshow security idp policies\n\nIf an attack group or rule(s) is not implemented to block the packets or terminate the session associated with code injection attacks that could be launched against databases, this is a finding.",
+      "control_id": "V-214620",
+      "default_value": "",
+      "discussion": "Data mining is the analysis of large quantities of data to discover patterns and is used in intelligence gathering. Failure to detect attacks that use unauthorized data mining techniques to attack databases may result in the compromise of information.\n\nInjection attacks allow an attacker to inject code into a program or query or inject malware onto a computer to execute remote commands that can read or modify a database, or change data on a website. Web applications frequently access databases to store, retrieve, and update information. An attacker can construct inputs that the database will execute. This is most commonly referred to as a code injection attack. This type of attack includes XPath and LDAP injections.\n\nIDPS component(s) with the capability to prevent code injections must be included in the IDPS implementation to protect against unauthorized data mining. These components must include rules and anomaly detection algorithms to monitor for atypical database queries or accesses.",
+      "fix_text": "Configure an attack group for \"INJ\" and \"CMDEXEC\" attacks in the signature database which are recommended. Consult the Junos Security Intelligence Center IDP signatures website for a list and details of each attack, along with recommended action upon detection. Then add the attack group to a policy.\n\nSpecify the attack group as match criteria in an IDP policy rule. Specify a match criteria and IDP action to block the IP packet or terminate the connection.",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80897",
+        "V-66407"
+      ],
+      "nist_800_53": [
+        "AC-23"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000011",
+      "title": "To protect against unauthorized data mining, the Juniper Networks SRX Series Gateway IDPS must prevent code injection attacks launched against data storage objects, including, at a minimum, databases, database records, queries, and fields."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002346"
+      ],
+      "check_text": "Verify attack group is configured.\n\n[edit]\nshow security idp policies\n\nIf an attack group or rule(s) is not implemented to block the packets or terminate the session associated with code injection attacks that could be launched against applications, this is a finding.",
+      "control_id": "V-214621",
+      "default_value": "",
+      "discussion": "Data mining is the analysis of large quantities of data to discover patterns and is used in intelligence gathering. Failure to detect attacks that use unauthorized data mining techniques to attack applications may result in the compromise of information.\n\nInjection attacks allow an attacker to inject code into a program or query or inject malware onto a computer to execute remote commands that can read or modify a database, or change data on a website. These attacks include buffer overrun, XML, JavaScript, and HTML injections.\n\nIDPS component(s) with the capability to prevent code injections must be included in the IDPS implementation to protect against unauthorized data mining. These components must include rules and anomaly detection algorithms to monitor for atypical database queries or accesses.",
+      "fix_text": "Configure an attack group for \"INJ\" and \"CMDEXEC\" attacks in the signature database which are recommended. Consult the Junos Security Intelligence Center IDP signatures website for a list and details of each attack, along with recommended action upon detection. Then add the attack group to a policy.\n\nSpecify the attack group as match criteria in an IDP policy rule. Specify a match criteria and IDP action to block the IP packet or terminate the connection.",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80899",
+        "V-66409"
+      ],
+      "nist_800_53": [
+        "AC-23"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000012",
+      "title": "To protect against unauthorized data mining, the Juniper Networks SRX Series Gateway IDPS must prevent code injection attacks launched against application objects, including, at a minimum, application URLs and application code."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002346"
+      ],
+      "check_text": "Verify an attack group is configured.\n\n[edit]\nshow security idp policies\n\nIf an attack group or rule(s) is not implemented to block the packets or terminate the session associated with SQL injection attacks that could be launched against data storage objects, this is a finding.",
+      "control_id": "V-214622",
+      "default_value": "",
+      "discussion": "Data mining is the analysis of large quantities of data to discover patterns and is used in intelligence gathering. Failure to detect attacks that use unauthorized data mining techniques to attack databases may result in the compromise of information.\n\nSQL injection attacks are the most prevalent attacks against web applications and databases. These attacks inject SQL commands that can read, modify, or compromise the meaning of the original SQL query. An attacker can spoof identity; expose, tamper, destroy, or make existing data unavailable; or gain unauthorized privileges on the database server.\n\nIDPS component(s) with the capability to prevent SQL code injections must be included in the IDPS implementation to protect against unauthorized data mining. These components must include rules and anomaly detection algorithms to monitor for SQL injection attacks.",
+      "fix_text": "Configure an attack group for \"SQL\" attacks in the signature database which are recommended. Consult the Junos Security Intelligence Center IDP signatures website for a list and details of each attack, along with recommended action upon detection. Then add the attack group to a policy.\n\nSpecify the attack group as match criteria in an IDP policy rule. Specify a match criteria and IDP action to block the IP packet or terminate the connection.",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80901",
+        "V-66411"
+      ],
+      "nist_800_53": [
+        "AC-23"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000013",
+      "title": "To protect against unauthorized data mining, the Juniper Networks SRX Series Gateway IDPS must prevent SQL injection attacks launched against data storage objects, including, at a minimum, databases, database records, and database fields."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002347"
+      ],
+      "check_text": "Verify an attack group is configured.\n\n[edit]\nshow security idp policies\n\nIf an attack group or rule(s) is not implemented to monitor for code injection attacks that could be launched against data storage objects, this is a finding.",
+      "control_id": "V-214623",
+      "default_value": "",
+      "discussion": "Data mining is the analysis of large quantities of data to discover patterns and is used in intelligence gathering. Failure to detect attacks that use unauthorized data mining techniques to attack databases may result in the compromise of information.\n\nInjection attacks allow an attacker to inject code into a program or query or inject malware onto a computer to execute remote commands that can read or modify a database, or change data on a website. Web applications frequently access databases to store, retrieve, and update information. An attacker can construct inputs that the database will execute. This is most commonly referred to as a code injection attack. This type of attack includes XPath and LDAP injections.\n\nIDPS component(s) with anomaly detection must be included in the IDPS implementation to protect against unauthorized data mining. These components must include rules and anomaly detection algorithms to monitor for atypical database queries or accesses.",
+      "fix_text": "Configure an attack group for \"INJ\" and \"CMDEXEC\" attacks in the signature database which are recommended. Consult the Junos Security Intelligence Center IDP signatures website for a list and details of each attack, along with recommended action upon detection. Then add the attack group to a policy.\n\nSpecify the attack group as match criteria in an IDP policy rule.",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80903",
+        "V-66413"
+      ],
+      "nist_800_53": [
+        "AC-23"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000014",
+      "title": "To protect against unauthorized data mining, the Juniper Networks SRX Series Gateway IDPS must detect code injection attacks launched against data storage objects, including, at a minimum, databases, database records, queries, and fields."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002347"
+      ],
+      "check_text": "Verify an attack group or rule is configured.\n\n[edit]\nshow security idp policies\n\nIf an attack group or rule(s) is not implemented to monitor for code injection attacks that could be launched against application objects, this is a finding.",
+      "control_id": "V-214624",
+      "default_value": "",
+      "discussion": "Data mining is the analysis of large quantities of data to discover patterns and is used in intelligence gathering. Failure to detect attacks that use unauthorized data mining techniques to attack applications may result in the compromise of information.\n\nInjection attacks allow an attacker to inject code into a program or query or inject malware onto a computer to execute remote commands that can read or modify a database, or change data on a website. These attacks include buffer overrun, XML, JavaScript, and HTML injections.\n\nIDPS component(s) with anomaly detection must be included in the IDPS implementation. These components must include rules and anomaly detection algorithms to monitor for atypical application behavior, commands, and accesses.",
+      "fix_text": "Configure an attack group for \"INJ\", \"SQL\", and \"CMDEXEC\" attacks in the signature database which are recommended. Consult the Junos Security Intelligence Center IDP signatures website for a list and details of each attack, along with recommended action upon detection. Then add the attack group to a policy.\n\nSpecify the attack group as match criteria in an IDP policy rule.",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80905",
+        "V-66415"
+      ],
+      "nist_800_53": [
+        "AC-23"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000015",
+      "title": "To protect against unauthorized data mining, the Juniper Networks SRX Series Gateway IDPS must detect code injection attacks launched against application objects, including, at a minimum, application URLs and application code."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002347"
+      ],
+      "check_text": "Verify an attack group or rule is configured.\n\n[edit]\nshow security idp policies\n\nIf an attack group or rule(s) is not implemented to monitor for SQL injection attacks that could be launched against data storage objects, this is a finding.",
+      "control_id": "V-214625",
+      "default_value": "",
+      "discussion": "Data mining is the analysis of large quantities of data to discover patterns and is used in intelligence gathering. Failure to detect attacks that use unauthorized data mining techniques to attack databases may result in the compromise of information.\n\nSQL injection attacks are the most prevalent attacks against web applications and databases. These attacks inject SQL commands that can read, modify, or compromise the meaning of the original SQL query. An attacker can spoof identity; expose, tamper, destroy, or make existing data unavailable; or gain unauthorized privileges on the database server.\n\nIDPS component(s) with anomaly detection must be included in the IDPS implementation to monitor for and detect unauthorized data mining. These components must include rules and anomaly detection algorithms to monitor for SQL injection attacks.",
+      "fix_text": "Configure an attack group for \"SQL\" attacks in the signature database which are recommended. Consult the Junos Security Intelligence Center IDP signatures website for a list and details of each attack, along with recommended action upon detection. Then add the attack group to a policy.\n\nSpecify the attack group as match criteria in an IDP policy rule.",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80907",
+        "V-66417"
+      ],
+      "nist_800_53": [
+        "AC-23"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000016",
+      "title": "To protect against unauthorized data mining, the Juniper Networks SRX Series Gateway IDPS must detect SQL injection attacks launched against data storage objects, including, at a minimum, databases, database records, and database fields."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002385",
+        "CCI-004866"
+      ],
+      "check_text": "From operational mode, enter the following command to verify that the anomaly-based attack object was created:\n\nshow idp security policies\n\nIf anomaly-based attack objects are not created, bound to a zone, and active, this is a finding.",
+      "control_id": "V-214626",
+      "default_value": "",
+      "discussion": "If the network does not provide safeguards against DoS attack, network resources will be unavailable to users.\n\nInstallation of IDPS detection and prevention components (i.e., sensors) at key boundaries in the architecture mitigates the risk of DoS attacks. These attacks can be detected by matching observed communications traffic with patterns of known attacks and monitoring for anomalies in traffic volume/type.\n\nDetection components that use rate-based behavior analysis can detect attacks when signatures for the attack do not exist or are not installed. These attacks include zero-day attacks which are new attacks for which vendors have not yet developed signatures. Rate-based behavior analysis can detect sophisticated, Distributed DoS (DDoS) attacks by correlating traffic information from multiple network segments or components.\n\nThe Juniper SRX must be configured with screens using the Firewall STIG, but must also be configured for anomaly-based protection using various locally developed anomaly-based attack objects.",
+      "fix_text": "Create a protocol anomaly-based attack object:\n\nSpecify a name for the attack.\n[edit]\nsecurity idp custom-attack anomaly1\n\nSpecify common properties for the attack.\n[edit security idp custom-attack anomaly1]\nset severity info\nset time-binding scope peer count 2\n\nSpecify the attack type and test condition.\n[edit]\nsecurity idp custom-attack anomaly1set attack-type anomaly test OPTIONS_UNSUPPORTED\n\nSpecify other properties for the anomaly attack.\n[edit]\nsecurity idp custom-attack anomaly1]\nset attack-type anomaly service TCP\nu set attack-type anomaly direction any\nattack-type anomaly shellcode spark",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80909",
+        "V-66419"
+      ],
+      "nist_800_53": [
+        "SC-05"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000017",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must protect against or limit the effects of known and unknown types of Denial of Service (DoS) attacks by employing rate-based attack prevention behavior analysis."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002385",
+        "CCI-004866"
+      ],
+      "check_text": "Verify that the anomaly-based attack object was created.\n\n[edit]\nshow idp security policies\n\nIf anomaly-based attack objects are not created, bound to a zone, and active, this is a finding.",
+      "control_id": "V-214627",
+      "default_value": "",
+      "discussion": "If the network does not provide safeguards against DoS attack, network resources will be unavailable to users.\n\nInstallation of IDPS components (i.e., sensors) at key boundaries in the architecture mitigates the risk of DoS attacks. These attacks can be detected by matching observed communications traffic with patterns of known attacks.\n\nDetection components that use pattern recognition pre-processors can detect attacks when signatures for the attack do not exist or are not installed. These attacks include zero-day attacks which are new attacks for which vendors have not yet developed signatures.\n\nThis requirement applies to the communications traffic functionality of the IDPS as it pertains to handling communications traffic, rather than to the IDPS device itself. The Juniper SRX must be configured with screens using the Firewall STIG, but must also be configured for anomaly-based protection using various locally developed anomaly-based attack objects.",
+      "fix_text": "Create a protocol anomaly-based attack object:\n\nSpecify a name for the attack.\n[edit]\nsecurity idp custom-attack anomaly1\n\nSpecify common properties for the attack.\n[edit security idp custom-attack anomaly1]\nset severity info\nset time-binding scope peer count 2\n\nSpecify the attack type and test condition.\n[edit]\nsecurity idp custom-attack anomaly1set attack-type anomaly test OPTIONS_UNSUPPORTED\n\nSpecify other properties for the anomaly attack.\n[edit]\nsecurity idp custom-attack anomaly1]\nset attack-type anomaly service TCP\nu set attack-type anomaly direction any\nattack-type anomaly shellcode spark",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80911",
+        "V-66421"
+      ],
+      "nist_800_53": [
+        "SC-05"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000018",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must protect against or limit the effects of known and unknown types of Denial of Service (DoS) attacks by employing anomaly-based detection."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002385",
+        "CCI-004866"
+      ],
+      "check_text": "Verify an attack group or rule is configured.\n\n[edit]\nshow security idp policies\n\nIf an attack group(s) or rules are not implemented to detect flood and DOS attacks, this is a finding.",
+      "control_id": "V-214628",
+      "default_value": "",
+      "discussion": "If the network does not provide safeguards against DoS attack, network resources will be unavailable to users.\n\nInstallation of IDPS detection and prevention components (i.e., sensors) at key boundaries in the architecture mitigates the risk of DoS attacks. These attacks can be detected by matching observed communications traffic with patterns of known attacks and monitoring for anomalies in traffic volume, type, or protocol usage.\n\nDetection components that use signatures can detect known attacks by using known attack signatures. Signatures are usually obtained from and updated by the IDPS component vendor. These attacks include SYN-flood, ICMP-flood, and Land Attacks.\n\nThis requirement applies to the communications traffic functionality of the IDPS as it pertains to handling communications traffic, rather than to the IDPS device itself. The Juniper SRX must be configured with screens using the Firewall STIG to protect against flood and DOS attacks type attacks, but must also be configured for anomaly-based protection",
+      "fix_text": "Configure an attack group for \"FLOOD\" and \"DOS\" attacks in the signature database which are recommended. Consult the Junos Security Intelligence Center IDP signatures website for a list and details of each attack, along with recommended action upon detection. Then add the attack group to a policy.\n\nSpecify the attack group as match criteria in an IDP policy rule.",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80913",
+        "V-66423"
+      ],
+      "nist_800_53": [
+        "SC-05"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000019",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must protect against or limit the effects of known types of Denial of Service (DoS) attacks by employing signatures."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002664"
+      ],
+      "check_text": "Verify an attack group or rule is configured.\n\n[edit]\nshow security idp policies\n\nIf an attack group or rule is not implemented to detect root-level intrusion attacks or the match condition is not configured for an alert, this is a finding.",
+      "control_id": "V-214629",
+      "default_value": "",
+      "discussion": "Without an alert, security personnel may be unaware of intrusion detection incidents that require immediate action and this delay may result in the loss or compromise of information.\n\nIn accordance with CCI-001242, the IDPS is a real-time intrusion detection system. These systems must generate an alert when detection events from real-time monitoring occur. Alerts may be transmitted, for example, telephonically, by electronic mail messages, or by text messaging. The IDPS must either send the alert to a management console that is actively monitored by authorized personnel or use a messaging capability to send the alert directly to designated personnel. The Juniper SRX IDPS can be configured for email alerts.",
+      "fix_text": "Create a custom rule that identifies the Junos application which is prohibited on the network.\n\nAdd the option \"alert\" onto the rule to send an alert when that rule is invoked. Alerts should be sent only on critical and other site-selected items to prevent an excess of alerts.\n\n[edit]\nset security idp idp-policy recommended rulebase-ips rule-1 then notification log-attacks alert",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80915",
+        "V-66425"
+      ],
+      "nist_800_53": [
+        "SI-04(05)"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000023",
+      "title": "The IDPS must send an alert to, at a minimum, the ISSO and ISSM when intrusion detection events are detected that indicate a compromise or potential for compromise."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002664"
+      ],
+      "check_text": "Verify an attack group or rule is configured.\n\n[edit]\nshow security idp policies\n\nIf an attack group or rules are not configured to detect root-level intrusion attacks or the match condition is not configured for an alert, this is a finding.",
+      "control_id": "V-214630",
+      "default_value": "",
+      "discussion": "Without an alert, security personnel may be unaware of major detection incidents that require immediate action and this delay may result in the loss or compromise of information.\n\nCJCSM 6510.01B, \"Cyber Incident Handling Program\", lists nine Cyber Incident and Reportable Event Categories. DoD has determined that categories identified by CJCSM 6510.01B Major Indicators (category I, II, IV, and VII detection events) will require an alert when an event is detected.\n\nAlerts messages must include a severity level indicator or code as an indicator of the criticality of the incident. Since these incidents require immediate action, these messages are assigned a critical or level 1 priority/severity, depending on the system's priority schema.\n\nAlerts may be transmitted, for example, telephonically, by electronic mail messages, or by text messaging. The IDPS must either send the alert to a management console that is actively monitored by authorized personnel or use a messaging capability to send the alert directly to designated personnel. The Juniper SRX IDPS can be configured for email alerts.",
+      "fix_text": "Configure an attack group for \"ROOT\" attacks in the signature database which are recommended. Consult the Junos Security Intelligence Center IDP signatures website for a list and details of each attack, along with recommended action upon detection. Then add the attack group to a policy.\n\nSpecify the attack group as match criteria in an IDP policy rule.",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80917",
+        "V-66427"
+      ],
+      "nist_800_53": [
+        "SI-04(05)"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000024",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must generate an alert to, at a minimum, the ISSO and ISSM when root-level intrusion events that provide unauthorized privileged access are detected."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002664"
+      ],
+      "check_text": "Verify alerts are configured to implement this requirement.\n\n[edit]\nshow security alarms potential-violation\n\nIf alerts are not configured to notify the ISSO and ISSM of potential-violation IDP events, this is a finding.",
+      "control_id": "V-214631",
+      "default_value": "",
+      "discussion": "Without an alert, security personnel may be unaware of major detection incidents that require immediate action and this delay may result in the loss or compromise of information.\n\nCJCSM 6510.01B, \"Cyber Incident Handling Program\", lists nine Cyber Incident and Reportable Event Categories. DoD has determined that categories identified by CJCSM 6510.01B Major Indicators (category I, II, IV, and VII detection events) will require an alert when an event is detected.\n\nAlerts messages must include a severity level indicator or code as an indicator of the criticality of the incident. Since these incidents require immediate action, these messages are assigned a critical or level 1 priority/severity, depending on the system's priority schema.\n\nAlerts may be transmitted, for example, telephonically, by electronic mail messages, or by text messaging. The IDPS must either send the alert to a management console that is actively monitored by authorized personnel or use a messaging capability to send the alert directly to designated personnel. The Juniper SRX IDPS can be configured for email alerts.",
+      "fix_text": "Configure alerts for IDP attack by using the [edit security alarms potential-violation] command.\n\nAdd the option \"alert\" onto the rule to send an alert when that rule is invoked. Alerts should be sent only on critical and other site-selected items to prevent an excess of alerts.\n\n[edit]\nset security idp idp-policy recommended rulebase-ips rule-1 then notification log-attacks alert",
+      "impact": "",
+      "iso_27001": [],
+      "legacy_ids": [
+        "SV-80919",
+        "V-66429"
+      ],
+      "nist_800_53": [
+        "SI-04(05)"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000025",
+      "title": "The IDPS must send an alert to, at a minimum, the ISSO and ISSM when DoS incidents are detected."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-004964"
+      ],
+      "check_text": "Verify automatic updates are configured.\n\n[edit]\nshow security idp\n\nIf updates are not automatically installed, this is a finding.",
+      "control_id": "V-214632",
+      "default_value": "",
+      "discussion": "Failing to automatically update malicious code protection mechanisms, including application software files, signature definitions, and vendor-provided rules, leaves the system vulnerable to exploitation by recently developed attack methods and programs. An automatic update process ensures this important task is performed without the need for Security Control Auditor (SCA) intervention.\n\nThe IDPS is a key malicious code protection mechanism in the enclave infrastructure. To ensure this protection is responsive to changes in malicious code threats, IDPS components must be automatically updated, including anti-virus signatures, detection heuristics, vendor-provided rules, and vendor-provided signatures.\n\nIf a DoD patch management server or update repository having the tested/verified updates is available for the IDPS component, the components must be configured to automatically check this server/site for updates and install new updates.\n\nIf a DoD server/site is not available, the component must be configured to automatically check a trusted vendor site for updates. A trusted vendor is either commonly used by DoD, specifically approved by DoD, the vendor from which the equipment was purchased, or approved by the local program's CCB.",
+      "fix_text": "The following example configures automatic updates of the IDP signature database:\n\nSpecify the URL to use.\n\n[edit]\nset security idp security-package url <DoD repository>\n\nCreate a schedule for the automatic downloads.\n\nset security idp security-package automatic interval <interval>\nset security idp security-package automatic enable\n\nAlso, recommend a local log be created to track when automated updates are performed for troubleshooting purposes.\n\nset system syslog file IDP_OPERATIONS any any match IDP_SCHEDULE",
+      "impact": "",
+      "iso_27001": [
+        "A.8.7"
+      ],
+      "legacy_ids": [
+        "SV-80921",
+        "V-66431"
+      ],
+      "nist_800_53": [
+        "SI-03"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000026",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must automatically install updates to signature definitions."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-002624"
+      ],
+      "check_text": "Verify a dynamic custom attack group which includes attack objects for malicious code monitoring of files.\n\nshow security idp dynamic-attack-group\n\nIf a custom attack group exists containing members which include malicious code attack categories, this is a finding.",
+      "control_id": "V-214633",
+      "default_value": "",
+      "discussion": "Real-time monitoring of files from external sources at network entry/exit points helps to detect covert malicious code before it is downloaded to or executed by internal and external endpoints. Using malicious code, such as viruses, worms, Trojan horses, and spyware, an attacker may gain access to sensitive data and systems.\n\nIDPSs innately meet this requirement for real-time scanning for malicious code when properly configured to meet the requirements of this STIG. However, most products perform communications traffic inspection at the packet level.",
+      "fix_text": "Configure a dynamic custom attack group which includes attack objects for malicious code monitoring of files. There are many ways to accomplish this; thus, the following is only an example:\n\n[edit]\nsecurity idp dynamic-attack-group Malicious-Activity\nset category values [ SHELLCODE VIRUS WORMS SPYWARE TROJAN]",
+      "impact": "",
+      "iso_27001": [
+        "A.8.7"
+      ],
+      "legacy_ids": [
+        "SV-80923",
+        "V-66433"
+      ],
+      "nist_800_53": [
+        "SI-03"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000027",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must perform real-time monitoring of files from external sources at network entry/exit points."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-001243"
+      ],
+      "check_text": "Verify custom rules exist to drop packets or terminate sessions upon detection of malicious code.\n\n[edit]\nshow security idp policy\n\nView the rulebase action option for the IDP policies.\n\nIf rulebases for IDP policies which detect malicious code are not configured with an action of Drop-Packet, Drop-Connection, or some form of session termination, this is a finding.",
+      "control_id": "V-214634",
+      "default_value": "",
+      "discussion": "Configuring the IDPS to discard and/or redirect based on local organizational incident handling procedures minimizes the impact of this code on the network.\n\nOnce an attack object in the IPS policy is matched, the SRX can execute an action on that specific session, along with actions on future sessions. The ability to execute an action on that particular session is known as an IDPS action. IDPS actions can be one of the following: No-Action, Drop-Packet, Drop-Connection, Close-Client, Close-Server, Close-Client-and-Server, DSCP-Marking, Recommended, or Ignore. IP actions are actions that can be enforced on future sessions. These actions include IP-Close, IP-Block, and IP-Notify",
+      "fix_text": "This requirement can be met through a custom rule within a policy or drop action option on the zone configuration to which the policy is applied. The following is an example of the command that can be added to the IDP policy. The policy is called Malicious-Activity and the rule is called R1 in this example.\n\n[edit]\nset security idp idp-policy Malicious-Activity rulebase-ips rule R1 then action drop-connection",
+      "impact": "",
+      "iso_27001": [
+        "A.8.7"
+      ],
+      "legacy_ids": [
+        "SV-80925",
+        "V-66435"
+      ],
+      "nist_800_53": [
+        "SI-03"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000028",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must drop packets or disconnect the connection when malicious code is detected."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-001243"
+      ],
+      "check_text": "Verify an alert is sent when malicious code is detected.\n\n[edit]\nshow security idp policy\n\nView the rulebase options for the IDP policies.\n\nIf the rulebase options for the IDP policies that detect malicious code do not contain the \"alert\" option, this is a finding.",
+      "control_id": "V-214635",
+      "default_value": "",
+      "discussion": "Without an alert, security personnel may be unaware of an impending failure of the audit capability, and the ability to perform forensic analysis and detect rate-based and other anomalies will be impeded.\n\nThe IDPS generates an immediate (within seconds) alert which notifies designated personnel of the incident. Sending a message to an unattended log or console does not meet this requirement since that will not be seen immediately. These messages should include a severity level indicator or code as an indicator of the criticality of the incident.",
+      "fix_text": "This requirement can be met using an alert. Alerts must be enabled and configured and then added to the IDP policy rulebase command as an option. The following is an example of the command that can be added to the IDP policy. The policy is called Malicious-Activity and the rule is called R1 in this example.\n\n[edit]\nset security idp idp-policy Malicious-Activity rulebase-ips rule R1 then notification log-attacks alert",
+      "impact": "",
+      "iso_27001": [
+        "A.8.7"
+      ],
+      "legacy_ids": [
+        "SV-80927",
+        "V-66437"
+      ],
+      "nist_800_53": [
+        "SI-03"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000029",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must send an immediate alert to, at a minimum, the Security Control Auditor (SCA) when malicious code is detected."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-000366"
+      ],
+      "check_text": "In operational mode, enter show system license.\n\nIf the license expiration for idp-sig and all other licenses installed are past today's date, this is a finding.",
+      "control_id": "V-214636",
+      "default_value": "",
+      "discussion": "If the IDP or UTM licenses are allowed to lapse, the Juniper SRX IDPS can still inspect traffic and continue to use the outdated signature database for rules, objects, and dynamic groups. However, updates to the signature database cannot be downloaded from Juniper Networks. This puts the network at risk since the updates are used to addresses new CERT and IAVM vulnerabilities.",
+      "fix_text": "Update the expired licenses immediately following the procedures on the vendor website.",
+      "impact": "",
+      "iso_27001": [
+        "A.8.9"
+      ],
+      "legacy_ids": [
+        "SV-80929",
+        "V-66439"
+      ],
+      "nist_800_53": [
+        "CM-06"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000030",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must have only active Juniper Networks licenses."
+    },
+    {
+      "automated": null,
+      "cci": [
+        "CCI-000366"
+      ],
+      "check_text": "Verify UTM and AV policies are configured.\n\n[edit]\nshow security utm\n\nIf a stanza does not exist for at least one UTM and one AV policy, this is a finding.\n\nIf the IDPS does not have UTM and AV capabilities and traffic is not forwarded to be inspected for AV and UTM threats, this is a finding.",
+      "control_id": "V-214637",
+      "default_value": "",
+      "discussion": "UTM is an industry term that was coined to define Layer 7 protection against client-side threats. This does not include IPS (which also has protection against server-to-client attacks) but rather technologies such as network-based antivirus protection, URL filtering, antispam solutions, and content filtering. IPS is primarily focused on network-based attacks on protocols, and is stream based, meaning that it processes traffic inline without modifying it as a stream. This works great from a performance perspective to detect attacks against services and applications. UTM, on the other hand, is meant more for protecting against files that are transmitted on top of the network streams. Although IPS might be more geared for detecting an overflow of the parser of the network stream, it isn’t as well geared for detecting threats within files. That is, it certainly can detect such file-based attacks, but attackers can go to great lengths to encode, encrypt, and obfuscate files to perform some malicious action—and it is very difficult to detect these attacks in Stream mode.",
+      "fix_text": "Configure at least one policy for the UTM and AV policy using the commands and options for the [edit security utm] hierarchy.\n\nIf the UTM and AV licenses are not installed, IDPS must be installed in the architecture so that traffic is forwarded for deeper AV and UTM inspection. This can be accomplished by using a zone stanza to direct the traffic to an interface or IP destination address.",
+      "impact": "",
+      "iso_27001": [
+        "A.8.9"
+      ],
+      "legacy_ids": [
+        "SV-80931",
+        "V-66441"
+      ],
+      "nist_800_53": [
+        "CM-06"
+      ],
+      "profile": null,
+      "severity": "medium",
+      "stig_id": "JUSX-IP-000031",
+      "title": "The Juniper Networks SRX Series Gateway IDPS must either forward the traffic from inbound connections to be more deeply inspected for malicious code and Layer 7 threats, or the Antivirus and Unified Threat Management (UTM) license must be installed, active, and policies and rules configured."
+    }
+  ],
+  "framework": "DISA_STIG",
+  "os_families": [
+    "junos"
+  ],
+  "source_document": "U_Juniper_SRX_SG_IDPS_STIG_V2R1_Manual-xccdf.xml",
+  "source_url": "",
+  "vendors": [
+    "juniper_junos"
+  ]
+}

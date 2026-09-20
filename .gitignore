@@ -1,0 +1,116 @@
+# Virtual environments
+.venv/
+.venv-remediation/
+.venv-dev-ccp2/
+
+# Model weights — GITIGNORED; absence raises ArtifactMissingError
+data/models/*.gguf
+data/models/classifier/
+data/models/lora/
+
+# SetFit Trainer checkpoints. TrainingArguments.output_dir defaults to the
+# RELATIVE string "checkpoints", which resolves against the working directory —
+# so running the trainer from the repo root wrote a 260 MB praman/checkpoints/
+# that nothing covered. scripts/train_setfit.py now pins it under
+# data/models/classifier/ (covered above); this line catches the old location and
+# any other tool that inherits the same default.
+checkpoints/
+
+# The operator's ledger. GITIGNORED, and this one is not just about size:
+#   - it changes on every ingest, so it diffs as unreviewable binary noise;
+#   - it holds whatever devices the last person audited, which on a real
+#     deployment means customer configurations in a public repository.
+# A fresh checkout has no database. Create one from the shipped fixtures with
+# `python scripts/reset_ledger.py --yes` (MANUAL_COMMANDS.md Step 12).
+data/praman.db
+data/praman.db-wal
+data/praman.db-shm
+data/praman.db.bak-*
+
+# sqlite-vec template index — GITIGNORED; same ArtifactMissingError contract
+data/index/
+
+# The publishers' JSON Schemas for the export conformance check (Step 14).
+# Downloaded, never vendored: 152 KB from NIST and 116 KB from OASIS, under
+# their terms, and a copy committed here would be a claim about their content
+# that nobody re-checks. scripts/check_export_conformance.py pins both digests,
+# so the file it validates against is identified rather than assumed.
+data/schemas/
+
+# SP 800-53B baseline allocation (Step 16), and the raw profiles it is extracted
+# from. Same reasoning as data/schemas/ and as sp80053.json above: derived from a
+# NIST publication under that publication's terms, and a committed copy is a
+# claim about which revision's baselines a coverage figure was scoped against —
+# which is exactly the claim that must be re-derived rather than trusted.
+# Absent, backend/frameworks/baseline.py returns {} and the metric says so.
+data/frameworks/oscal/_b/
+data/frameworks/oscal/baselines.json
+
+# Private / sensitive data
+data/private/
+data/frameworks/cis/_source/
+
+# Real config corpora (not redistributable)
+data/corpus/_batfish/
+data/corpus/_hierconfig/
+data/corpus/_config2spec/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.production
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Vendor binaries and downloads
+vendor/llama-cpp/
+vendor/*.zip
+
+# STIG library bundles — 350+ MB each, too large for GitHub.
+# Individual extracted STIGs (U_Cisco_*, U_Arista_*, etc.) are small and fine.
+data/frameworks/stig/U_SRG-STIG_Library_*/
+data/frameworks/stig/U_SRG-STIG_Library_*.zip
+
+# ATT&CK enterprise bundle (51 MB, downloaded by Step 4a)
+data/frameworks/attack/ent.json
+
+# Reports (except committed samples)
+reports/*.pdf
+out/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
+# AI tool configs
+.claude/
+
+# Backup virtual environments
+.venv-py314-backup/
+
+# Misc
+*.gguf
+*.log
+.cache/

@@ -1,0 +1,747 @@
+# DISA STIG — Juniper Router NDM v3r2 — canonical mappings
+#
+# 34 of this STIG's 49 controls. As in every pack here, a rule is a *mapping*,
+# never a control: the title, discussion, check text and official remediation an
+# auditor reads all come from the catalog built from DISA's own XCCDF (catalog_id
+# below). A rule supplies only the canonical-model condition that decides the
+# control, plus the rationale for why that condition stands in for it.
+#
+# The conventions in rules/mappings/disa_stig/cisco_ios_router_ndm_v3r8.yaml hold
+# here unchanged, including the three specific to DISA content: no
+# `severity_override` (the publisher's CAT rating wins), no `remediation_ref` (the
+# catalog's fix_text is the remediation), and `on_missing: pass` only where DISA
+# itself words the test as the absence of a command.
+#
+# Three things about this STIG shape the pack:
+#
+#   * **Fourteen controls resolve to Junos syslog message classes.** V-217306
+#     through V-217309, V-217313, V-217316, V-217329, V-217330, V-217343,
+#     V-217344 and V-217349 all reduce to "are configuration changes recorded";
+#     V-217315, V-217345 and V-217347 to "are authentication events recorded".
+#     Junos states both as a *message class* on a syslog destination —
+#     `change-log info`, `authorization info` — and DISA writes the same note
+#     under every one of them: "The parameter 'any' can be in place of
+#     'change-log' as this will log everything." The pattern pack decomposes the
+#     class into the booleans four other packs already emit for the same
+#     properties, so these rules read `logging.config_changes` and
+#     `logging.login_success` — the identical conditions the FortiGate NDM pack
+#     uses for the identical control families on a device with no syslog classes
+#     at all. That is the canonical model earning its keep rather than being
+#     asserted.
+#
+#     They are kept as fourteen rules rather than collapsed into one because they
+#     are fourteen separate findings with fourteen separate CCIs, and an auditor
+#     tracing AC-02(04) must find a result for it rather than a cross-reference.
+#     Each rationale names the event class it stands for. Same shape as
+#     CASA-ND-000090 on the ASA and FGFW-ND-000005 on the FortiGate.
+#
+#   * **DISA's second note is load-bearing too:** "a syslog server can be
+#     configured in addition to or in lieu of logging to a file". A device that
+#     records `change-log` only to a local file has audited the change, so the
+#     pack emits the audit booleans from both the `host` and the `file` blocks.
+#     Sending the record off the box is a *separate* control (V-217348,
+#     V-220141), and those read `logging.remote_syslog`, which only the `host`
+#     block emits.
+#
+#   * **Two controls are the same SSH MAC list read twice.** V-217322
+#     (replay-resistant authentication) and V-217340 (integrity of remote
+#     maintenance) both reduce to `set system services ssh macs`. They keep
+#     separate rules and separate rationales for the same reason as above, and
+#     the shared condition is stated once here: every negotiable MAC must be in
+#     the FIPS-approved SHA-2 set, which `subset_of` says exactly — a device
+#     offering `hmac-sha2-256` *and* `hmac-md5` fails, because an attacker
+#     negotiates the weakest algorithm on offer, not the strongest.
+#
+# Four controls fail on the shipped fixture, test_configs/multivendor/
+# juniper_edge_router.conf, and all four failures are correct rather than rule
+# defects. The fixture is a CIS-hardened Indian enterprise edge router, which is
+# exactly the device a DoD STIG should find wanting:
+#
+#   * **V-217312** — an enterprise consent banner, not the Standard Mandatory DoD
+#     Notice and Consent Banner. Same finding the FortiGate fixture draws at
+#     V-234169, for the same reason.
+#   * **V-217328** — the fixture defines no login class at all; its two accounts
+#     use the built-in `super-user` and `read-only` classes, neither of which
+#     carries an `idle-timeout`. A CLI session on this device never times out.
+#     This is the finding the pattern pack could not previously see: `idle-timeout`
+#     was being read from the J-Web `web-management session` stanza, so a GUI
+#     timeout was answering a CLI-session control and could only ever produce a
+#     false pass.
+#   * **V-217335** — `time-zone Asia/Kolkata`. Correct for the device's operators
+#     and a finding under a STIG that requires timestamps mappable to UTC or GMT.
+#     A real difference between two frameworks over the same device, which is the
+#     thing this project exists to show.
+#   * **V-220141** passes with exactly two syslog hosts; **V-217334** passes with
+#     exactly two NTP servers. Both are worth noting because both were one
+#     `boot-server` away from passing dishonestly until the pattern pack stopped
+#     filing a boot-time source as a redundant one.
+#
+# The 15 unmapped controls are recorded in docs/GAPS.md §2.8 with the reason.
+# They render as `notchecked` — an explicit "no automated check exists", never a
+# pass.
+
+rules:
+
+  # ══ Concurrent session limit ═══════════════════════════════════════════
+
+  - id: stig-junos-router-ndm-v217305
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217305}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      The threshold is organisation-defined - DISA's example shows 3 but the
+      requirement is a limit, not that number - so the condition asserts that a
+      limit exists and is a real one. `gt 0` is load-bearing rather than tidy:
+      the check must not be satisfiable by a configuration that names the knob
+      and disables it.
+
+      aaa.max_sessions carries Junos `connection-limit`, the ceiling on
+      concurrent SSH sessions, which is the same quantity as `quota
+      management-session` on the ASA and `admin-login-max` on FortiOS. Not
+      verified: `max-sessions-per-connection`, the second directive in DISA's
+      example, which limits multiplexed channels within one connection and has
+      no canonical path.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.max_sessions, operator: gt, expected: 0, quantifier: all, on_missing: fail}
+
+  # ══ Audit record generation ════════════════════════════════════════════
+  #
+  # The fourteen controls described in the header. `logging.config_changes` is
+  # true when a syslog destination records the `change-log` class or `any`;
+  # `logging.login_success` / `logging.login_failure` when it records
+  # `authorization` or `any`; `logging.commands` when it records
+  # `interactive-commands` or `any`. All are booleans, and all are emitted by the
+  # `host` and the `file` blocks alike, because DISA accepts either destination.
+
+  - id: stig-junos-router-ndm-v217306
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217306}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Account creation. DISA does not look for an account-creation audit switch,
+      because Junos has none; it states in its own words that the requirement
+      "can be met by ensuring that configuration changes are logged", and an
+      account is created by committing a configuration change. The condition is
+      therefore the publisher's own test rather than an interpretation of it.
+    condition:
+      type: fact_check
+      path: logging.config_changes
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217307
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217307}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Account modification. Same mechanism as account creation and for the same
+      stated reason: modifying a user's authentication or class is a
+      configuration change, so the change-log records it.
+    condition:
+      type: fact_check
+      path: logging.config_changes
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217308
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217308}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Account disabling. DISA's own note explains why this is the change-log and
+      not a dedicated event: on Junos an account is disabled by reassigning its
+      class to one with no permissions, which is a configuration change and
+      nothing else.
+    condition:
+      type: fact_check
+      path: logging.config_changes
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217309
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217309}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Account removal. Deleting a `user` stanza is a configuration change; the
+      change-log is where the deletion is recorded and who committed it.
+    condition:
+      type: fact_check
+      path: logging.config_changes
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217313
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217313}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Non-repudiation. The control is about an individual falsely denying an
+      action, and DISA's check text reduces it to one question - "does it log
+      configuration changes" - because on Junos a commit is attributed to the
+      user who issued it. Without the change-log there is no record to deny.
+    condition:
+      type: fact_check
+      path: logging.config_changes
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217316
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217316}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Full-text recording of privileged commands. DISA's check for this one asks
+      only for the change-log, not for `interactive-commands`, and the condition
+      follows the check text rather than the title: on Junos the privileged
+      command whose full text matters is the commit, and the change-log records
+      the statements it applied.
+    condition:
+      type: fact_check
+      path: logging.config_changes
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217329
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217329}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Account enabling. The mirror of V-217308 and DISA says so outright:
+      accounts are enabled by changing the assigned class back to one that
+      carries permissions, which is a configuration change.
+    condition:
+      type: fact_check
+      path: logging.config_changes
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217330
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217330}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Execution of privileged functions. This is one of the two controls in the
+      family whose check text names a second class - `interactive-commands`
+      alongside `change-log` - and the finding statement joins them with "as well
+      as", so both are required. The distinction is real and worth the extra
+      leaf: a device recording only the change-log has the *outcome* of every
+      privileged action and not the command that produced it, including the
+      operational commands that change state without a commit.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: any, on_missing: fail}
+        - {type: fact_check, path: logging.commands, operator: eq, expected: true, quantifier: any, on_missing: fail}
+
+  - id: stig-junos-router-ndm-v217343
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217343}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Administrator privileges modified. A Junos account's privileges are its
+      login class, and reassigning a class is a configuration change - which is
+      why DISA's check for this control is the change-log and not an
+      authorisation event.
+    condition:
+      type: fact_check
+      path: logging.config_changes
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217344
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217344}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Administrator privileges deleted. The deletion half of V-217343, separated
+      by DISA because the two carry different CCIs.
+    condition:
+      type: fact_check
+      path: logging.config_changes
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217346
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217346}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Privileged activities. The second of the two controls whose check names
+      both classes, and the only difference from V-217330 is the CCI it answers -
+      the condition is the same because DISA's check text is the same.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: any, on_missing: fail}
+        - {type: fact_check, path: logging.commands, operator: eq, expected: true, quantifier: any, on_missing: fail}
+
+  - id: stig-junos-router-ndm-v217349
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217349}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      A locally developed list of auditable events. The list itself is
+      organisation-defined and no configuration file states what an organisation
+      decided, so this rule does not attempt to check the list. What it checks is
+      DISA's own example of one: the three classes reproduced in the check text -
+      authorization, change-log, and the catch-all - which together are the
+      minimum from which any locally developed list could be drawn.
+
+      Not verified: that the list configured is the list the organisation
+      approved. That is a document comparison, and this rule would pass a device
+      auditing more than the list requires, which is the correct direction to be
+      wrong in.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.config_changes, operator: eq, expected: true, quantifier: any, on_missing: fail}
+        - {type: fact_check, path: logging.login_success, operator: eq, expected: true, quantifier: any, on_missing: fail}
+        - {type: fact_check, path: logging.commands, operator: eq, expected: true, quantifier: any, on_missing: fail}
+
+  - id: stig-junos-router-ndm-v217315
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217315}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Logon attempts with access privileges, successful and unsuccessful. Junos
+      folds both into the one `authorization` message class, so both booleans
+      come from the one directive and both are asserted - which keeps this rule
+      readable next to the IOS pack, where `login on-success` and
+      `login on-failure` are genuinely two commands and a device can have one
+      without the other.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.login_success, operator: eq, expected: true, quantifier: any, on_missing: fail}
+        - {type: fact_check, path: logging.login_failure, operator: eq, expected: true, quantifier: any, on_missing: fail}
+
+  - id: stig-junos-router-ndm-v217345
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217345}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Logon attempts, successful and unsuccessful. V-217315 scopes the same
+      requirement to privileged access and this one states it unqualified; on a
+      device where every account is an administrator they are the same check,
+      which is why DISA's check text for the two is identical.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.login_success, operator: eq, expected: true, quantifier: any, on_missing: fail}
+        - {type: fact_check, path: logging.login_failure, operator: eq, expected: true, quantifier: any, on_missing: fail}
+
+  - id: stig-junos-router-ndm-v217347
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217347}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Concurrent logons from different workstations. Junos has no
+      concurrent-logon event; DISA's check is the `authorization` class again,
+      because a concurrent logon is two logons and the class records both with
+      their source addresses.
+
+      Not verified: that anything correlates the two records into a
+      concurrent-session alert. The device generates the evidence; detecting the
+      pattern is the log system's job, which is what the control's own
+      discussion assumes.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.login_success, operator: eq, expected: true, quantifier: any, on_missing: fail}
+        - {type: fact_check, path: logging.login_failure, operator: eq, expected: true, quantifier: any, on_missing: fail}
+
+  # ══ Audit off-load and alerting ════════════════════════════════════════
+
+  - id: stig-junos-router-ndm-v217333
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217333}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      An alert on audit failure, which DISA reduces to sending log messages to a
+      syslog host at `critical` or below. The severity leaf is the load-bearing
+      one and its direction is easy to get backwards: a Junos severity is a
+      *threshold*, so `any critical` sends critical and everything more severe,
+      and configuring `emergency` or `alert` would send less than the control
+      requires, not more. Those two are therefore the only values excluded.
+
+      `quantifier: any` because one qualifying destination satisfies the control;
+      a device may reasonably send `emergency` to a pager host and `info` to the
+      log collector, and the collector is the one this control is about.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: logging.remote_syslog, must_be_present: true}
+        - {type: fact_check, path: logging.trap_level, operator: not_in, expected: [emergency, alert], quantifier: any, on_missing: fail}
+
+  - id: stig-junos-router-ndm-v217348
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217348}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Off-load audit records to a different system. This is the control that
+      makes the pattern pack's split between `syslog { file ... }` and
+      `syslog { host ... }` matter: only the host block emits
+      logging.remote_syslog, so a device logging exhaustively to local files -
+      which satisfies every audit-generation control above - fails this one, as
+      it should. Local logs die with the box that is being attacked.
+    condition:
+      type: presence
+      path: logging.remote_syslog
+      must_be_present: true
+
+  - id: stig-junos-router-ndm-v220141
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-220141}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      At least two syslog servers. A count, because the control names a number,
+      and the number is the whole point: V-217348 is satisfied by one
+      destination, and this control exists because one destination is a single
+      point of failure for the record of its own compromise.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 2}
+
+  # ══ Authentication and session control ═════════════════════════════════
+
+  - id: stig-junos-router-ndm-v217311
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217311}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      The title carries two numbers - three attempts and a 15-minute lockout -
+      and both are checked, because either alone is defeated. Three attempts with
+      no lockout is three attempts per reconnection; a 15-minute lockout that
+      never triggers locks nobody out.
+
+      `lte 3` and `gte 900` rather than equalities: a device that disconnects
+      after two attempts or locks out for an hour is more restrictive than the
+      requirement, and reporting a finding against it would be reporting a
+      finding against being safer than asked. 900 rather than 15 because
+      aaa.login_block is a normalised count of seconds on every pack - Junos
+      states `lockout-period` in minutes and the pattern pack converts it.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.authentication_attempts, operator: lte, expected: 3, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: aaa.authentication_attempts, operator: gt, expected: 0, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: aaa.login_block, operator: gte, expected: 900, quantifier: all, on_missing: fail}
+
+  - id: stig-junos-router-ndm-v217312
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217312}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      A login banner existing is not the control; the control is the *Standard
+      Mandatory DoD* banner, which the check text reproduces in full. A device
+      greeting administrators with its own acceptable-use notice has a banner and
+      fails this requirement, so the text is matched as well as its presence.
+
+      'U.S. Government' is the anchor phrase, for the same reason as in the IOS
+      and FortiGate packs: matching the full nine-paragraph notice would fail
+      every device over a line break, a trailing space or a curly apostrophe,
+      while that phrase appears in no other banner text.
+
+      Not verified: that the remaining paragraphs are present and unaltered. An
+      operator who pasted the first sentence and truncated the rest passes this
+      rule, which is why the report prints DISA's full banner from the catalog's
+      check text for comparison rather than paraphrasing it.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.login_banner, operator: eq, expected: true, quantifier: any, on_missing: fail}
+        - type: fact_check
+          path: mgmt.banner.text
+          operator: regex_match
+          expected: 'U\.S\. Government'
+          quantifier: any
+          case_sensitive: false
+          on_missing: fail
+
+  - id: stig-junos-router-ndm-v217323
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217323}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Fifteen characters, compared with `gte` because DISA writes the threshold
+      as `minimum-length 15` and a device requiring twenty is not less compliant.
+      Junos applies `system login password minimum-length` to locally
+      authenticated accounts, which is the population this NDM STIG governs.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.min_length
+      operator: gte
+      expected: 15
+      quantifier: all
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217328
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217328}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Five minutes, so 300 seconds - line.vty.exec_timeout is seconds on every
+      pack, and Junos states the class `idle-timeout` in minutes, which the
+      pattern pack converts.
+
+      `gt 0` is not tidiness: Junos reads `idle-timeout 0` as "never", so a bare
+      ceiling would pass the least secure setting the platform offers. And
+      `on_missing: fail` rather than the default `unknown` is the point of the
+      control - DISA's check is that *all* login classes carry the timeout, and
+      the built-in classes `super-user`, `operator` and `read-only` carry none.
+      A device whose accounts all use built-in classes has no CLI timeout at all,
+      and no fact at this path is the honest evidence of that.
+
+      Not verified: that no class was defined with a longer timeout than another.
+      `quantifier: all` covers that - every class-level timeout observed must be
+      within five minutes - but a class defined and assigned to nobody is checked
+      as strictly as one in use.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: line.vty.exec_timeout, operator: lte, expected: 300, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: line.vty.exec_timeout, operator: gt, expected: 0, quantifier: all, on_missing: fail}
+
+  # ══ Services, SSH and SNMP ═════════════════════════════════════════════
+
+  - id: stig-junos-router-ndm-v217320
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217320}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      DISA names three services that "should never be enabled" - finger, telnet
+      and clear-text JUNOScript - and a longer list that is permitted when
+      operationally required. Only the never-enabled ones are asserted, because
+      the rest are a judgement about operational need that a configuration file
+      does not record, and failing a device for running NETCONF over SSH would be
+      inventing a requirement DISA did not write.
+
+      Both facts are emitted by absence as well as by presence: a Junos config
+      with no `telnet;` under `services` yields service.telnet false, which is
+      the correct evidence rather than a missing fact, because on this platform
+      the service is off unless the statement is there.
+
+      Not verified: `xnm-clear-text`, the third of the three. No canonical path
+      records it. Recorded in GAPS.md rather than approximated with a
+      nearby-looking path.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: service.telnet, operator: eq, expected: false, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: service.finger, operator: eq, expected: false, quantifier: all, on_missing: fail}
+
+  - id: stig-junos-router-ndm-v217322
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217322}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Replay-resistant authentication, which DISA reduces to FIPS-140-2 compliant
+      HMACs on SSH. `subset_of` rather than `contains`: the control is about what
+      the device will *negotiate*, and DISA's own note says so - "if a remote
+      party tries to negotiate using an algorithm that is not part of the allowed
+      list, the request is rejected". A device offering hmac-sha2-256 alongside
+      hmac-md5 has an allowed list containing hmac-md5, and an attacker chooses
+      from the list rather than being handed the strongest entry in it.
+
+      The expected set is the SHA-2 family with their OpenSSH encrypt-then-MAC
+      variants, which are the same algorithms under a construction that is
+      stronger, not weaker. hmac-sha1 is excluded: it remains in Junos defaults
+      and is no longer acceptable under FIPS 140-2 for this purpose.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.mac
+      operator: subset_of
+      expected:
+        - hmac-sha2-256
+        - hmac-sha2-512
+        - hmac-sha2-256-etm@openssh.com
+        - hmac-sha2-512-etm@openssh.com
+      quantifier: all
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217340
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217340}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Integrity of remote maintenance sessions, which resolves to the same SSH
+      MAC list as V-217322 - DISA's check text for the two is the same command
+      with the same expected output. The rules are kept separate because they are
+      two findings with two CCIs, and an auditor tracing MA-04(06) must find a
+      result for it rather than a cross-reference. See V-217322 for why the
+      operator is `subset_of`.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.mac
+      operator: subset_of
+      expected:
+        - hmac-sha2-256
+        - hmac-sha2-512
+        - hmac-sha2-256-etm@openssh.com
+        - hmac-sha2-512-etm@openssh.com
+      quantifier: all
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217341
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217341}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Confidentiality of remote maintenance sessions, which is the cipher list
+      rather than the MAC list, and `subset_of` for the same negotiation reason.
+
+      DISA's example shows `aes128-cbc`, and the expected set here is wider than
+      the example rather than equal to it: CTR and GCM are the modes Junos
+      offers alongside CBC, both are FIPS 140-2 approved AES, and GCM is what a
+      current Junos release will negotiate first. Holding a device to the literal
+      example would fail it for using a stronger mode than the one printed.
+      3DES and the arcfour/blowfish/CBC-legacy suites are excluded.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.cipher
+      operator: subset_of
+      expected:
+        - aes128-cbc
+        - aes192-cbc
+        - aes256-cbc
+        - aes128-ctr
+        - aes192-ctr
+        - aes256-ctr
+        - aes128-gcm@openssh.com
+        - aes256-gcm@openssh.com
+      quantifier: all
+      on_missing: fail
+
+  - id: stig-junos-router-ndm-v217337
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217337}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      SNMP message authentication with a FIPS-validated HMAC, which on Junos is
+      `authentication-sha` under a v3 USM user. Three leaves rather than one,
+      because the path holds one fact per USM user and a device is only as strong
+      as its weakest user: at least one user must use SHA, and no user may use
+      MD5 or none. `ne` with `quantifier: all` is what says "no user anywhere",
+      and it is the leaf that catches the configuration this control exists to
+      find - a hardened NMS user beside a legacy MD5 one nobody removed.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: snmp.v3_auth, operator: eq, expected: sha, quantifier: any, case_sensitive: false, on_missing: fail}
+        - {type: fact_check, path: snmp.v3_auth, operator: ne, expected: md5, quantifier: all, case_sensitive: false, on_missing: fail}
+        - {type: fact_check, path: snmp.v3_auth, operator: ne, expected: none, quantifier: all, case_sensitive: false, on_missing: fail}
+
+  - id: stig-junos-router-ndm-v217338
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217338}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      SNMP message encryption with a FIPS 140-2 approved algorithm, which is
+      `privacy-aes128` or wider. The pack records the AES key size as the fact
+      value, so the approved set is the three sizes Junos offers; `privacy-des`
+      and `privacy-none` are recorded by name and excluded by the `ne` leaves,
+      which apply to every USM user for the reason given at V-217337.
+
+      Authentication is not re-checked here even though DISA's note observes that
+      the privacy security level authenticates too. V-217337 is that control, and
+      duplicating it would report the same defect twice under two CCIs.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: snmp.v3_priv, operator: in, expected: ['128', '192', '256'], quantifier: any, on_missing: fail}
+        - {type: fact_check, path: snmp.v3_priv, operator: ne, expected: des, quantifier: all, case_sensitive: false, on_missing: fail}
+        - {type: fact_check, path: snmp.v3_priv, operator: ne, expected: none, quantifier: all, case_sensitive: false, on_missing: fail}
+
+  # ══ Time, backup and configuration integrity ═══════════════════════════
+
+  - id: stig-junos-router-ndm-v217334
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217334}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Primary and secondary time sources, so a count of two. The count is only
+      honest because the pattern pack stopped filing `boot-server` at
+      time.ntp.server: a boot-server is queried once, before the NTP daemon
+      starts, and a device with `boot-server 10.0.0.1; server 10.0.0.1;` has one
+      time source however many statements name it.
+
+      Not verified: that the two servers are *authoritative*, which is a property
+      of the servers rather than of this device's configuration.
+    condition: {type: count, path: time.ntp.server, operator: gte, expected: 2}
+
+  - id: stig-junos-router-ndm-v217335
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217335}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Timestamps mappable to UTC or GMT. DISA's note that "UTC is the default;
+      hence, the command set time-zone may not be seen in the configuration" is
+      why `on_missing: pass` is correct here and almost nowhere else in this
+      pack: on Junos the absence of the statement *is* the compliant state, which
+      is the one shape of check where absence may be read as compliance.
+
+      The regex is anchored so `UTC` matches and `America/Detroit` does not,
+      and it accepts the GMT offsets Junos also spells - `GMT`, `Etc/UTC`,
+      `Etc/GMT+5` - because all of them are stated relative to the zero meridian
+      and map to UTC without a rule table.
+    condition:
+      type: fact_check
+      path: time.timezone
+      operator: regex_match
+      expected: '\A(?:Etc/)?(?:UTC|GMT|Universal|Zulu|UCT)(?:[+-]\d{1,2})?\Z'
+      quantifier: all
+      case_sensitive: false
+      on_missing: pass
+
+  - id: stig-junos-router-ndm-v217339
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217339}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Cryptographic authentication of NTP sources. Two leaves because Junos needs
+      two statements and either alone is inert: `authentication-key` defines a
+      key, and `trusted-key` is what makes the daemon actually require it. A
+      device with keys defined and no trusted-key list accepts unauthenticated
+      time from anyone, which is the configuration this control exists to find.
+
+      Not verified: that each `server` statement names a key. That needs the
+      cross-reference condition type recorded in the roadmap - resolving a
+      server's key id against the defined key list - and is tracked in GAPS.md
+      alongside the time.ntp.key_id split it depends on.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: time.ntp.authentication, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - {type: presence, path: time.ntp.trusted_keys, must_be_present: true}
+
+  - id: stig-junos-router-ndm-v217350
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217350}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Two authentication servers, so a count of two, and DISA's check text is two
+      `radius-server` entries under one stanza. The control is CAT I because the
+      failure mode it prevents is total: with one authentication server and no
+      local fallback, that server going down locks every administrator out of the
+      device that is about to need them.
+
+      `aaa.server.host` counts RADIUS and TACACS+ servers alike, because the
+      control asks for two authentication servers rather than two of a particular
+      protocol, and a site running one of each has the redundancy it is asking
+      for.
+
+      Not verified: that the two servers are reachable, or that they are distinct
+      systems rather than two addresses on one box. Both are runtime facts.
+    condition: {type: count, path: aaa.server.host, operator: gte, expected: 2}
+
+  - id: stig-junos-router-ndm-v217351
+    catalog: {catalog_id: disa_stig_juniper_router_ndm_security_technical_implementation_guide_v3r2, control_id: V-217351}
+    applies_to: {vendors: [juniper_junos], os_families: [junos]}
+    mapping_rationale: >
+      Back up the configuration when changes occur. Two leaves, and the second is
+      what makes it a security control rather than an operations one:
+      `transfer-on-commit` without an archive site backs the configuration up to
+      nowhere, and an archive site reached over FTP or HTTP ships the running
+      configuration of a router - including its hashed credentials and its ACLs -
+      across the network in clear text. DISA's example is scp and the regex
+      requires it.
+
+      Not verified: that the destination is reachable, or that the credentials in
+      the archive-site URL are valid. Both are runtime facts.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: file.config_archive, operator: eq, expected: true, quantifier: all, on_missing: fail}
+        - type: fact_check
+          path: file.archive_path
+          operator: regex_match
+          expected: '\A(?:scp|sftp)://'
+          quantifier: all
+          case_sensitive: false
+          on_missing: fail

@@ -1,0 +1,2370 @@
+# Cisco IOS 12.x / 15.x pattern pack.
+#
+# This file IS the Cisco IOS parser. There is no cisco_ios.py: backend/ingest/
+# generic.py runs this data, and the same engine runs every other vendor's pack.
+# That is what makes PS 26155 C5 ("add vendors without manual code modification")
+# literally true rather than aspirational.
+#
+# Reading order for a reviewer:
+#   detect:   how a file is recognised as Cisco IOS
+#   ignore:   lines that are structural noise, not unparsed content
+#   patterns: global commands, matched outside any block
+#   blocks:   stanzas, whose children are matched only inside them
+#   defaults: facts that follow from a command being absent, each with its reason
+#
+# Two conventions worth knowing before editing:
+#
+# 1. Value paths carry values, boolean companion paths carry on/off. A command
+#    with an operand ("logging host 10.0.0.1") fills the value path
+#    (logging.remote_syslog) AND sets the companion boolean (logging.enable).
+#    Its negation ("no logging host") sets only the boolean to false. This keeps
+#    a presence-style rule on the value path honest: an explicitly disabled
+#    feature never leaves a fact sitting at the value path.
+#
+# 2. First match wins, top to bottom, so a specific pattern must be listed above
+#    the general one it would otherwise be swallowed by. Where that matters the
+#    pattern carries a note saying so.
+#
+# Secrets are never emitted as fact values. Password and key hashes are recorded
+# by their *type* (mgmt.enable_secret.hash_type, aaa.server.key_encrypted)
+# because that is the compliance-relevant part; the ciphertext itself adds risk
+# and answers no control.
+
+vendor: cisco_ios
+os_family: ios
+parser_id: cisco_ios_patterns@1
+description: >
+  Cisco IOS classic (12.x/15.x) running-configuration and show-version output.
+  Covers the CIS Cisco IOS 15 benchmark surface and the DISA IOS Router/Switch
+  STIG check surface.
+
+# IOS comments start with '!'. '#' is deliberately NOT a comment prefix here:
+# it is a common banner delimiter, and treating it as a comment would silently
+# swallow banner text.
+comment_prefixes:
+  - "!"
+
+case_insensitive: true
+
+# Detection has to answer "is this file Cisco IOS?", which is a different
+# question from "is this file hardened?". Every marker in the original list was a
+# security-relevant command, so a short but unmistakably-IOS config — a version
+# header, a hostname, two commands and `end` — scored zero and was refused with
+# "no loaded pattern pack recognises this file". The list below therefore has two
+# halves: *shape* markers, which say the file is written in IOS syntax, and
+# *surface* markers, which say it configures the things IOS configs configure.
+# Either kind counts one hit; three hits are still required to make a claim.
+#
+# The shape markers carry a leading "\n" where the command word is ambiguous as a
+# bare substring: markers are matched case-insensitively against the whole file,
+# so "end" alone would hit "sending", "append" and "vendor", and "version 1"
+# alone would hit "ip ssh version 1". Requiring the preceding newline means the
+# marker only fires when the token opens a line, which is what makes it evidence
+# of syntax rather than a coincidence of spelling. CRLF files match too, because
+# "\r\nend" contains "\nend".
+detect:
+  min_hits: 3
+  markers:
+    # ── Shape: this file is written in IOS syntax ──────────────────────
+    # The running-config version header. IOS classic writes "version 12.4" or
+    # "version 15.0" as its first non-comment line; NX-OS writes "version
+    # 7.3(0)N1(1)", so the "1" also keeps the two apart.
+    - "\nversion 1"
+    # IOS-family global hostname command. Junos spells this "set system
+    # host-name" and FortiOS "set hostname", so the presence of the bare command
+    # is already family evidence; the siblings that do share it (ASA, NX-OS, XR)
+    # are excluded by anti_markers below.
+    - "hostname "
+    # The IOS configuration terminator. Junos, FortiOS and PAN-OS have no
+    # equivalent — they close with braces or nothing at all.
+    - "\nend"
+    # ── Surface: this file configures what IOS configs configure ───────
+    - "boot-start-marker"
+    - "service timestamps"
+    - "service password-encryption"
+    - "line con 0"
+    - "line vty"
+    - "transport input"
+    - "spanning-tree"
+    - "ip ssh version"
+    - "snmp-server"
+    - "enable secret"
+    - "enable password"
+    - "interface gigabitethernet"
+    - "interface fastethernet"
+    - "ip access-list"
+    - "aaa new-model"
+    - "no ip http server"
+    - "logging trap"
+  # Syntax no other supported platform emits. Present together, these lift IOS
+  # above a sibling dialect that shares most of its commands.
+  strong_markers:
+    - "boot-start-marker"
+    - "boot-end-marker"
+  strong_bonus: 8
+  # A file carrying any of these is another platform, whatever else it contains.
+  anti_markers:
+    - "asa version"          # cisco_asa
+    - "nameif "              # cisco_asa
+    - "feature nx-os"        # cisco_nxos
+    - "vdc "                 # cisco_nxos
+    - "!! ios xr"            # cisco_xr
+    - "set system services"  # juniper_junos
+    - "config system global" # fortinet
+    - "management api http-commands"  # arista_eos
+    - "set deviceconfig"     # paloalto_panos
+  filename_hints:
+    - "ios"
+    - "cisco"
+
+# Structural noise. A line here is neither a fact nor an unparsed line, because
+# it carries no compliance meaning at all. Anything genuinely unrecognised must
+# stay out of this list so it reaches the training queue (C2).
+ignore:
+  - '^boot-(?:start|end)-marker$'
+  - '^end$'
+  - '^exit(?:-address-family)?$'
+  - '^(?:\^C?|#|%|~|\+)\s*$'   # banner delimiter lines
+  - '^logging synchronous$'    # console output formatting, not a control
+  - '^stopbits\s+\d+$'
+  - '^databits\s+\d+$'
+  # Serial line speeds under 'line con'/'line aux'. Enumerated rather than
+  # '^speed \d+$' so an interface's 'speed 1000' still reaches if_speed instead
+  # of being silently discarded as console noise.
+  - '^speed\s+(?:1200|2400|4800|9600|19200|38400|57600|115200)$'
+  - '^Building configuration'
+  - '^Current configuration\s*:'
+  - '^upgrade fpd auto$'
+  - '^no ipv6 cef$'
+  - '^ip cef$'
+  - '^multilink bundle-name authenticated$'
+  - '^license (?:udi|boot|accept)'
+  - '^memory-size iomem\s+\d+$'
+  - '^diagnostic bootup level'
+  - '^voice-card\s+\d+$'
+
+  # ── 'show' output scaffolding ──────────────────────────────────────────
+  # An upload may bundle 'show version' / 'show inventory' text with the running
+  # config, because C4 needs the serial and hardware and neither is in a config.
+  # The command echo and the inventory NAME/DESCR header carry no fact — the
+  # facts are on the PID/SN and serial-number lines below. Without these two
+  # entries every such upload puts three templates in the training queue that an
+  # admin has to dismiss, which teaches them to dismiss the queue.
+  #
+  # Deliberately NOT ignored: 'Configuration register is 0x…'. That one is a
+  # security-relevant fact (0x2142 skips the startup config on boot), so it has a
+  # pattern of its own — see show_version_config_register.
+  - '^show\s+(?:version|inventory|running-config|startup-config|tech-support)\b'
+  - '^NAME:\s*".*",\s*DESCR:\s*".*"$'
+
+  # ── 'show version' boilerplate ─────────────────────────────────────────
+  # Measured, not guessed: the two fixtures in test_configs/device_identity/
+  # leave 71 lines unparsed between them, and only 10 are configuration. The
+  # other 61 are the block below. They matter because the training queue is
+  # ordered by occurrences DESC — and this text appears once per device, exactly
+  # like the genuinely unmapped config lines it would sit beside. Busiest-first
+  # does not bury it; it interleaves. So an operator opening the C2 training view
+  # after ingesting two devices would find 61 rows of build metadata around 10
+  # real ones, and the queue stops being a work list.
+  #
+  # The test applied to each line: does it carry a fact a rule could ever read?
+  # Copyright strings, compile timestamps, reload reasons, interface tallies and
+  # memory sizes do not. Assembly and revision numbers, CLEI codes and MAC
+  # addresses identify hardware but no framework has a control on them, and
+  # authoring a canonical path with no reader is how a vocabulary rots.
+  #
+  # NOT ignored, and this is the one that matters: 'The password-recovery
+  # mechanism is enabled.' Its negation is what 'no service password-recovery'
+  # produces, which is a real hardening decision, so it gets a pattern —
+  # see show_version_password_recovery_{on,off}.
+  - '^Technical Support:\s+http'
+  - '^Copyright \(c\)'
+  - '^Compiled \w{3}\s'
+  - '^(?:ROM|BOOTLDR):\s'
+  - '^System returned to ROM by\b'
+  - '^System restarted at\b'
+  - '^Last (?:reload|reset)\b'
+  - '^\d+[KMG]? bytes of\b'
+  - '^DRAM configuration is\b'
+  - '^\d+ (?:\w+ )*(?:[Ee]thernet interfaces|interfaces|terminal lines?)$'
+  - '^\d+ Virtual Private Network \(VPN\) Module'
+  # Component identifiers: real, but nothing reads them. See the note beside
+  # inventory_pid_sn for why board serials stay out of device.serials.
+  - '^Base ethernet MAC Address\s*:'
+  - '^(?:Motherboard|Power supply) (?:assembly|part) number\s*:'
+  - '^(?:Motherboard|Power supply) serial number\s*:'
+  - '^(?:Model|Motherboard|Top Assembly|Hardware Board) revision number\s*:'
+  - '^Top Assembly Part Number\s*:'
+  - '^Top Assembly Revision Number\s*:'
+  - '^Hardware Board Revision Number\s*:'
+  - '^Version ID\s*:'
+  - '^CLEI Code Number\s*:'
+  # The stack-member table in 'show version'. Its model and version columns are
+  # real, but 'show inventory' reports the same members with a serial attached,
+  # which is the better source — see inventory_pid_sn. Parsing both would double
+  # every stack member in device.hardware.
+  - '^Switch\s+Ports\s+Model\s+SW Version\s+SW Image$'
+  - '^\*?\s*\d+\s+\d+\s+\S+\s+\d+\.\d+\S*\s+\S+$'
+  # The technology-package licence table on ISR platforms. securityk9 gates the
+  # crypto features, so this is not worthless — but no catalogue control reads a
+  # licence state, and a path with no reader is vocabulary rot.
+  #
+  # Anchored on the table's shape, not its first column. The obvious regex
+  # (`^(?:ipbase|security|uc|data)\s+\S+\s+\S+\s*\S*$`) also swallows
+  # 'security passwords min-length 8', a real hardening directive that
+  # password_min_length parses — caught by
+  # test_ignore_rules_do_not_swallow_emitted_paths, which is why that test
+  # exists. A licence row's later columns are always a package name ending in
+  # 'k9', a licence type, or 'None', and no config directive looks like that.
+  - "^Technology Package License Information"
+  - '^Technology\s+Technology-package'
+  - '^Current\s+Type\s+Next reboot$'
+  - '^\S+\s+(?:\S*k9|None)\s+(?:Permanent|Evaluation|Subscription|EvalRightToUse|None)\s+(?:\S*k9|None)$'
+  # Table rules of dashes, in either the show-version or licence tables.
+  - '^[-\s]{10,}$'
+
+patterns:
+
+  # ── Device identity ───────────────────────────────────────────────────
+  # PS 26155 C4 requires the report to identify a device by serial number and
+  # hardware. Neither appears in a running-config, so both are read from any
+  # 'show version' / 'show inventory' text included in the upload. When the
+  # upload is config-only they stay empty and the report says so.
+
+  - id: version
+    regex: '^version\s+(?P<value>\d+\.\d+\S*)$'
+    path: device.os_version
+    value: str
+
+  - id: ios_version_banner
+    regex: '^Cisco IOS Software.*?Version\s+(?P<value>[^,\s]+)'
+    path: device.os_version
+    value: str
+    note: first line of 'show version'
+
+  - id: hostname
+    regex: '^hostname\s+(?P<value>\S+)$'
+    path: device.hostname
+    value: str
+
+  - id: show_version_hostname
+    regex: '^(?P<value>\S+)\s+uptime is\s+'
+    emits:
+      - {path: device.hostname, value: str, group: value}
+      - {path: device.uptime, value: line}
+
+  - id: system_serial
+    regex: '^System [Ss]erial [Nn]umber\s*:\s*(?P<value>\S+)'
+    path: device.serials
+    value: str
+
+  - id: processor_board_id
+    regex: '^Processor board ID\s+(?P<value>\S+)'
+    path: device.serials
+    value: str
+
+  # Deliberately absent: 'Motherboard serial number' and 'Power supply serial
+  # number'. device.serials is an unlabelled list, and its consumer is an auditor
+  # cross-referencing the C4 report against an asset register — which tracks
+  # chassis, not boards. A board serial in that list matches nothing and the
+  # auditor cannot tell which entry is the chassis. Both lines are ignored above.
+  # 'Processor board ID' is kept despite its name: IOS prints the chassis serial
+  # there, identically to 'System serial number' on every platform in
+  # test_configs/device_identity/, and on older units it is the only serial in
+  # 'show version'. Labelling serials by role would need a structured
+  # device.serials — worth doing, but it is a canonical-model change.
+
+  - id: inventory_pid_sn
+    regex: '^PID:\s*(?P<pid>\S+?)\s*,\s*VID:\s*(?P<vid>\S*)\s*,\s*SN:\s*(?P<sn>\S+)'
+    emits:
+      - {path: device.hardware, value: str, group: pid}
+      - {path: device.serials, value: str, group: sn}
+    note: '"show inventory" line; one per chassis, module or stack member'
+
+  - id: model_number
+    regex: '^Model [Nn]umber\s*:\s*(?P<value>\S+)'
+    path: device.model
+    value: str
+
+  - id: chassis_model
+    regex: '^cisco\s+(?P<value>\S+)\s+\('
+    path: device.model
+    value: str
+    note: '"cisco CISCO2921/K9 (revision 1.0) with ..." from show version'
+
+  - id: system_image
+    regex: '^System image file is\s+"(?P<value>[^"]+)"'
+    path: image.file
+    value: str
+
+  - id: boot_system
+    regex: '^boot system\s+(?P<value>\S+.*)$'
+    path: device.boot_system
+    value: str
+
+  - id: config_register
+    regex: '^config-register\s+(?P<value>\S+)$'
+    path: device.config_register
+    value: str
+
+  # The same fact from 'show version'. Worth a pattern rather than an ignore
+  # entry: 0x2142 tells the router to skip the startup config on boot, which
+  # discards every setting audited here. A device whose running config looks
+  # perfect and whose register is 0x2142 is one power cycle from unconfigured.
+  - id: show_version_config_register
+    regex: '^Configuration register is\s+(?P<value>0x[0-9a-fA-F]+)'
+    path: device.config_register
+    value: str
+    note: "'show version' form; the config command form is above"
+
+  # ── Small services ────────────────────────────────────────────────────
+  # negated_bool matches both polarities in one pattern: the '(?P<neg>no\s+)?'
+  # group flips the value, so 'service password-encryption' and
+  # 'no service password-encryption' cannot disagree with each other.
+
+  - id: service_timestamps_log
+    regex: '^(?P<neg>no\s+)?service timestamps log\s+(?P<value>.+)$'
+    emits:
+      - {path: service.timestamps, value: negated_bool}
+      - {path: logging.timestamps, value: str, group: value}
+    note: must precede service_timestamps_debug and service_timestamps_bare
+
+  - id: service_timestamps_debug
+    regex: '^(?P<neg>no\s+)?service timestamps debug\s+(?P<value>.+)$'
+    emits:
+      - {path: service.timestamps, value: negated_bool}
+      - {path: logging.timestamps_debug, value: str, group: value}
+    note: >
+      The debug stream gets its own path rather than sharing logging.timestamps
+      with the log stream. CIS 2.2.6 asks only about 'service timestamps debug
+      datetime'; if both streams wrote to one path, an all-quantified rule for
+      the debug control would also fail on a misconfigured log line, reporting a
+      finding against a control the device actually satisfies.
+
+  - id: service_timestamps_bare
+    regex: '^(?P<neg>no\s+)?service timestamps$'
+    path: service.timestamps
+    value: negated_bool
+
+  - id: service_password_encryption
+    regex: '^(?P<neg>no\s+)?service password-encryption$'
+    path: service.password_encryption
+    value: negated_bool
+
+  - id: service_pad
+    regex: '^(?P<neg>no\s+)?service pad$'
+    path: service.pad
+    value: negated_bool
+
+  # Password recovery is readable from two places and they disagree in form: the
+  # config carries the directive only when it has been turned off, while
+  # 'show version' states the resulting condition either way. Both emit the same
+  # canonical path, so a rule reads one fact regardless of what the upload held.
+  #
+  # No entry in the `defaults` block at the end of this file, unlike the other
+  # service.* switches. Password recovery is a Catalyst feature; asserting a
+  # default of true on an ISR that never had the mechanism would be inventing a
+  # fact. Absent evidence the path stays empty and a rule reading it renders
+  # INDETERMINATE, which is the honest verdict.
+  - id: service_password_recovery
+    regex: '^(?P<neg>no\s+)?service password-recovery$'
+    path: service.password_recovery
+    value: negated_bool
+
+  - id: show_version_password_recovery_on
+    regex: '^The password-recovery mechanism is enabled\.$'
+    path: service.password_recovery
+    value: 'true'
+
+  - id: show_version_password_recovery_off
+    regex: '^The password-recovery mechanism is disabled\.$'
+    path: service.password_recovery
+    value: 'false'
+
+  - id: service_finger
+    regex: '^(?P<neg>no\s+)?(?:service finger|ip finger)$'
+    path: service.finger
+    value: negated_bool
+
+  - id: service_config
+    regex: '^(?P<neg>no\s+)?service config$'
+    path: service.config
+    value: negated_bool
+
+  - id: service_tcp_small_servers
+    regex: '^(?P<neg>no\s+)?service tcp-small-servers$'
+    path: service.tcp_small_servers
+    value: negated_bool
+
+  - id: service_udp_small_servers
+    regex: '^(?P<neg>no\s+)?service udp-small-servers$'
+    path: service.udp_small_servers
+    value: negated_bool
+
+  - id: service_tcp_keepalives_in
+    regex: '^(?P<neg>no\s+)?service tcp-keepalives-in$'
+    path: service.tcp_keepalives_in
+    value: negated_bool
+
+  - id: service_tcp_keepalives_out
+    regex: '^(?P<neg>no\s+)?service tcp-keepalives-out$'
+    path: service.tcp_keepalives_out
+    value: negated_bool
+
+  - id: service_bootp
+    regex: '^(?P<neg>no\s+)?ip bootp server$'
+    path: service.bootp
+    value: negated_bool
+
+  - id: service_dhcp
+    regex: '^(?P<neg>no\s+)?service dhcp$'
+    path: service.dhcp
+    value: negated_bool
+
+  - id: service_identd
+    regex: '^(?P<neg>no\s+)?ip identd$'
+    path: service.identd
+    value: negated_bool
+
+  - id: service_dns
+    regex: '^(?P<neg>no\s+)?ip dns server$'
+    path: service.dns
+    value: negated_bool
+    note: >
+      The DNS *server*, not the resolver. 'ip name-server' points the device at
+      someone else's DNS and is unremarkable; 'ip dns server' makes the router
+      answer queries for the whole network, which is what DISA CISC-ND-000470
+      lists among the services that must not be running. No default is declared
+      because the two are one keyword apart and a wrong default here would credit
+      or condemn every device silently - absence is reported as absence.
+
+  - id: service_rcmd_rcp
+    regex: '^(?P<neg>no\s+)?ip rcmd rcp-enable$'
+    path: service.rcmd
+    value: negated_bool
+
+  - id: service_rcmd_rsh
+    regex: '^(?P<neg>no\s+)?ip rcmd rsh-enable$'
+    path: service.rcmd
+    value: negated_bool
+    note: >
+      Both rcmd forms land on one path deliberately. CISC-ND-000470 forbids the
+      pair as a unit, and either one being enabled is the same finding; keeping
+      them separate would need the rule to say "not rcp and not rsh" and would
+      quietly pass a device running only the one the rule forgot. Two facts at
+      one path with an 'all' quantifier says it once and cannot forget.
+
+  - id: service_boot_network
+    regex: '^(?P<neg>no\s+)?boot network(?:\s+\S+.*)?$'
+    path: service.boot_network
+    value: negated_bool
+    note: >
+      The filename argument is optional because the negated form does not carry
+      one: enabling it reads 'boot network tftp://host/cfg' but disabling it is
+      the bare 'no boot network'. Requiring the argument matched only the
+      enabled form, so the compliant device produced no fact and fell through to
+      whatever the rule's on_missing said, while the non-compliant one was
+      recorded correctly - the exact asymmetry that makes a check trustworthy
+      only when it fails.
+
+  - id: service_boot_server
+    regex: '^(?P<neg>no\s+)?ip boot server$'
+    path: service.boot_network
+    value: negated_bool
+    note: >
+      As with rcmd: 'boot network' loads a config from the network at boot and
+      'ip boot server' serves one to others. Both are network-boot surface and
+      CISC-ND-000470 names them together.
+
+  - id: service_cdp_run
+    regex: '^(?P<neg>no\s+)?cdp run$'
+    path: service.cdp
+    value: negated_bool
+
+  - id: service_lldp_run
+    regex: '^(?P<neg>no\s+)?lldp run$'
+    path: service.lldp
+    value: negated_bool
+
+  - id: service_gratuitous_arp
+    regex: '^(?P<neg>no\s+)?ip gratuitous-arps$'
+    path: service.gratuitous_arp
+    value: negated_bool
+
+  - id: dhcp_snooping_global
+    regex: '^(?P<neg>no\s+)?ip dhcp snooping$'
+    path: service.dhcp_snooping
+    value: negated_bool
+
+  - id: arp_inspection_global
+    regex: '^ip arp inspection vlan\s+(?P<value>\S+)$'
+    emits:
+      - {path: service.arp_inspection, value: true}
+    note: presence of any inspected VLAN means the feature is on
+
+  # ── SSH and crypto keys ───────────────────────────────────────────────
+
+  - id: ssh_version
+    regex: '^ip ssh version\s+(?P<value>\d+)$'
+    path: mgmt.ssh.version
+    value: int
+
+  - id: ssh_timeout
+    regex: '^ip ssh time-out\s+(?P<value>\d+)$'
+    path: mgmt.ssh.timeout
+    value: int
+
+  - id: ssh_auth_retries
+    regex: '^ip ssh authentication-retries\s+(?P<value>\d+)$'
+    path: mgmt.ssh.maxretries
+    value: int
+
+  - id: ssh_source_interface
+    regex: '^ip ssh source-interface\s+(?P<value>\S+)$'
+    path: mgmt.ssh.source_interface
+    value: str
+
+  - id: ssh_logging_events
+    regex: '^ip ssh logging events$'
+    path: mgmt.ssh.logging
+    value: true
+
+  - id: ssh_dh_min_size
+    regex: '^ip ssh dh min size\s+(?P<value>\d+)$'
+    path: mgmt.ssh.dh_min_size
+    value: int
+
+  - id: ssh_rekey_time
+    regex: '^ip ssh rekey time\s+(?P<value>\d+)$'
+    path: mgmt.ssh.rekey_time
+    value: int
+
+  - id: ssh_rekey_volume
+    regex: '^ip ssh rekey volume\s+(?P<value>\d+)$'
+    path: mgmt.ssh.rekey_volume
+    value: int
+
+  - id: ssh_algorithm_encryption
+    regex: '^ip ssh server algorithm encryption\s+(?P<value>.+)$'
+    path: mgmt.ssh.cipher
+    value: word_list
+
+  - id: ssh_algorithm_mac
+    regex: '^ip ssh server algorithm mac\s+(?P<value>.+)$'
+    path: mgmt.ssh.mac
+    value: word_list
+
+  - id: ssh_algorithm_kex
+    regex: '^ip ssh server algorithm kex\s+(?P<value>.+)$'
+    path: mgmt.ssh.kex
+    value: word_list
+
+  - id: ssh_pubkey_chain
+    regex: '^ip ssh pubkey-chain$'
+    path: mgmt.ssh.pubkey_chain
+    value: true
+
+  - id: domain_name
+    regex: '^ip domain[- ]name\s+(?P<value>\S+)$'
+    path: mgmt.domain_name
+    value: str
+
+  - id: crypto_key_rsa
+    regex: '^crypto key generate rsa(?:\s+general-keys)?(?:\s+label\s+\S+)?(?:\s+modulus\s+(?P<bits>\d+))?'
+    emits:
+      - {path: crypto.key.type, value: const, literal: rsa}
+      - {path: crypto.key.size, value: int, group: bits}
+
+  - id: crypto_fips
+    regex: '^(?P<neg>no\s+)?fips mode enable$'
+    path: crypto.fips_mode
+    value: negated_bool
+
+  # ── HTTP / management planes ───────────────────────────────────────────
+
+  - id: http_server
+    regex: '^(?P<neg>no\s+)?ip http server$'
+    path: mgmt.http.server_enabled
+    value: negated_bool
+
+  - id: http_secure_server
+    regex: '^(?P<neg>no\s+)?ip http secure-server$'
+    path: mgmt.http.secure_server_enabled
+    value: negated_bool
+
+  - id: http_authentication
+    regex: '^ip http authentication\s+(?P<value>.+)$'
+    path: mgmt.http.auth
+    value: lower
+
+  - id: http_access_class
+    regex: '^ip http access-class\s+(?P<value>\S+)$'
+    path: mgmt.http.acl
+    value: str
+
+  - id: http_tls_version
+    regex: '^ip http tls-version\s+(?P<value>\S+)$'
+    path: mgmt.http.tls_version
+    value: lower
+
+  - id: http_max_connections
+    regex: '^ip http max-connections\s+(?P<value>\d+)$'
+    path: mgmt.http.max_connections
+    value: int
+
+  - id: http_timeout_policy
+    regex: '^ip http timeout-policy idle\s+(?P<value>\d+)(?:\s+life\s+\d+)?(?:\s+requests\s+\d+)?$'
+    path: mgmt.http.idle_timeout
+    value: int
+    note: >
+      Seconds, unlike 'exec-timeout' on a line, which is minutes-and-seconds.
+      Kept in the publisher's own unit rather than normalised to minutes because
+      CISC-ND-000720 states the threshold as 'idle 300' and a rule that has to
+      divide by sixty to agree with the document it cites is a rule nobody can
+      check by reading.
+
+  - id: http_secure_ciphersuite
+    regex: '^ip http secure-ciphersuite\s+(?P<value>.+)$'
+    path: crypto.cipher_suite
+    value: word_list
+
+  - id: netconf
+    regex: '^(?P<neg>no\s+)?netconf(?:-yang| ssh)?$'
+    path: mgmt.netconf.enabled
+    value: negated_bool
+
+  - id: restconf
+    regex: '^(?P<neg>no\s+)?restconf$'
+    path: mgmt.restconf.enabled
+    value: negated_bool
+
+  - id: transport_preferred
+    regex: '^transport preferred\s+(?P<value>\S+)$'
+    path: mgmt.transport_preferred
+    value: lower
+    note: >
+      Appears inside line blocks but is declared at top level: the engine falls
+      through from a block's children to the pack's global patterns, so one
+      declaration covers console, vty and aux without triplication.
+
+  # ── Passwords, enable secret, local users ─────────────────────────────
+
+  - id: enable_secret_typed
+    regex: '^enable secret\s+(?:level\s+\d+\s+)?(?P<type>\d+)\s+\S+$'
+    path: mgmt.enable_secret.hash_type
+    value: int
+    group: type
+    note: must precede enable_secret_plain; the hash itself is never emitted
+
+  - id: enable_secret_plain
+    regex: '^enable secret\s+(?:level\s+\d+\s+)?\S+$'
+    path: mgmt.enable_secret.hash_type
+    value: const
+    literal: 0
+    note: an untyped 'enable secret' is stored as type 0 in the config
+
+  - id: enable_password_typed
+    regex: '^enable password\s+(?:level\s+\d+\s+)?(?P<type>\d+)\s+\S+$'
+    path: mgmt.enable_password.present
+    value: true
+    note: >
+      'enable password' is the weak predecessor of 'enable secret'; both CIS and
+      the STIG fail its presence, so presence is the whole fact.
+
+      Its hash type is deliberately NOT emitted at mgmt.enable_secret.hash_type.
+      Sharing that path would let a device carrying only 'enable password 7 …'
+      answer "is enable secret set with a strong hash" with a 7, which passes a
+      'gte 5' check on a device that has no enable secret at all - a false
+      negative on the exact weakness the control exists to find. There is no
+      mgmt.enable_password.hash_type in the vocabulary because no control asks
+      for it: the presence of the command is already the finding.
+
+  - id: enable_password_plain
+    regex: '^enable password\s+(?:level\s+\d+\s+)?\S+$'
+    path: mgmt.enable_password.present
+    value: true
+
+  - id: local_user_secret
+    regex: '^username\s+(?P<name>\S+)(?:\s+privilege\s+(?P<priv>\d+))?(?:\s+view\s+\S+)?\s+secret\s+(?:(?P<htype>\d+)\s+)?\S+\s*$'
+    emits:
+      - {path: mgmt.local_user.name, value: str, group: name}
+      - {path: mgmt.local_user.privilege, value: int, group: priv}
+      - {path: mgmt.local_user.hash_type, value: int, group: htype}
+      - {path: mgmt.local_user.secret, value: true}
+    note: >
+      One line, four separate compliance facts. Splitting this into four regexes
+      over the same line would make their agreement accidental; an absent clause
+      is skipped, not defaulted, so a user with no explicit privilege level does
+      not acquire an invented one.
+
+      'secret' and 'password' need separate patterns rather than one alternation
+      because CIS 1.4.3 asks specifically which keyword was used, and the hash
+      type alone cannot answer it: 'username x secret MyPass' carries no type
+      digit at all, so a rule reading only hash_type would see no fact for that
+      user and an all-quantified check would pass on the strength of the *other*
+      users' facts. mgmt.local_user.secret is emitted unconditionally by each
+      variant, so every local user contributes exactly one fact to that path.
+
+  - id: local_user_password
+    regex: '^username\s+(?P<name>\S+)(?:\s+privilege\s+(?P<priv>\d+))?(?:\s+view\s+\S+)?\s+password\s+(?:(?P<htype>\d+)\s+)?\S+\s*$'
+    emits:
+      - {path: mgmt.local_user.name, value: str, group: name}
+      - {path: mgmt.local_user.privilege, value: int, group: priv}
+      - {path: mgmt.local_user.hash_type, value: int, group: htype}
+      - {path: mgmt.local_user.secret, value: false}
+    note: >
+      'username … password' stores a reversible type-7 or cleartext credential.
+      The false here is the finding for CIS 1.4.3, not the absence of a fact.
+
+  - id: local_user_bare
+    regex: '^username\s+(?P<name>\S+)(?:\s+privilege\s+(?P<priv>\d+))?(?:\s+view\s+\S+)?\s*$'
+    emits:
+      - {path: mgmt.local_user.name, value: str, group: name}
+      - {path: mgmt.local_user.privilege, value: int, group: priv}
+    note: >
+      A username with no credential clause at all - valid IOS, used with
+      certificate or key authentication. No secret fact is emitted because the
+      keyword question does not arise; must be ordered after the two credential
+      variants, which it would otherwise never let match.
+
+  - id: local_user_ssh_key
+    regex: '^ip ssh pubkey-chain username\s+(?P<value>\S+)$'
+    path: mgmt.local_user.ssh_key
+    value: str
+
+  - id: password_min_length
+    regex: '^security passwords min-length\s+(?P<value>\d+)$'
+    path: mgmt.password_policy.min_length
+    value: int
+
+  - id: privilege_exec_level
+    regex: '^privilege exec level\s+(?P<value>\d+)\s+'
+    path: mgmt.privilege.level
+    value: int
+
+  - id: file_privilege
+    regex: '^file privilege\s+(?P<value>\d+)$'
+    path: file.privilege
+    value: int
+    note: >
+      The privilege level a session needs to reach the flash filesystem, and thus
+      the stored audit log. Three DISA controls turn on it (CISC-ND-000380,
+      -000390, -000460) and all three are phrased the same way: anything other
+      than 15 is a finding.
+
+      No pack default, even though IOS has one - 15 - and 'file privilege 15' is
+      therefore never written out. A default of 15 would be *the compliant value*,
+      so every device on earth would pass these three controls without evidence,
+      which is R4.2's forbidden shape. The rules instead read on_missing: pass and
+      say why in their own rationale, so the assumption is stated where it is
+      relied on rather than buried in a defaults table.
+
+  # ── AAA ───────────────────────────────────────────────────────────────
+
+  - id: aaa_new_model
+    regex: '^(?P<neg>no\s+)?aaa new-model$'
+    path: aaa.new_model
+    value: negated_bool
+
+  - id: aaa_auth_login_with_local_fallback
+    regex: '^aaa authentication login\s+\S+\s+(?P<value>.*\bgroup\b.*\blocal\b.*)$'
+    emits:
+      - {path: aaa.authentication_login, value: str, group: value}
+      - {path: aaa.local_fallback, value: true}
+    note: must precede aaa_auth_login
+
+  - id: aaa_auth_login
+    regex: '^aaa authentication login\s+\S+\s+(?P<value>.+)$'
+    path: aaa.authentication_login
+    value: str
+
+  - id: aaa_auth_enable
+    regex: '^aaa authentication enable\s+\S+\s+(?P<value>.+)$'
+    path: aaa.authentication_enable
+    value: str
+
+  - id: aaa_auth_attempts
+    regex: '^aaa authentication attempts login\s+(?P<value>\d+)$'
+    path: aaa.authentication_attempts
+    value: int
+
+  - id: aaa_authorization_exec
+    regex: '^aaa authorization exec\s+\S+\s+(?P<value>.+)$'
+    path: aaa.authorization_exec
+    value: str
+
+  - id: aaa_authorization_commands
+    regex: '^aaa authorization commands\s+\d+\s+\S+\s+(?P<value>.+)$'
+    path: aaa.authorization_commands
+    value: str
+
+  - id: aaa_accounting_commands
+    regex: '^aaa accounting commands\s+(?P<value>\d+\s+\S+\s+.+)$'
+    path: aaa.accounting_commands
+    value: str
+    note: >
+      The privilege level is kept in the value rather than discarded, because CIS
+      1.1.7 asks specifically about 'commands 15'. A device accounting only for
+      'commands 1' would otherwise satisfy a presence check on this path and pass
+      a control it violates. The value is 'level list-name method…', so the level
+      is decidable with a regex on the leading field and no extra canonical path.
+
+  - id: aaa_accounting_connection
+    regex: '^aaa accounting connection\s+\S+\s+(?P<value>.+)$'
+    path: aaa.accounting_connection
+    value: str
+
+  - id: aaa_accounting_exec
+    regex: '^aaa accounting exec\s+\S+\s+(?P<value>.+)$'
+    path: aaa.accounting_exec
+    value: str
+
+  - id: aaa_accounting_network
+    regex: '^aaa accounting network\s+\S+\s+(?P<value>.+)$'
+    path: aaa.accounting_network
+    value: str
+
+  - id: aaa_accounting_system
+    regex: '^aaa accounting system\s+\S+\s+(?P<value>.+)$'
+    path: aaa.accounting_system
+    value: str
+
+  - id: aaa_login_block
+    regex: '^login block-for\s+(?P<secs>\d+)\s+attempts\s+(?P<tries>\d+)\s+within\s+\d+$'
+    emits:
+      # `block-for` is stated in seconds on IOS, and aaa.login_block is seconds
+      # everywhere now, so the int goes in rather than the whole directive. The
+      # line itself is not lost: every fact carries `raw_text`, so the evidence
+      # an auditor reads is still the configuration line the device holds.
+      - {path: aaa.login_block, value: int, group: secs}
+      - {path: aaa.authentication_attempts, value: int, group: tries}
+
+  - id: aaa_max_sessions
+    regex: '^aaa max-sessions\s+(?P<value>\d+)$'
+    path: aaa.max_sessions
+    value: int
+
+  - id: aaa_source_interface
+    regex: '^ip (?:tacacs|radius) source-interface\s+(?P<value>\S+)$'
+    path: aaa.source_interface
+    value: str
+
+  - id: aaa_server_host_legacy
+    regex: '^(?P<proto>radius|tacacs)-server host\s+(?P<host>\S+)'
+    emits:
+      - {path: aaa.server.host, value: str, group: host}
+      - {path: aaa.server.protocol, value: lower, group: proto}
+
+  - id: aaa_server_key_typed
+    regex: '^(?:radius|tacacs)-server key\s+(?P<type>\d+)\s+\S+$'
+    path: aaa.server.key_encrypted
+    value: true
+    note: must precede aaa_server_key_plain
+
+  - id: aaa_server_key_plain
+    regex: '^(?:radius|tacacs)-server key\s+\S+$'
+    path: aaa.server.key_encrypted
+    value: false
+
+  - id: aaa_server_timeout
+    regex: '^(?:radius|tacacs)-server timeout\s+(?P<value>\d+)$'
+    path: aaa.server.timeout
+    value: int
+
+  # ── Logging ───────────────────────────────────────────────────────────
+
+  - id: logging_on
+    regex: '^(?P<neg>no\s+)?logging on$'
+    path: logging.on
+    value: negated_bool
+
+  - id: logging_host_disabled
+    regex: '^no logging host\s*(?:\S+)?$'
+    path: logging.enable
+    value: false
+    note: >
+      Sets only the companion boolean. Emitting a false value at
+      logging.remote_syslog would satisfy a presence-style rule on that path,
+      which is exactly the "absence read as compliance" failure R4.2 forbids.
+
+  - id: logging_host
+    regex: '^logging(?:\s+host)?\s+(?P<value>\d{1,3}(?:\.\d{1,3}){3}|[a-z][\w.-]*\.[a-z]{2,})(?:\s+transport\s+(?P<transport>\S+))?(?:\s+port\s+(?P<port>\d+))?'
+    emits:
+      - {path: logging.remote_syslog, value: str, group: value}
+      - {path: logging.enable, value: true}
+      - {path: logging.host.transport, value: lower, group: transport}
+      - {path: logging.host.port, value: int, group: port}
+    note: >
+      Accepts both the modern 'logging host X' and the legacy bare 'logging X'.
+      The value group requires an address or FQDN shape so 'logging trap
+      informational' cannot be mistaken for a syslog destination.
+
+  - id: logging_buffered_disabled
+    regex: '^no logging buffered$'
+    path: logging.buffered
+    value: const
+    literal: none
+
+  - id: logging_buffered
+    regex: '^logging buffered(?:\s+(?P<size>\d+))?(?:\s+(?P<level>[a-z]+))?$'
+    emits:
+      - {path: logging.buffered, value: lower, group: level}
+      - {path: logging.buffered_size, value: int, group: size}
+
+  - id: logging_trap_disabled
+    regex: '^no logging trap$'
+    path: logging.trap_level
+    value: const
+    literal: none
+
+  - id: logging_trap
+    regex: '^logging trap\s+(?P<value>\S+)$'
+    path: logging.trap_level
+    value: lower
+
+  - id: logging_console_disabled
+    regex: '^no logging console$'
+    path: logging.console
+    value: const
+    literal: none
+    note: >
+      Must precede logging_console. Without this, 'no logging console' would
+      match the level pattern with an absent group and emit nothing at all,
+      leaving the path silently unset rather than explicitly off.
+
+  - id: logging_console
+    regex: '^logging console\s+(?P<value>\S+)$'
+    path: logging.console
+    value: lower
+
+  - id: logging_monitor
+    regex: '^logging monitor\s+(?P<value>\S+)$'
+    path: logging.monitor
+    value: lower
+
+  - id: logging_source_interface
+    regex: '^logging source-interface\s+(?P<value>\S+)$'
+    path: logging.source_interface
+    value: str
+
+  - id: logging_facility
+    regex: '^logging facility\s+(?P<value>\S+)$'
+    path: logging.facility
+    value: lower
+
+  - id: logging_origin_id
+    regex: '^logging origin-id\s+(?P<value>.+)$'
+    path: logging.origin_id
+    value: str
+
+  - id: logging_discriminator
+    regex: '^logging discriminator\s+(?P<value>\S+)'
+    path: logging.discriminator
+    value: str
+
+  - id: logging_persistent
+    regex: '^logging persistent'
+    path: logging.persistent
+    value: true
+
+  - id: logging_count
+    regex: '^logging count$'
+    path: logging.count
+    value: true
+
+  - id: logging_userinfo
+    regex: '^logging userinfo$'
+    path: logging.userinfo
+    value: true
+
+  - id: logging_login_success
+    regex: '^login on-success log(?:\s+every\s+\d+)?$'
+    path: logging.login_success
+    value: true
+
+  - id: logging_login_failure
+    regex: '^login on-failure log(?:\s+every\s+\d+)?$'
+    path: logging.login_failure
+    value: true
+    note: >
+      Success and failure are separate paths, not one 'login logging' boolean,
+      because IOS configures them separately and a device very commonly has only
+      the failure half. CISC-ND-001260 requires both, and folding them together
+      would let half a configuration satisfy the whole control.
+
+      The optional 'every N' clause is matched and discarded: it throttles the
+      rate at which IOS emits the record, not whether it emits it, and no control
+      in any built catalog asks about the rate.
+
+  - id: logging_sequence_numbers
+    regex: '^service sequence-numbers$'
+    path: logging.sequence_numbers
+    value: true
+
+  # ── Time ──────────────────────────────────────────────────────────────
+
+  - id: ntp_server_disabled
+    regex: '^no ntp server\s*(?:\S+)?$'
+    path: time.ntp.enabled
+    value: false
+
+  - id: ntp_server
+    regex: '^ntp server\s+(?:vrf\s+\S+\s+)?(?P<value>\S+)(?:\s+key\s+(?P<key>\d+))?'
+    emits:
+      - {path: time.ntp.server, value: str, group: value}
+      - {path: time.ntp.enabled, value: true}
+      - {path: time.ntp.key_id, value: int, group: key}
+
+  - id: ntp_authenticate
+    regex: '^(?P<neg>no\s+)?ntp authenticate$'
+    path: time.ntp.authentication
+    value: negated_bool
+
+  - id: ntp_authentication_key
+    regex: '^ntp authentication-key\s+(?P<id>\d+)\s+(?P<alg>\S+)\s+\S+'
+    emits:
+      - {path: time.ntp.key_id, value: int, group: id}
+      - {path: time.ntp.key, value: lower, group: alg}
+    note: the digest algorithm is recorded; the key material is not
+
+  - id: ntp_trusted_key
+    regex: '^ntp trusted-key\s+(?P<value>\d+)'
+    path: time.ntp.trusted_keys
+    value: int
+
+  - id: ntp_source
+    regex: '^ntp source\s+(?P<value>\S+)$'
+    emits:
+      - {path: time.ntp.source, value: str, group: value}
+      - {path: time.ntp.source_interface, value: str, group: value}
+
+  - id: ntp_access_group
+    regex: '^ntp access-group\s+(?P<value>.+)$'
+    path: time.ntp.access_group
+    value: str
+
+  - id: ntp_max_associations
+    regex: '^ntp max-associations\s+(?P<value>\d+)$'
+    path: time.ntp.max_associations
+    value: int
+
+  - id: clock_timezone
+    regex: '^clock timezone\s+(?P<value>.+)$'
+    path: time.timezone
+    value: str
+
+  - id: clock_source
+    regex: '^ntp master(?:\s+(?P<value>\d+))?$'
+    path: time.clock_source
+    value: line
+
+  # ── SNMP ──────────────────────────────────────────────────────────────
+
+  - id: snmp_community
+    regex: '^snmp-server community\s+(?P<name>\S+)(?:\s+view\s+(?P<view>\S+))?(?:\s+(?P<access>RO|RW))?(?:\s+ipv6\s+\S+)?(?:\s+(?P<acl>\S+))?\s*$'
+    emits:
+      - {path: snmp.community, value: str, group: name}
+      - {path: snmp.community_access, value: lower, group: access}
+      - {path: snmp.community_view, value: str, group: view}
+      - {path: snmp.acl, value: str, group: acl}
+      - {path: snmp.enabled, value: true}
+      - {path: snmp.version, value: const, literal: v1v2c}
+    note: >
+      A community string is an SNMP v1/v2c credential by definition, so the
+      pattern asserts snmp.version = v1v2c. That is what DISA V-215823 and the
+      CIS v3-only recommendation are actually testing for, and it is derived
+      from the syntax rather than from a separate 'snmp-server version' line
+      that IOS does not have.
+
+  - id: snmp_group
+    regex: '^snmp-server group\s+(?P<name>\S+)\s+(?P<ver>v1|v2c|v3)(?:\s+(?P<sec>auth|noauth|priv))?(?:\s+read\s+(?P<read>\S+))?(?:\s+write\s+(?P<write>\S+))?'
+    emits:
+      - {path: snmp.group, value: str, group: name}
+      - {path: snmp.version, value: lower, group: ver}
+      - {path: snmp.group_security, value: lower, group: sec}
+      - {path: snmp.view, value: str, group: read}
+      - {path: snmp.enabled, value: true}
+    note: >
+      The security level (noauth/auth/priv) decides CIS 1.5.9, which requires
+      'priv' on every SNMPv3 group. It was captured but never emitted, so the
+      control had no fact to read. A v1/v2c group has no security level and the
+      group is absent from the match, so no fact is emitted for it - which is
+      correct: 1.5.9 is scoped to SNMPv3 and must not fail a v2c line.
+
+  - id: snmp_user
+    regex: '^snmp-server user\s+(?P<name>\S+)\s+(?P<grp>\S+)\s+(?P<ver>v1|v2c|v3)(?:\s+auth\s+(?P<auth>\S+)\s+\S+)?(?:\s+priv\s+(?P<priv>\S+))?'
+    emits:
+      - {path: snmp.user, value: str, group: name}
+      - {path: snmp.version, value: lower, group: ver}
+      - {path: snmp.v3_auth, value: lower, group: auth}
+      - {path: snmp.v3_priv, value: lower, group: priv}
+      - {path: snmp.enabled, value: true}
+
+  - id: snmp_view
+    regex: '^snmp-server view\s+(?P<value>\S+)\s+'
+    path: snmp.view
+    value: str
+
+  - id: snmp_host
+    regex: '^snmp-server host\s+(?P<host>\S+)(?:\s+vrf\s+\S+)?(?:\s+(?:informs|traps))?(?:\s+version\s+(?:1|2c|3))?'
+    emits:
+      - {path: snmp.host, value: str, group: host}
+      - {path: snmp.trap_host, value: str, group: host}
+      - {path: snmp.enabled, value: true}
+    note: >
+      The trailing 'version' clause is matched but deliberately not emitted as
+      snmp.version: it states the protocol version of one trap destination, not
+      of the agent, and folding the two together would let a v3 agent with one
+      legacy trap receiver read as a v1/v2c agent.
+
+  - id: snmp_traps
+    regex: '^snmp-server enable traps(?:\s+(?P<value>.+))?$'
+    path: snmp.traps
+    value: true
+
+  - id: snmp_location
+    regex: '^snmp-server location\s+(?P<value>.+)$'
+    path: snmp.location
+    value: str
+
+  - id: snmp_contact
+    regex: '^snmp-server contact\s+(?P<value>.+)$'
+    path: snmp.contact
+    value: str
+
+  - id: snmp_chassis_id
+    regex: '^snmp-server chassis-id\s+(?P<value>.+)$'
+    path: snmp.chassis_id
+    value: str
+
+  - id: snmp_source_interface
+    regex: '^snmp-server source-interface\s+\S+\s+(?P<value>\S+)$'
+    path: snmp.source_interface
+    value: str
+
+  - id: snmp_engine_id
+    regex: '^snmp-server engineID\s+\S+\s+(?P<value>\S+)$'
+    path: snmp.engine_id
+    value: str
+
+  - id: snmp_notify_filter
+    regex: '^snmp-server notify-filter\s+(?P<value>\S+)'
+    path: snmp.notify_filter
+    value: str
+
+  # ── Routing plane ─────────────────────────────────────────────────────
+
+  - id: source_routing
+    regex: '^(?P<neg>no\s+)?ip source-route$'
+    path: routing.source_routing
+    value: negated_bool
+
+  - id: ip_routing
+    regex: '^(?P<neg>no\s+)?ip routing$'
+    path: routing.ip_routing
+    value: negated_bool
+
+  - id: global_proxy_arp
+    regex: '^(?P<neg>no\s+)?ip proxy-arp$'
+    path: routing.proxy_arp
+    value: negated_bool
+
+  - id: default_route
+    regex: '^ip route\s+0\.0\.0\.0\s+0\.0\.0\.0\s+(?P<value>.+)$'
+    path: routing.default_route
+    value: str
+    note: must precede static_route
+
+  - id: static_route
+    regex: '^ip route\s+(?P<value>\S+\s+\S+\s+.+)$'
+    path: routing.static_route
+    value: str
+
+  - id: urpf_global
+    regex: '^ip verify unicast source reachable-via\s+(?P<value>\S+)'
+    path: routing.urpf
+    value: lower
+
+  # ── Spanning tree ─────────────────────────────────────────────────────
+
+  - id: stp_rapid_pvst
+    regex: '^spanning-tree mode\s+(?P<value>rapid-pvst)$'
+    emits:
+      - {path: stp.mode, value: lower, group: value}
+      - {path: stp.rapid_pvst, value: true}
+    note: must precede stp_mode
+
+  - id: stp_mode
+    regex: '^spanning-tree mode\s+(?P<value>\S+)$'
+    path: stp.mode
+    value: lower
+
+  - id: stp_bpduguard_default
+    regex: '^(?P<neg>no\s+)?spanning-tree portfast bpduguard default$'
+    path: stp.bpduguard_default
+    value: negated_bool
+    note: must precede stp_portfast_default
+
+  - id: stp_portfast_default
+    regex: '^(?P<neg>no\s+)?spanning-tree portfast (?:edge )?default$'
+    path: stp.portfast_default
+    value: negated_bool
+
+  - id: stp_loopguard_default
+    regex: '^(?P<neg>no\s+)?spanning-tree loopguard default$'
+    path: stp.loopguard_default
+    value: negated_bool
+
+  - id: stp_extend_system_id
+    regex: '^(?P<neg>no\s+)?spanning-tree extend system-id$'
+    path: stp.extend_system_id
+    value: negated_bool
+
+  - id: stp_uplinkfast
+    regex: '^(?P<neg>no\s+)?spanning-tree uplinkfast'
+    path: stp.uplinkfast
+    value: negated_bool
+
+  - id: stp_backbonefast
+    regex: '^(?P<neg>no\s+)?spanning-tree backbonefast$'
+    path: stp.backbonefast
+    value: negated_bool
+
+  - id: stp_rootguard_default
+    regex: '^(?P<neg>no\s+)?spanning-tree guard root$'
+    path: stp.rootguard
+    value: negated_bool
+
+  # ── VLAN pruning / trunking globals ───────────────────────────────────
+
+  - id: vlan_default_pruned
+    regex: '^vtp pruning$'
+    path: vlan.default_pruned
+    value: true
+
+  # ── Numbered access lists (single-line form) ───────────────────────────
+
+  - id: acl_numbered_entry
+    regex: '^access-list\s+(?P<num>\d+)\s+(?P<action>permit|deny)\s+(?P<rest>.+?)(?P<log>\s+log(?:-input)?)?$'
+    emits:
+      - {path: acl.numbered.entry, value: line}
+      - {path: acl.name, value: str, group: num}
+      - {path: acl.entry.action, value: lower, group: action}
+      - {path: acl.entry.log, value: group_present, group: log}
+
+  - id: acl_numbered_remark
+    regex: '^access-list\s+(?P<num>\d+)\s+remark\s+(?P<value>.+)$'
+    path: acl.remark
+    value: str
+    note: >
+      Order-independent of acl_numbered_entry, whose action group only accepts
+      permit or deny, so a remark cannot be mistaken for an ACE.
+
+  # ── Image integrity ───────────────────────────────────────────────────
+
+  - id: image_verify
+    regex: '^(?P<neg>no\s+)?file verify auto$'
+    path: image.verify
+    value: negated_bool
+
+  - id: image_boot_secure
+    regex: '^secure boot-image$'
+    path: image.boot_secure
+    value: true
+
+  - id: image_integrity
+    regex: '^secure boot-config$'
+    path: image.integrity
+    value: true
+
+  - id: config_encryption
+    regex: '^password encryption aes$'
+    path: file.config_encryption
+    value: true
+
+  - id: tftp_source_interface
+    regex: '^ip tftp source-interface\s+(?P<value>\S+)$'
+    path: file.tftp_source_interface
+    value: str
+
+  # ── Banners in the negated form ───────────────────────────────────────
+  # The positive form is a block (see blocks: banner_login etc.) because the
+  # banner body spans lines. The negation is a single line, so it lives here.
+
+  - id: banner_login_disabled
+    regex: '^no banner login$'
+    path: mgmt.login_banner
+    value: false
+
+  - id: banner_motd_disabled
+    regex: '^no banner motd$'
+    path: mgmt.motd_banner
+    value: false
+
+  - id: banner_exec_disabled
+    regex: '^no banner exec$'
+    path: mgmt.exec_banner
+    value: false
+
+
+blocks:
+
+  # ── Banners ───────────────────────────────────────────────────────────
+  # Delimited mode: the body runs from the anchor to a line containing only the
+  # delimiter character. Each body line becomes its own mgmt.banner.text fact so
+  # the report can cite the exact line, and the closing delimiter is swallowed
+  # by the pack's ignore list rather than becoming banner text.
+
+  - id: banner_login
+    anchor_path: mgmt.login_banner
+    regex: '^banner login\s+\S*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^(?:\^C?|#|%|~|\+)\s*$'
+    children:
+      - id: banner_login_text
+        regex: '^(?P<value>.+)$'
+        path: mgmt.banner.text
+        value: str
+
+  - id: banner_motd
+    anchor_path: mgmt.motd_banner
+    regex: '^banner motd\s+\S*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^(?:\^C?|#|%|~|\+)\s*$'
+    children:
+      - id: banner_motd_text
+        regex: '^(?P<value>.+)$'
+        path: mgmt.banner.text
+        value: str
+
+  - id: banner_exec
+    anchor_path: mgmt.exec_banner
+    regex: '^banner (?:exec|incoming)\s+\S*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^(?:\^C?|#|%|~|\+)\s*$'
+    children:
+      - id: banner_exec_text
+        regex: '^(?P<value>.+)$'
+        path: mgmt.banner.text
+        value: str
+
+  # ── Lines (console / vty / aux) ───────────────────────────────────────
+  # Three near-identical blocks rather than one shared definition, because the
+  # canonical paths differ: a 5-minute console timeout and a 5-minute vty
+  # timeout answer different controls, and collapsing them into one path would
+  # make a console finding indistinguishable from a remote-access finding.
+
+  - id: line_console
+    anchor_path: line.console.id
+    regex: '^line con(?:sole)?\s+(?P<value>\d+(?:\s+\d+)?)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: con_exec_timeout_none
+        regex: '^no exec-timeout$'
+        path: line.console.exec_timeout
+        value: const
+        literal: 0
+        note: >
+          'no exec-timeout' means never time out, which IOS represents as 0.
+          Emitting false here would be a category error: the fact is a duration.
+      - id: con_exec_timeout
+        regex: '^exec-timeout\s+(?P<minutes>\d+)(?:\s+(?P<seconds>\d+))?$'
+        path: line.console.exec_timeout
+        value: minutes_seconds
+      - id: con_login_none
+        regex: '^no login$'
+        path: line.console.login_auth
+        value: const
+        literal: none
+      - id: con_login_auth
+        regex: '^login authentication\s+(?P<value>\S+)$'
+        path: line.console.login_auth
+        value: str
+      - id: con_login_local
+        regex: '^login\s+(?P<value>local)$'
+        path: line.console.login_auth
+        value: lower
+      - id: con_login_line
+        regex: '^login$'
+        path: line.console.login_auth
+        value: const
+        literal: line
+        note: >
+          Bare 'login' means "authenticate against the line password", the weakest
+          of the three forms and the one CIS and the STIG both fail. It matched no
+          child before, so it fell into unparsed_lines and the control saw no fact
+          at all - absence of evidence standing in for a known-bad setting.
+      - id: con_transport_input
+        regex: '^transport input\s+(?P<value>.+)$'
+        path: line.console.transport_input
+        value: word_list
+      - id: con_transport_output
+        regex: '^transport output\s+(?P<value>.+)$'
+        path: line.console.transport_output
+        value: word_list
+      - id: con_password
+        regex: '^password\s+(?:(?P<type>\d+)\s+)?\S+$'
+        path: line.console.password
+        value: true
+        note: presence only; the credential is never emitted as a value
+      - id: con_access_class
+        regex: '^access-class\s+(?P<value>\S+)\s+(?:in|out)$'
+        path: line.console.access_class
+        value: str
+      - id: con_privilege_level
+        regex: '^privilege level\s+(?P<value>\d+)$'
+        path: line.console.privilege_level
+        value: int
+      - id: con_authorization
+        regex: '^authorization exec\s+(?P<value>\S+)$'
+        path: line.console.authorization
+        value: str
+      - id: con_no_exec
+        regex: '^no exec$'
+        path: line.console.state
+        value: const
+        literal: disabled
+
+  - id: line_vty
+    anchor_path: line.vty.id
+    regex: '^line vty\s+(?P<value>\d+(?:\s+\d+)?)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: vty_exec_timeout_none
+        regex: '^no exec-timeout$'
+        path: line.vty.exec_timeout
+        value: const
+        literal: 0
+      - id: vty_exec_timeout
+        regex: '^exec-timeout\s+(?P<minutes>\d+)(?:\s+(?P<seconds>\d+))?$'
+        path: line.vty.exec_timeout
+        value: minutes_seconds
+      - id: vty_login_none
+        regex: '^no login$'
+        path: line.vty.login_auth
+        value: const
+        literal: none
+      - id: vty_login_auth
+        regex: '^login authentication\s+(?P<value>\S+)$'
+        path: line.vty.login_auth
+        value: str
+      - id: vty_login_local
+        regex: '^login\s+(?P<value>local)$'
+        path: line.vty.login_auth
+        value: lower
+      - id: vty_login_line
+        regex: '^login$'
+        path: line.vty.login_auth
+        value: const
+        literal: line
+      - id: vty_transport_input
+        regex: '^transport input\s+(?P<value>.+)$'
+        path: line.vty.transport_input
+        value: word_list
+      - id: vty_transport_output
+        regex: '^transport output\s+(?P<value>.+)$'
+        path: line.vty.transport_output
+        value: word_list
+      - id: vty_password
+        regex: '^password\s+(?:(?P<type>\d+)\s+)?\S+$'
+        path: line.vty.password
+        value: true
+      - id: vty_access_class
+        regex: '^access-class\s+(?P<value>\S+)\s+in$'
+        path: line.vty.access_class
+        value: str
+      - id: vty_access_class_out
+        regex: '^access-class\s+(?P<value>\S+)\s+out$'
+        path: line.vty.access_class_out
+        value: str
+        note: >
+          Split by direction, where one pattern used to match '(?:in|out)' and
+          discard which it saw. Inbound and outbound access-class are different
+          controls: inbound restricts who may open a management session, which is
+          CIS 1.2.x and DISA CISC-ND-000140, while outbound restricts where a
+          session may connect on to and no built catalog asks about it. Folded
+          together, a device carrying only 'access-class X out' satisfied a
+          presence check for the inbound requirement - a false pass on the one
+          control that decides whether the management plane is reachable from the
+          whole estate.
+
+          The outbound form keeps a path of its own rather than going unmatched:
+          it is a legitimate directive, and dropping it would push a benign line
+          into the training queue for an admin to dismiss by hand. No rule reads
+          it today, which is the correct state for a fact nobody has asked about.
+      - id: vty_session_limit
+        regex: '^session-limit\s+(?P<value>\d+)$'
+        path: line.vty.session_limit
+        value: int
+      - id: vty_privilege_level
+        regex: '^privilege level\s+(?P<value>\d+)$'
+        path: line.vty.privilege_level
+        value: int
+      - id: vty_authorization
+        regex: '^authorization exec\s+(?P<value>\S+)$'
+        path: line.vty.authorization
+        value: str
+      - id: vty_accounting
+        regex: '^accounting (?:commands\s+\d+|exec)\s+(?P<value>\S+)$'
+        path: line.vty.accounting
+        value: str
+      - id: vty_no_exec
+        regex: '^no exec$'
+        path: line.vty.state
+        value: const
+        literal: disabled
+
+  - id: line_aux
+    anchor_path: line.aux.id
+    regex: '^line aux\s+(?P<value>\d+(?:\s+\d+)?)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: aux_exec_timeout_none
+        regex: '^no exec-timeout$'
+        path: line.aux.exec_timeout
+        value: const
+        literal: 0
+      - id: aux_exec_timeout
+        regex: '^exec-timeout\s+(?P<minutes>\d+)(?:\s+(?P<seconds>\d+))?$'
+        path: line.aux.exec_timeout
+        value: minutes_seconds
+      - id: aux_login_none
+        regex: '^no login$'
+        path: line.aux.login_auth
+        value: const
+        literal: none
+      - id: aux_login_auth
+        regex: '^login authentication\s+(?P<value>\S+)$'
+        path: line.aux.login_auth
+        value: str
+      - id: aux_login_local
+        regex: '^login\s+(?P<value>local)$'
+        path: line.aux.login_auth
+        value: lower
+      - id: aux_login_line
+        regex: '^login$'
+        path: line.aux.login_auth
+        value: const
+        literal: line
+      - id: aux_transport_input
+        regex: '^transport input\s+(?P<value>.+)$'
+        path: line.aux.transport_input
+        value: word_list
+      - id: aux_transport_output
+        regex: '^transport output\s+(?P<value>.+)$'
+        path: line.aux.transport_output
+        value: word_list
+      - id: aux_password
+        regex: '^password\s+(?:(?P<type>\d+)\s+)?\S+$'
+        path: line.aux.password
+        value: true
+      - id: aux_access_class
+        regex: '^access-class\s+(?P<value>\S+)\s+(?:in|out)$'
+        path: line.aux.access_class
+        value: str
+      - id: aux_privilege_level
+        regex: '^privilege level\s+(?P<value>\d+)$'
+        path: line.aux.privilege_level
+        value: int
+      - id: aux_no_exec
+        regex: '^no exec$'
+        path: line.aux.state
+        value: const
+        literal: disabled
+        note: >
+          'no exec' disables the EXEC process on the line, which is how the STIG
+          expects an unused AUX port to be secured. It is a different fact from
+          exec-timeout, so it gets its own path.
+
+  - id: line_tty
+    anchor_path: line.tty.id
+    regex: '^line tty\s+(?P<value>\d+(?:\s+\d+)?)$'
+    anchor_value: str
+    mode: indent
+    note: >
+      Asynchronous TTY lines are the forgotten back door: they are reachable
+      through a console server or a modem and the STIG treats them like any other
+      management line. Without this block every line inside 'line tty 1-16' was
+      unparsed, so a TTY with no timeout and line-password auth produced no facts
+      and therefore no finding. Only the three facts a control actually asks about
+      are modelled; anything else in the stanza is still reported as unparsed
+      rather than silently dropped.
+    children:
+      - id: tty_exec_timeout_none
+        regex: '^no exec-timeout$'
+        path: line.tty.exec_timeout
+        value: const
+        literal: 0
+      - id: tty_exec_timeout
+        regex: '^exec-timeout\s+(?P<minutes>\d+)(?:\s+(?P<seconds>\d+))?$'
+        path: line.tty.exec_timeout
+        value: minutes_seconds
+      - id: tty_login_none
+        regex: '^no login$'
+        path: line.tty.login_auth
+        value: const
+        literal: none
+      - id: tty_login_auth
+        regex: '^login authentication\s+(?P<value>\S+)$'
+        path: line.tty.login_auth
+        value: str
+      - id: tty_login_local
+        regex: '^login\s+(?P<value>local)$'
+        path: line.tty.login_auth
+        value: lower
+      - id: tty_login_line
+        regex: '^login$'
+        path: line.tty.login_auth
+        value: const
+        literal: line
+
+  # ── Interfaces ────────────────────────────────────────────────────────
+
+  - id: interface
+    anchor_path: interface.name
+    regex: '^interface\s+(?P<value>\S+)$'
+    anchor_value: str
+    mode: indent
+    child_defaults:
+      - path: interface.admin_state
+        value: "no shutdown"
+        reason: >
+          no shutdown command present; an IOS interface with neither 'shutdown'
+          nor 'no shutdown' in the running-config is administratively up
+      - path: interface.cdp_enabled
+        value: true
+        reason: CDP is enabled per-interface by default on IOS
+      - path: interface.proxy_arp
+        value: true
+        reason: proxy ARP is enabled by default on IOS routed interfaces
+      - path: interface.redirects
+        value: true
+        reason: ICMP redirects are sent by default on IOS
+      - path: interface.unreachables
+        value: true
+        reason: ICMP unreachables are sent by default on IOS
+      - path: interface.directed_broadcast
+        value: false
+        reason: directed broadcasts are dropped by default since IOS 12.0
+      - path: interface.port_security
+        value: false
+        reason: port security is off until explicitly configured
+      - path: interface.bpdu_guard
+        value: false
+        reason: BPDU guard is off per-interface until enabled or defaulted globally
+    children:
+      - id: if_description
+        regex: '^description\s+(?P<value>.+)$'
+        path: interface.description
+        value: str
+      - id: if_admin_state
+        regex: '^(?P<value>(?:no\s+)?shutdown)$'
+        path: interface.admin_state
+        value: lower
+      - id: if_ip_address_dhcp
+        regex: '^ip address dhcp$'
+        path: interface.ip_address
+        value: const
+        literal: dhcp
+        note: must precede if_ip_address
+      - id: if_ip_address
+        regex: '^ip address\s+(?P<value>[\d.]+\s+[\d.]+)(?:\s+secondary)?$'
+        path: interface.ip_address
+        value: str
+      - id: if_acl_in
+        regex: '^ip access-group\s+(?P<value>\S+)\s+in$'
+        path: interface.acl_in
+        value: str
+      - id: if_acl_out
+        regex: '^ip access-group\s+(?P<value>\S+)\s+out$'
+        path: interface.acl_out
+        value: str
+      - id: if_cdp_enable
+        regex: '^(?P<neg>no\s+)?cdp enable$'
+        path: interface.cdp_enabled
+        value: negated_bool
+      - id: if_lldp
+        regex: '^(?P<neg>no\s+)?lldp (?:transmit|receive)$'
+        path: interface.lldp_enabled
+        value: negated_bool
+      - id: if_switchport_mode
+        regex: '^switchport mode\s+(?P<value>\S+)$'
+        path: interface.switchport_mode
+        value: lower
+      - id: if_access_vlan
+        regex: '^switchport access vlan\s+(?P<value>\d+)$'
+        path: interface.access_vlan
+        value: int
+      - id: if_native_vlan
+        regex: '^switchport trunk native vlan\s+(?P<value>\d+)$'
+        path: interface.native_vlan
+        value: int
+      - id: if_trunk_allowed_vlan
+        regex: '^switchport trunk allowed vlan\s+(?:add\s+)?(?P<value>[\d,\s-]+)$'
+        path: interface.trunk_allowed_vlan
+        value: word_list
+      - id: if_nonegotiate
+        regex: '^switchport nonegotiate$'
+        path: interface.switchport_nonegotiate
+        value: true
+      - id: if_port_security_max
+        regex: '^switchport port-security maximum\s+(?P<value>\d+)'
+        path: interface.mac_limit
+        value: int
+        note: must precede if_port_security
+      - id: if_port_security
+        regex: '^(?P<neg>no\s+)?switchport port-security$'
+        path: interface.port_security
+        value: negated_bool
+      - id: if_bpduguard_enable
+        regex: '^spanning-tree bpduguard enable$'
+        path: interface.bpdu_guard
+        value: true
+        note: >
+          Emitted as a boolean, not as the word "enable", so it is the same type
+          as the child_default below; a rule comparing to true must not have to
+          know which of the two produced the fact.
+      - id: if_bpduguard_disable
+        regex: '^spanning-tree bpduguard disable$'
+        path: interface.bpdu_guard
+        value: false
+      - id: if_portfast
+        regex: '^spanning-tree portfast(?:\s+(?:trunk|edge|disable))?$'
+        path: interface.portfast
+        value: true
+      - id: if_redirects
+        regex: '^(?P<neg>no\s+)?ip redirects$'
+        path: interface.redirects
+        value: negated_bool
+      - id: if_unreachables
+        regex: '^(?P<neg>no\s+)?ip unreachables$'
+        path: interface.unreachables
+        value: negated_bool
+      - id: if_proxy_arp
+        regex: '^(?P<neg>no\s+)?ip proxy-arp$'
+        path: interface.proxy_arp
+        value: negated_bool
+      - id: if_directed_broadcast
+        regex: '^(?P<neg>no\s+)?ip directed-broadcast$'
+        path: interface.directed_broadcast
+        value: negated_bool
+      - id: if_verify_source
+        regex: '^ip verify unicast source reachable-via\s+(?P<value>\S+)'
+        path: interface.ip_verify_source
+        value: lower
+      - id: if_mtu
+        regex: '^(?:ip\s+)?mtu\s+(?P<value>\d+)$'
+        path: interface.mtu
+        value: int
+      - id: if_duplex
+        regex: '^duplex\s+(?P<value>\S+)$'
+        path: interface.duplex
+        value: lower
+      - id: if_speed
+        regex: '^speed\s+(?P<value>\S+)$'
+        path: interface.speed
+        value: lower
+      - id: if_storm_control
+        regex: '^storm-control\s+.+$'
+        path: interface.storm_control
+        value: line
+      - id: if_dhcp_snooping_limit
+        regex: '^ip dhcp snooping limit rate\s+(?P<value>\d+)$'
+        path: interface.dhcp_snooping_limit
+        value: int
+        note: must precede if_dhcp_snooping_trust
+      - id: if_dhcp_snooping_trust
+        regex: '^ip dhcp snooping trust$'
+        path: interface.dhcp_snooping_trust
+        value: true
+      - id: if_arp_inspection_trust
+        regex: '^ip arp inspection trust$'
+        path: interface.arp_inspection
+        value: true
+      - id: if_nd_raguard
+        regex: '^ipv6 nd raguard'
+        path: interface.nd_ra_guard
+        value: true
+      - id: if_channel_group
+        regex: '^channel-group\s+(?P<value>\d+)'
+        path: interface.channel_group
+        value: int
+      - id: if_vrf
+        regex: '^(?:ip )?vrf forwarding\s+(?P<value>\S+)$'
+        path: interface.vrf
+        value: str
+      - id: if_tunnel
+        regex: '^tunnel (?:source|destination|mode)\s+(?P<value>.+)$'
+        path: interface.tunnel
+        value: line
+      - id: if_udld
+        regex: '^udld port(?:\s+(?P<value>\S+))?$'
+        path: interface.udld
+        value: line
+      - id: if_helper_address
+        regex: '^ip helper-address\s+(?P<value>\S+)$'
+        path: interface.helper_address
+        value: str
+      - id: if_igmp_snooping
+        regex: '^(?P<neg>no\s+)?ip igmp snooping$'
+        path: interface.igmp_snooping
+        value: negated_bool
+      - id: if_block_unicast
+        regex: '^switchport block unicast$'
+        path: interface.uufb
+        value: true
+
+  # ── Named access lists ────────────────────────────────────────────────
+
+  - id: acl_extended
+    anchor_path: acl.name
+    regex: '^ip access-list extended\s+(?P<value>\S+)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: ace_implicit_deny_log
+        regex: '^(?:(?P<seq>\d+)\s+)?(?P<action>deny)\s+ip any any log(?:-input)?$'
+        emits:
+          - {path: acl.implicit_deny_log, value: true}
+          - {path: acl.extended.entry, value: line}
+          - {path: acl.entry.sequence, value: int, group: seq}
+          - {path: acl.entry.action, value: lower, group: action}
+          - {path: acl.entry.log, value: true}
+        note: >
+          Must precede ace_extended. A logged deny-all at the end of an ACL is
+          its own control (CIS "log all denied traffic"), so it is recognised as
+          such rather than being folded into the generic entry pattern.
+      - id: ace_remark
+        regex: '^(?:\d+\s+)?remark\s+(?P<value>.+)$'
+        path: acl.entry.remark
+        value: str
+      - id: ace_extended
+        regex: '^(?:(?P<seq>\d+)\s+)?(?P<action>permit|deny)\s+(?P<proto>ip|tcp|udp|icmp|igmp|gre|esp|ahp|eigrp|ospf|pim|nos|ipinip|\d+)\s+(?P<rest>.+?)(?P<log>\s+log(?:-input)?)?$'
+        emits:
+          - {path: acl.extended.entry, value: line}
+          - {path: acl.entry.sequence, value: int, group: seq}
+          - {path: acl.entry.action, value: lower, group: action}
+          - {path: acl.entry.protocol, value: lower, group: proto}
+          - {path: acl.entry.log, value: group_present, group: log}
+
+  - id: acl_standard
+    anchor_path: acl.name
+    regex: '^ip access-list standard\s+(?P<value>\S+)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: ace_standard_remark
+        regex: '^(?:\d+\s+)?remark\s+(?P<value>.+)$'
+        path: acl.entry.remark
+        value: str
+      - id: ace_standard
+        regex: '^(?:(?P<seq>\d+)\s+)?(?P<action>permit|deny)\s+(?P<rest>.+?)(?P<log>\s+log(?:-input)?)?$'
+        emits:
+          - {path: acl.standard.entry, value: line}
+          - {path: acl.entry.sequence, value: int, group: seq}
+          - {path: acl.entry.action, value: lower, group: action}
+          - {path: acl.entry.log, value: group_present, group: log}
+
+  # ── VLANs ─────────────────────────────────────────────────────────────
+
+  - id: vlan
+    anchor_path: vlan.id
+    regex: '^vlan\s+(?P<value>\d+(?:[-,]\d+)*)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: vlan_name
+        regex: '^name\s+(?P<value>\S+)$'
+        path: vlan.name
+        value: str
+      - id: vlan_shutdown
+        regex: '^(?P<neg>no\s+)?shutdown$'
+        path: vlan.shutdown
+        value: negated_bool
+      - id: vlan_state
+        regex: '^state\s+(?P<value>\S+)$'
+        path: vlan.state
+        value: lower
+
+  # ── Routing processes ─────────────────────────────────────────────────
+
+  - id: router_bgp
+    anchor_path: routing.bgp.asn
+    regex: '^router bgp\s+(?P<value>\d+)$'
+    anchor_value: int
+    mode: indent
+    children:
+      - id: bgp_log_neighbor_changes
+        regex: '^(?P<neg>no\s+)?bgp log-neighbor-changes$'
+        path: routing.bgp.log_neighbor_changes
+        value: negated_bool
+      - id: bgp_neighbor_password
+        regex: '^neighbor\s+(?P<value>\S+)\s+password\s+'
+        path: routing.bgp.neighbor_auth
+        value: str
+      - id: bgp_neighbor_ttl_security
+        regex: '^neighbor\s+\S+\s+ttl-security hops\s+(?P<value>\d+)$'
+        path: routing.bgp.ttl_security
+        value: int
+      - id: bgp_neighbor_max_prefix
+        regex: '^neighbor\s+\S+\s+maximum-prefix\s+(?P<value>\d+)'
+        path: routing.bgp.max_prefix
+        value: int
+
+  - id: router_ospf
+    anchor_path: routing.ospf.process
+    regex: '^router ospf\s+(?P<value>\d+)'
+    anchor_value: int
+    mode: indent
+    children:
+      - id: ospf_area_auth_md5
+        regex: '^area\s+\S+\s+authentication message-digest$'
+        emits:
+          - {path: routing.ospf.message_digest, value: true}
+          - {path: routing.ospf.auth, value: const, literal: message-digest}
+        note: must precede ospf_area_auth
+      - id: ospf_area_auth
+        regex: '^area\s+\S+\s+authentication$'
+        path: routing.ospf.auth
+        value: const
+        literal: simple
+
+  - id: router_eigrp
+    anchor_path: routing.eigrp.process
+    regex: '^router eigrp\s+(?P<value>\d+)$'
+    anchor_value: int
+    mode: indent
+    children:
+      - id: eigrp_auth_mode
+        regex: '^authentication mode\s+(?P<value>\S+)'
+        path: routing.eigrp.auth
+        value: lower
+      - id: eigrp_key_chain
+        regex: '^authentication key-chain\s+(?P<value>\S+)'
+        path: routing.eigrp.key_chain
+        value: str
+
+  - id: router_rip
+    anchor_path: routing.rip.process
+    regex: '^router rip$'
+    anchor_value: true
+    mode: indent
+    note: >
+      Anchored on routing.rip.process, not routing.rip.auth. Anchoring a block on
+      the .auth path would make the mere existence of 'router rip' assert that RIP
+      authentication is configured, so a device running unauthenticated RIP would
+      pass "RIP neighbour authentication is enabled" - a false negative on the
+      control's whole point. The process path says "RIP is running"; only a
+      child that reads an authentication line may write to .auth.
+    children:
+      - id: rip_auth_mode
+        regex: '^(?:ip rip )?authentication mode\s+(?P<value>\S+)'
+        path: routing.rip.auth
+        value: lower
+      - id: rip_key_chain
+        regex: '^(?:ip rip )?authentication key-chain\s+(?P<value>\S+)'
+        path: routing.rip.key_chain
+        value: str
+
+  - id: router_isis
+    anchor_path: routing.isis.process
+    regex: '^router isis'
+    anchor_value: true
+    mode: indent
+    note: same anchoring rule as router_rip - the process is not the authentication.
+    children:
+      - id: isis_auth_mode
+        regex: '^authentication mode\s+(?P<value>\S+)'
+        path: routing.isis.auth
+        value: lower
+
+  # ── VRFs ──────────────────────────────────────────────────────────────
+
+  - id: vrf_definition
+    anchor_path: routing.vrf
+    regex: '^(?:vrf definition|ip vrf)\s+(?P<value>\S+)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: vrf_rd
+        regex: '^rd\s+(?P<value>\S+)$'
+        path: routing.vrf
+        value: str
+
+  # ── AAA server groups (modern form) ───────────────────────────────────
+
+  - id: aaa_common_criteria_policy
+    anchor_path: mgmt.password_policy.name
+    regex: '^aaa common-criteria policy\s+(?P<value>\S+)$'
+    anchor_value: str
+    mode: indent
+    note: >
+      The Common Criteria password policy, which is where IOS 15 keeps every
+      composition rule DISA asks about: CISC-ND-000550 (length), -000570 through
+      -000600 (one directive per character class) and -000610 (characters that
+      must change between old and new). The older global 'security passwords
+      min-length' already lands on mgmt.password_policy.min_length, and the two
+      coexist deliberately - a device may carry either, and a rule that wants the
+      CC policy specifically asks for mgmt.password_policy.name as well as the
+      length, because the global form sets a floor for line passwords while the
+      CC policy is the one bound to local accounts.
+    children:
+      - id: aaa_cc_min_length
+        regex: '^min-length\s+(?P<value>\d+)$'
+        path: mgmt.password_policy.min_length
+        value: int
+      - id: aaa_cc_max_length
+        regex: '^max-length\s+(?P<value>\d+)$'
+        path: mgmt.password_policy.max_length
+        value: int
+      - id: aaa_cc_complexity
+        regex: '^(?:upper-case|lower-case|numeric-count|special-case|char-changes)\s+\d+$'
+        path: mgmt.password_policy.complexity
+        value: line
+        note: >
+          One fact per directive, each carrying the directive verbatim rather than
+          being normalised into five booleans. DISA states these requirements as
+          'upper-case 1' and the rules quote them back with a regex, so the
+          evidence line an auditor reads is the configuration line the device
+          actually holds. Five separate paths would need five patterns, five
+          schema entries and five near-identical rules to say the same thing, and
+          would still not tell anyone what the configured count was.
+
+          Consumed with quantifier: any - the policy passes a given class check if
+          any one of its facts is that directive.
+
+  - id: aaa_group_server
+    anchor_path: aaa.server.group
+    regex: '^aaa group server\s+(?:tacacs\+|radius)\s+(?P<value>\S+)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: aaa_group_server_private
+        regex: '^server(?:-private)?\s+(?P<value>\S+)'
+        path: aaa.server.host
+        value: str
+      - id: aaa_group_source_interface
+        regex: '^ip (?:tacacs|radius) source-interface\s+(?P<value>\S+)$'
+        path: aaa.source_interface
+        value: str
+
+  - id: tacacs_server_named
+    anchor_path: aaa.server.name
+    regex: '^(?:tacacs|radius) server\s+(?P<value>\S+)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: tacacs_address
+        regex: '^address ipv[46]\s+(?P<value>\S+)$'
+        path: aaa.server.host
+        value: str
+      - id: tacacs_key_typed
+        regex: '^key\s+(?P<type>\d+)\s+\S+$'
+        path: aaa.server.key_encrypted
+        value: true
+        note: must precede tacacs_key_plain
+      - id: tacacs_key_plain
+        regex: '^key\s+\S+$'
+        path: aaa.server.key_encrypted
+        value: false
+      - id: tacacs_timeout
+        regex: '^timeout\s+(?P<value>\d+)$'
+        path: aaa.server.timeout
+        value: int
+
+  # ── Crypto ────────────────────────────────────────────────────────────
+
+  - id: crypto_pki_trustpoint
+    anchor_path: crypto.pki.trustpoint
+    regex: '^crypto pki trustpoint\s+(?P<value>\S+)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: pki_enrollment
+        regex: '^enrollment\s+(?P<value>.+)$'
+        path: crypto.pki.enrollment
+        value: str
+
+  - id: crypto_isakmp_policy
+    anchor_path: crypto.isakmp.policy
+    regex: '^crypto isakmp policy\s+(?P<value>\d+)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: isakmp_encryption
+        regex: '^encr(?:yption)?\s+(?P<value>.+)$'
+        path: crypto.cipher_suite
+        value: word_list
+      - id: isakmp_authentication
+        regex: '^authentication\s+(?P<value>\S+)$'
+        path: vpn.tunnel.auth
+        value: lower
+      - id: isakmp_ikev1
+        regex: '^(?:hash|group|lifetime)\s+\S+$'
+        path: crypto.ikev1.enabled
+        value: true
+        note: >
+          An isakmp (IKEv1) policy body implies IKEv1 is in use, which several
+          benchmarks fail outright in favour of IKEv2.
+
+  - id: crypto_ikev2_proposal
+    anchor_path: crypto.ikev2.proposal
+    regex: '^crypto ikev2 proposal\s+(?P<value>\S+)$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: ikev2_encryption
+        regex: '^encryption\s+(?P<value>.+)$'
+        path: crypto.cipher_suite
+        value: word_list
+      - id: ikev2_group
+        regex: '^group\s+(?P<value>.+)$'
+        path: crypto.ikev2.group
+        value: word_list
+        note: >
+          An IKEv2 Diffie-Hellman group is not an SSH key-exchange group; this
+          previously wrote to mgmt.ssh.key_exchange_group, which let a VPN
+          proposal decide an SSH control (and vice versa) on the same device.
+
+  - id: crypto_ipsec_transform
+    anchor_path: crypto.ipsec.transform
+    regex: '^crypto ipsec transform-set\s+(?P<value>\S+)\s+'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: ipsec_mode
+        regex: '^mode\s+(?P<value>\S+)$'
+        path: crypto.ipsec.mode
+        value: lower
+        note: >
+          'mode tunnel|transport' is the encapsulation mode, not perfect forward
+          secrecy; it previously wrote to vpn.pfs, where 'tunnel' would have been
+          read as a PFS setting.
+
+  # ── Archive / control plane / HA ──────────────────────────────────────
+
+  - id: archive
+    anchor_path: file.config_archive
+    regex: '^archive$'
+    anchor_value: true
+    mode: indent
+    children:
+      - id: archive_path
+        regex: '^path\s+(?P<value>.+)$'
+        path: file.archive_path
+        value: str
+      - id: archive_write_memory
+        regex: '^write-memory$'
+        path: file.write_memory
+        value: true
+      - id: archive_log_config
+        regex: '^log config$'
+        path: file.config_archive
+        value: true
+      - id: archive_log_enable
+        regex: '^logging enable$'
+        path: logging.config_changes
+        value: true
+        note: >
+          'logging enable', not 'log config', is what answers CISC-ND-000210.
+          'log config' only opens the sub-stanza; a device carrying
+          'archive / log config' and nothing under it records no configuration
+          change at all, so treating the container as the fact would pass a
+          device that logs nothing. The switch gets the path and the container
+          falls back to file.config_archive alongside the block anchor - two
+          identical facts at one path, which a presence check reads the same way
+          as one and which keeps the line out of the training queue.
+
+          Absence therefore means absence: the rule reads on_missing: fail and
+          says so, rather than a pack default deciding for every device at once.
+      - id: archive_log_size
+        regex: '^logging size\s+(?P<value>\d+)$'
+        path: logging.config_changes_size
+        value: int
+        note: >
+          How many configuration-change records the archive keeps before it wraps.
+          Distinct from logging.buffered_size, which sizes the syslog buffer: this
+          one bounds the change history an auditor reads to reconstruct who
+          changed what, and a device can size one without sizing the other.
+
+          Parsed but unread, like the two directives below. It appears in DISA's
+          own fix_text for CISC-ND-000210, so a device hardened by following that
+          document to the letter carries this line, and a pack that did not know
+          it would send one line of a correct archive stanza to the training
+          queue for every such device.
+      - id: archive_notify_syslog
+        regex: '^notify syslog contenttype\s+\S+$'
+        path: logging.config_changes_notify
+        value: true
+      - id: archive_hidekeys
+        regex: '^hidekeys$'
+        path: logging.config_changes_hidekeys
+        value: true
+        note: >
+          Suppresses passwords and keys from the change records the line above
+          ships to syslog. No built catalog asks about any of these three
+          directives, so none is read by a rule today; they are parsed because the
+          alternative is three lines of a correctly hardened archive stanza
+          arriving in the training queue for an admin to dismiss by hand, which
+          is how a queue stops being read.
+
+  - id: control_plane
+    anchor_path: control_plane.protection
+    regex: '^control-plane(?:\s+host)?$'
+    anchor_value: true
+    mode: indent
+    children:
+      - id: cp_service_policy
+        regex: '^service-policy input\s+(?P<value>\S+)$'
+        emits:
+          - {path: control_plane.service_policy, value: str, group: value}
+          - {path: control_plane.copp, value: true}
+      - id: cp_management_interface
+        regex: '^management-interface\s+\S+\s+allow\s+(?P<value>.+)$'
+        path: control_plane.policing
+        value: word_list
+
+  - id: redundancy
+    anchor_path: ha.redundancy
+    regex: '^redundancy$'
+    anchor_value: true
+    mode: indent
+    children:
+      - id: redundancy_mode
+        regex: '^mode\s+(?P<value>\S+)$'
+        path: ha.sync
+        value: lower
+        note: >
+          'mode sso' is stateful switchover, 'mode rpr' is not; the mode word is
+          the fact a redundancy control actually tests, so it is kept verbatim
+          rather than reduced to a boolean.
+
+
+# ── Platform defaults ──────────────────────────────────────────────────
+# A fact asserted only when no pattern in the file produced that path, with
+# present=False and the reason recorded in the fact's raw_text. Reserved for
+# documented IOS defaults, because a fact with no configuration line behind it
+# still owes the reader an explanation of where its value came from.
+#
+# Deliberately NOT defaulted: mgmt.http.server_enabled. The IOS default varies
+# by image and licence, so a rule about it uses on_missing: unknown and the
+# report says the evidence is inconclusive rather than guessing.
+
+defaults:
+  # ── Documented platform defaults for settings a benchmark thresholds ──
+  # These four are not "off unless configured" booleans but real numeric and
+  # string defaults from Cisco's own command reference. Stating them here is what
+  # lets a control be decided on a device whose config omits the command: the
+  # alternative is on_missing:fail in the rule, which reports a finding against a
+  # device that is compliant by default, or on_missing:pass, which credits a
+  # device for a setting nobody checked. Both are wrong; the default is a fact
+  # about the platform and belongs in the pack.
+  mgmt.ssh.version:
+    value: 1
+    reason: >
+      without 'ip ssh version 2' IOS negotiates 1.99 and still accepts SSHv1
+  mgmt.ssh.timeout:
+    value: 120
+    reason: "the 'ip ssh time-out' default is 120 seconds"
+  mgmt.ssh.maxretries:
+    value: 3
+    reason: "the 'ip ssh authentication-retries' default is 3"
+  logging.on:
+    value: true
+    reason: "IOS logs by default; only 'no logging on' disables it"
+  logging.trap_level:
+    value: informational
+    reason: "the syslog trap level defaults to informational"
+  service.pad:
+    value: true
+    reason: "IOS enables the PAD service by default; only 'no service pad' turns it off"
+  service.password_encryption:
+    value: false
+    reason: "password encryption is off unless 'service password-encryption' is present"
+  service.finger:
+    value: false
+    reason: the finger service is disabled by default on IOS 12.1(5)T and later
+  service.config:
+    value: false
+    reason: remote configuration loading is disabled by default
+  service.tcp_small_servers:
+    value: false
+    reason: TCP small servers are disabled by default on IOS 12.0 and later
+  service.udp_small_servers:
+    value: false
+    reason: UDP small servers are disabled by default on IOS 12.0 and later
+  service.bootp:
+    value: true
+    reason: "the BOOTP server is on by default; only 'no ip bootp server' disables it"
+  service.dhcp:
+    value: true
+    reason: "the DHCP service is on by default; only 'no service dhcp' disables it"
+  service.identd:
+    value: false
+    reason: the identd server is disabled by default
+  service.tcp_keepalives_in:
+    value: false
+    reason: inbound TCP keepalives are off unless explicitly configured
+  service.tcp_keepalives_out:
+    value: false
+    reason: outbound TCP keepalives are off unless explicitly configured
+  service.cdp:
+    value: true
+    reason: "CDP runs globally by default; only 'no cdp run' disables it"
+  service.gratuitous_arp:
+    value: true
+    reason: gratuitous ARP is enabled by default on IOS
+  service.dhcp_snooping:
+    value: false
+    reason: DHCP snooping is off until explicitly enabled
+  service.arp_inspection:
+    value: false
+    reason: dynamic ARP inspection is off until a VLAN is explicitly inspected
+  routing.source_routing:
+    value: true
+    reason: "IP source routing is enabled by default; 'no ip source-route' disables it"
+  routing.proxy_arp:
+    value: true
+    reason: proxy ARP is enabled by default
+  aaa.new_model:
+    value: false
+    reason: "the AAA model is off until 'aaa new-model' is configured"
+  stp.bpduguard_default:
+    value: false
+    reason: global BPDU guard defaulting is off unless explicitly configured
+  stp.portfast_default:
+    value: false
+    reason: global PortFast defaulting is off unless explicitly configured
+  stp.loopguard_default:
+    value: false
+    reason: global loop guard defaulting is off unless explicitly configured
+  snmp.enabled:
+    value: false
+    reason: the SNMP agent starts only when a community, group or user is configured
+  time.ntp.enabled:
+    value: false
+    reason: no NTP server, peer or master is configured
+  time.ntp.authentication:
+    value: false
+    reason: "NTP authentication is off until 'ntp authenticate' is configured"
+  mgmt.login_banner:
+    value: false
+    reason: no login banner is configured
+  mgmt.motd_banner:
+    value: false
+    reason: no MOTD banner is configured
+  logging.enable:
+    value: false
+    reason: no syslog destination is configured
+  image.verify:
+    value: false
+    reason: "automatic image verification is off unless 'file verify auto' is present"
+  crypto.fips_mode:
+    value: false
+    reason: FIPS mode is off unless explicitly enabled

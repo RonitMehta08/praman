@@ -1,0 +1,94 @@
+{
+  "caveats": [
+    "Size and latency say nothing about whether the report is legible or useful. No readability metric is claimed because there is not an honest one to compute.",
+    "The fallback is reached by blocking the reportlab import at runtime, which exercises the real guard but not a machine on which ReportLab was never installed -- a genuinely absent package can fail at a different point. tests/test_cold_start.py covers cold start.",
+    "Signature generation is excluded: these records carry an empty signature, so the figures are for an unsigned report. Signing adds one Ed25519 operation over a 32-byte hash, which is not measurable against a multi-millisecond render.",
+    "Finding count is constant across devices (every device is evaluated against the whole loaded catalog), so report size tracks failures rather than config size. bytes_per_failure is therefore the ratio with meaning; bytes-per-finding would be a near-constant.",
+    "The ~1.2 s render is dominated by chart drawing and is per device. It is roughly 90x the rule evaluation it reports on, so on an estate the PDF is the bottleneck, not the audit."
+  ],
+  "dataset": "Two fixtures chosen as the extremes of the shipped set by *failure* count -- 122 failures against 2. Finding count is identical (1,462) for both, so failures are the only axis that varies what the report has to render. All four frameworks, governance projection on, which is the shape the API commits.",
+  "environment": {
+    "cpu_count": 16,
+    "gpu": "not recorded",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.10.11"
+  },
+  "generated_at": "2026-09-12T17:28:31.139199+00:00",
+  "measures": "Wall-clock latency and output size of render_pdf() for the shipped fixture with the most failing controls and the one with the fewest, plus the same for the dependency-free fallback renderer that render_pdf selects when ReportLab cannot be imported.",
+  "metric": "pdf_generation",
+  "n": 10,
+  "results": {
+    "cases": {
+      "fewest_failures": {
+        "bytes": 124201,
+        "bytes_per_failure": 62100.5,
+        "config_lines": 278,
+        "failures": 2,
+        "findings": 1462,
+        "fixture": "fully_hardened.conf",
+        "latency": {
+          "max_ms": 892.464,
+          "mean_ms": 816.688,
+          "min_ms": 736.529,
+          "n": 5,
+          "p50_ms": 803.269,
+          "p95_ms": 892.464,
+          "timings_ms": [
+            892.464,
+            736.529,
+            859.616,
+            791.562,
+            803.269
+          ]
+        }
+      },
+      "most_failures": {
+        "bytes": 199628,
+        "bytes_per_failure": 1636.3,
+        "config_lines": 76,
+        "failures": 122,
+        "findings": 1462,
+        "fixture": "insecure_minimal.conf",
+        "latency": {
+          "max_ms": 1339.018,
+          "mean_ms": 1247.886,
+          "min_ms": 1180.559,
+          "n": 5,
+          "p50_ms": 1251.341,
+          "p95_ms": 1339.018,
+          "timings_ms": [
+            1205.783,
+            1339.018,
+            1180.559,
+            1262.728,
+            1251.341
+          ]
+        }
+      }
+    },
+    "fallback_renderer": {
+      "bytes": 201721,
+      "bytes_with_reportlab": 199628,
+      "is_valid_pdf_header": true,
+      "latency": {
+        "max_ms": 32.907,
+        "mean_ms": 28.968,
+        "min_ms": 22.637,
+        "n": 5,
+        "p50_ms": 29.487,
+        "p95_ms": 32.907,
+        "timings_ms": [
+          22.637,
+          28.532,
+          32.907,
+          31.276,
+          29.487
+        ]
+      },
+      "note": "backend/report/minimal_pdf.py, reached through render_pdf's own except ImportError after making reportlab unimportable. Same verdicts, same record hash, no charts, no third-party dependency -- and marginally LARGER on the wire, because uncompressed monospaced text costs more than the compressed vector charts it replaces. Much faster to produce: see speedup_vs_reportlab, which is computed, not asserted.",
+      "selected_by_the_real_import_guard": true,
+      "speedup_vs_reportlab": 42.4
+    },
+    "reportlab_available": true
+  }
+}

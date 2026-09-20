@@ -1,0 +1,843 @@
+# DISA STIG — Cisco IOS Router NDM v3r8 — canonical mappings
+#
+# 32 of this STIG's 35 controls. As in the CIS pack, a rule here is a *mapping*,
+# never a control: every word an auditor reads — title, discussion, check text,
+# official remediation — comes from the catalog built from DISA's own XCCDF
+# (catalog_id below). A rule supplies only the canonical-model condition that
+# decides the control, plus a rationale for why that condition stands in for it.
+#
+# The four conventions in rules/mappings/cis/cisco_ios_15_v4_1_1.yaml hold here
+# too. Three more are specific to DISA content, and each is a deliberate
+# departure from how the CIS pack is written:
+#
+# 5. `severity_override` is *absent* from every rule, where the CIS pack sets it
+#    on all of them. DISA publishes high/medium/low in @severity, and the
+#    evaluator reads `rule.severity_override or control.severity`
+#    (backend/rules/evaluator.py). Overriding it would replace the publisher's
+#    own CAT rating with ours, which is exactly the substitution this project
+#    exists to avoid. CIS publishes no severity, which is why that pack must.
+#
+# 6. `remediation_ref` is absent for the same reason. resolve_remediation()
+#    prefers the catalog's fix_text and extracts the CLI from it, reconstructing
+#    the prompts with the device's real hostname; DISA's fix_text is a citable,
+#    per-control command sequence. Naming a hand-authored playbook entry here
+#    would *replace* that with something an auditor cannot trace to a document.
+#
+# 7. Several checks are explicitly textual — "the following commands should not
+#    be in the configuration". Where DISA words the test that way, absence of
+#    the command satisfies it, so those leaves carry `on_missing: pass` and the
+#    rationale quotes the phrasing it relies on. This is the one place a rule in
+#    this project may treat absence as compliance, and it is allowed only
+#    because the publisher defined the test that way — not because the platform
+#    default happens to be convenient.
+#
+# The three unmapped controls are recorded in docs/GAPS.md with the reason. They
+# render as `notchecked` — an explicit "no automated check exists", never a pass.
+
+rules:
+
+  # ══ Session control and management-plane access ═════════════════════════
+
+  - id: stig-ios-router-ndm-v215662
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215662}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The check offers three ways to satisfy the control and accepts any one of
+      them: 'ip http max-connections', 'session-limit' under line vty on
+      platforms that support it, or - for platforms that do not - reducing the
+      number of usable vty lines by putting 'transport input none' on the rest.
+      All three are tested, because a rule that recognised only session-limit
+      would report a finding against a device DISA's own example calls compliant.
+
+      The third branch requires 'transport input none' on *every* vty line
+      (quantifier defaults to all), which is stricter than the example: DISA
+      shows 'line vty 0 1 transport input ssh' alongside 'line vty 2 4 transport
+      input none', so a real device using this technique passes on one of the
+      first two branches or not at all. It is kept because it is the only form
+      that decides a device with no usable vty lines whatsoever, and because an
+      any_of branch that never fires is dead weight rather than a wrong verdict.
+
+      Not verified: whether the configured limit matches the
+      organization-defined number, which is not in the configuration file.
+    condition:
+      type: any_of
+      conditions:
+        - {type: presence, path: mgmt.http.max_connections, must_be_present: true}
+        - {type: presence, path: line.vty.session_limit, must_be_present: true}
+        - type: fact_check
+          path: line.vty.transport_input
+          operator: contains
+          expected: none
+          on_missing: fail
+
+  - id: stig-ios-router-ndm-v215667
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215667}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Step 1 of the check - an inbound ACL on every vty line - is decided here.
+      'line.vty.access_class' carries only the inbound form; the outbound
+      'access-class ... out' lands on its own path precisely so that a device
+      restricting where sessions may go, rather than where they may come from,
+      cannot satisfy this control.
+
+      Not verified: Step 2, that the ACL permits only hosts from the management
+      network. The ACEs are parsed as separate facts with no binding back to the
+      line that references them, so any encoding would have to guess which
+      addresses count as management - and a guess that came back PASS would be
+      worse than the honest partial answer, because the operator would stop
+      looking. A device passing this rule has an ACL on every vty line; whether
+      that ACL is correct is a manual step, and the report says so.
+
+      on_no_blocks is fail: a device with no 'line vty' stanza at all still
+      accepts management sessions on the platform's default vty lines, so the
+      absence of the stanza is the absence of the control, not inapplicability.
+    condition:
+      type: for_each
+      block: line.vty.id
+      on_no_blocks: fail
+      condition: {type: presence, path: line.vty.access_class, must_be_present: true}
+
+  - id: stig-ios-router-ndm-v215668
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215668}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The title carries two numbers - three attempts, and a 15-minute lockout -
+      and both are checked, because 'login block-for 60 attempts 3 within 120'
+      satisfies the attempt count while locking an attacker out for one minute.
+
+      The attempt count is read from its own path, and the lockout duration from
+      aaa.login_block, which is a normalised integer count of seconds on every
+      vendor pack. This rule used to match '(?:9\d\d|\d{4,})' against the raw
+      directive because the path held the whole line on IOS and minutes on two
+      other vendors; that is fixed at the pattern layer, so the comparison is
+      now the plain 'gte 900' the STIG actually states. The evidence line an
+      auditor sees is unchanged - every fact carries its source line verbatim.
+
+      'lte 3' rather than 'eq 3' - a device locking out after two attempts is
+      more restrictive than the requirement, and reporting a finding against it
+      would be reporting a finding against being safer than asked.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: aaa.login_block, must_be_present: true}
+        - {type: fact_check, path: aaa.authentication_attempts, operator: lte, expected: 3, on_missing: fail}
+        - {type: fact_check, path: aaa.login_block, operator: gte, expected: 900, on_missing: fail}
+
+  - id: stig-ios-router-ndm-v215669
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215669}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      A login banner existing is not the control; the control is the *Standard
+      Mandatory DoD* banner. A device greeting users with "Welcome to R1" has a
+      banner and fails this requirement, so the text is matched as well as its
+      presence.
+
+      'U.S. Government' is the anchor phrase. Matching the full nine-paragraph
+      notice would fail every device over a line break, a trailing space or the
+      curly apostrophe a word processor inserted on the way to the console;
+      matching one phrase that appears in no other banner text is the strongest
+      test that does not fail on whitespace. quantifier: any because the banner
+      arrives as one fact per line and the phrase is on one of them.
+
+      Not verified: that the remaining paragraphs are present and unaltered. An
+      operator who has pasted the first sentence and truncated the rest passes
+      this rule, which is why the finding text keeps DISA's full banner for
+      comparison rather than paraphrasing it.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.login_banner, operator: eq, expected: true, on_missing: fail}
+        - type: fact_check
+          path: mgmt.banner.text
+          operator: regex_match
+          expected: 'U\.S\. Government'
+          quantifier: any
+          case_sensitive: false
+          on_missing: fail
+
+  # ══ Audit generation and protection ═════════════════════════════════════
+
+  - id: stig-ios-router-ndm-v215670
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215670}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Two halves, both required by the check's example: 'logging userinfo',
+      which records privilege escalation, and the archive stanza's 'logging
+      enable', which records configuration changes.
+
+      The second half reads logging.config_changes, which the pack emits from
+      'logging enable' and not from the 'log config' container above it. A
+      device carrying 'archive / log config' with nothing under it logs no
+      change at all, so treating the container as the fact would pass a device
+      that records nothing - see the pattern note on archive_log_enable.
+
+      Both leaves fail on missing evidence. Neither command has a platform
+      default that could stand in: absence means the device is not auditing
+      administrator activity, which is the finding.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.userinfo, operator: eq, expected: true, on_missing: fail}
+        - {type: presence, path: logging.config_changes, must_be_present: true}
+
+  - id: stig-ios-router-ndm-v215672
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215672}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'service timestamps log datetime' is the operative setting: without
+      'datetime' IOS stamps records with uptime, which cannot establish when an
+      event occurred without knowing when the device last booted.
+
+      Matched as a substring rather than compared for equality because the
+      keyword takes optional suffixes - 'msec', 'localtime', 'show-timezone' -
+      and all of them still carry the date and time. DISA's example includes
+      'localtime', but the finding statement is "If time stamps is not
+      configured, this is a finding", so the zone selection is not made a
+      condition of passing.
+
+      logging.timestamps carries only 'service timestamps log'; the debug
+      variant has its own path, so the default quantifier of all is safe here.
+    condition:
+      type: fact_check
+      path: logging.timestamps
+      operator: regex_match
+      expected: 'datetime'
+      on_missing: fail
+
+  - id: stig-ios-router-ndm-v215675
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215675}
+    applies_to:
+      vendors: [cisco_ios]
+      os_families: [ios]
+      requires_paths: [logging.persistent]
+    mapping_rationale: >
+      Step 1 of the check is a gate, not a test: "If persistent logging is
+      enabled ... go to step 2. Otherwise, this requirement is not applicable."
+      requires_paths encodes that literally - a device with no 'logging
+      persistent' reports notapplicable, which the compliance ratio excludes.
+      Expressing the gate inside the condition instead would return PASS and
+      credit the device for a control it was never subject to.
+
+      Step 2 is 'file privilege' being 15. on_missing is pass because DISA
+      states the reason in the check itself: "The default privilege level
+      required for access to the file system is 15; hence, the command file
+      privilege 15 will not be shown in the configuration." The compliant
+      device is the silent one. This is the publisher's own reading of absence,
+      not an inference of ours, and it is why the pack declines to declare a
+      default for file.privilege - a default of 15 would silently pass every
+      device on earth, whereas here the assumption is written at the one place
+      it is relied on.
+    condition:
+      type: fact_check
+      path: file.privilege
+      operator: eq
+      expected: 15
+      on_missing: pass
+
+  - id: stig-ios-router-ndm-v215676
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215676}
+    applies_to:
+      vendors: [cisco_ios]
+      os_families: [ios]
+      requires_paths: [logging.persistent]
+    mapping_rationale: >
+      Unauthorized deletion, where V-215675 is unauthorized modification. DISA
+      publishes the same two-step check and the same fix for both, so the
+      mapping is identical by design rather than by copy-paste: the file
+      privilege level is what governs access to the stored log, and it governs
+      reading, writing and deleting it alike. See V-215675 for why Step 1 is a
+      requires_paths gate and why absence of 'file privilege' passes.
+    condition:
+      type: fact_check
+      path: file.privilege
+      operator: eq
+      expected: 15
+      on_missing: pass
+
+  - id: stig-ios-router-ndm-v215677
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215677}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The same 'file privilege' test as V-215675 and V-215676, but
+      unconditional: this control is about who may replace the IOS image in
+      flash, which does not depend on whether persistent logging is enabled.
+      There is no Step 1 gate in the check text, so there is no requires_paths
+      here - a device silent on both 'logging persistent' and 'file privilege'
+      is notapplicable to the two audit-protection controls and passing on this
+      one, which is the difference the STIG draws.
+    condition:
+      type: fact_check
+      path: file.privilege
+      operator: eq
+      expected: 15
+      on_missing: pass
+
+  - id: stig-ios-router-ndm-v215678
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215678}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The check enumerates thirteen commands that "should not be in the
+      configuration". Eleven canonical paths cover them; each is required to be
+      false, and any one being true fails the control.
+
+      Four paths carry no platform default - service.dns, service.rcmd,
+      service.boot_network and mgmt.http.server_enabled - and read
+      on_missing: pass. That is convention 7 in this file's header: DISA words
+      this test textually, as the *absence of a command from the
+      configuration*, so absence satisfies it by the publisher's own
+      definition. mgmt.http.server_enabled is the one to watch, because the
+      pack deliberately refuses to default it (the IOS default varies by image
+      and licence) and any rule asking what the HTTP server is actually *doing*
+      must report unknown. This rule does not ask that. It asks whether the
+      enabling command is present, which the file answers.
+
+      service.rcmd and service.boot_network each receive two facts, one per
+      command form ('rcp-enable'/'rsh-enable', 'boot network'/'ip boot
+      server'). The default quantifier of all requires both to be false, so a
+      device running only the form a narrower rule forgot still fails.
+
+      'service call-home' is deliberately excluded. DISA's own note exempts it:
+      "Those devices do not incur a finding for having call-home enabled for
+      Smart Licensing." Including it would manufacture findings the STIG
+      forgives.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: service.bootp, operator: eq, expected: false}
+        - {type: fact_check, path: service.finger, operator: eq, expected: false}
+        - {type: fact_check, path: service.identd, operator: eq, expected: false}
+        - {type: fact_check, path: service.config, operator: eq, expected: false}
+        - {type: fact_check, path: service.pad, operator: eq, expected: false}
+        - {type: fact_check, path: service.tcp_small_servers, operator: eq, expected: false}
+        - {type: fact_check, path: service.udp_small_servers, operator: eq, expected: false}
+        - {type: fact_check, path: service.dns, operator: eq, expected: false, on_missing: pass}
+        - {type: fact_check, path: service.rcmd, operator: eq, expected: false, on_missing: pass}
+        - {type: fact_check, path: service.boot_network, operator: eq, expected: false, on_missing: pass}
+        - {type: fact_check, path: mgmt.http.server_enabled, operator: eq, expected: false, on_missing: pass}
+
+  - id: stig-ios-router-ndm-v215679
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215679}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      "Only one local account" is a count, not a presence test, and it is the
+      half of this control most often missed: a device with six local accounts
+      has an account of last resort and fails anyway. 'eq 1' is therefore
+      exact - zero accounts means there is nothing to fall back to when the
+      authentication server is unreachable, and two or more means the local
+      database has become a parallel identity store outside AAA.
+
+      Step 2 is aaa.local_fallback: 'local' appearing after the server group in
+      the authentication order, which is what makes the account reachable only
+      when the servers are not.
+
+      Not verified: that the account's privilege level lets an administrator
+      troubleshoot the authentication server, and that its password was set
+      under the Common Criteria policy. The first is an operational judgement;
+      the second is not observable in the configuration, because the policy
+      binding is recorded on the username line but whether the *current*
+      password was created under it is device state.
+    condition:
+      type: all_of
+      conditions:
+        - {type: count, path: mgmt.local_user.name, operator: eq, expected: 1}
+        - {type: fact_check, path: aaa.local_fallback, operator: eq, expected: true, on_missing: fail}
+
+  # ══ Password policy — the AAA common-criteria stanza ════════════════════
+  #
+  # All six of these controls are answered by 'aaa common-criteria policy'.
+  # Every one requires the policy to exist as well as to carry the directive,
+  # because the older global 'security passwords min-length' lands on the same
+  # min_length path: without the presence check a device carrying only the
+  # legacy global command would pass a control about the CC policy.
+
+  - id: stig-ios-router-ndm-v215681
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215681}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'min-length 15' inside a Common Criteria policy. gte rather than eq: a
+      site enforcing 20 characters exceeds the requirement and must not be
+      reported as failing it. quantifier all so that a device with two policies
+      cannot pass on the strength of the stricter one while a weaker policy is
+      also bound to accounts.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: mgmt.password_policy.name, must_be_present: true}
+        - {type: fact_check, path: mgmt.password_policy.min_length, operator: gte, expected: 15}
+
+  - id: stig-ios-router-ndm-v215682
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215682}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'upper-case 1' or more. The pack records each composition directive as
+      its own fact carrying the line verbatim, so the condition is a regex over
+      those facts with quantifier any - the policy satisfies this control if any
+      one of its directives is the uppercase requirement.
+
+      '[1-9]' rather than a numeric comparison because the value is the
+      directive text, not an integer; it accepts 1 through 9 and, since it
+      matches the leading digit, 10 and above. 'upper-case 0' is the only
+      spelling it rejects, which is the only spelling that fails the control.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: mgmt.password_policy.name, must_be_present: true}
+        - type: fact_check
+          path: mgmt.password_policy.complexity
+          operator: regex_match
+          expected: '^upper-case\s+[1-9]'
+          quantifier: any
+          on_missing: fail
+
+  - id: stig-ios-router-ndm-v215683
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215683}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'lower-case 1' or more; see V-215682 for why the directive is matched as
+      text with quantifier any rather than compared as a number.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: mgmt.password_policy.name, must_be_present: true}
+        - type: fact_check
+          path: mgmt.password_policy.complexity
+          operator: regex_match
+          expected: '^lower-case\s+[1-9]'
+          quantifier: any
+          on_missing: fail
+
+  - id: stig-ios-router-ndm-v215684
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215684}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'numeric-count 1' or more. IOS spells the numeric requirement
+      'numeric-count' rather than 'numeric-case', which is the one directive
+      name in this group that does not follow the pattern of the others.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: mgmt.password_policy.name, must_be_present: true}
+        - type: fact_check
+          path: mgmt.password_policy.complexity
+          operator: regex_match
+          expected: '^numeric-count\s+[1-9]'
+          quantifier: any
+          on_missing: fail
+
+  - id: stig-ios-router-ndm-v215685
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215685}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'special-case 1' or more; see V-215682 for the matching approach.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: mgmt.password_policy.name, must_be_present: true}
+        - type: fact_check
+          path: mgmt.password_policy.complexity
+          operator: regex_match
+          expected: '^special-case\s+[1-9]'
+          quantifier: any
+          on_missing: fail
+
+  - id: stig-ios-router-ndm-v215686
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215686}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'char-changes 8' or more - at least eight positions must differ when a
+      password is changed. The threshold is eight rather than one, so the regex
+      cannot simply accept any non-zero digit: '(?:[89]|\d{2,})' admits 8, 9 and
+      any two-or-more digit number, and rejects 1 through 7. This is the one
+      directive in the group where a lazy '[1-9]' would have passed a device
+      configured with 'char-changes 1'.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: mgmt.password_policy.name, must_be_present: true}
+        - type: fact_check
+          path: mgmt.password_policy.complexity
+          operator: regex_match
+          expected: '^char-changes\s+(?:[89]|\d{2,})$'
+          quantifier: any
+          on_missing: fail
+
+  - id: stig-ios-router-ndm-v215687
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215687}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The check is one line - 'service password-encryption' - and the pack
+      defaults the path to false, so absence is a decided finding rather than
+      missing evidence and no on_missing clause is needed.
+
+      Worth recording that this control is weaker than its title: 'service
+      password-encryption' applies type 7, a reversible Vigenere cipher, not a
+      cryptographic representation. DISA's check nevertheless asks for exactly
+      this command, and the mapping follows the check rather than the title,
+      because a rule that also demanded type 8 or 9 secrets would report
+      findings the STIG does not authorise. The gap belongs in the report's
+      narrative, not in a condition that outvotes the publisher.
+    condition:
+      type: fact_check
+      path: service.password_encryption
+      operator: eq
+      expected: true
+
+  # ══ Idle timeout ════════════════════════════════════════════════════════
+
+  - id: stig-ios-router-ndm-v215688
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215688}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Five minutes, on *all* network connections associated with device
+      management - which DISA's example spells out as the console, every vty
+      line, and the HTTP management server's idle timeout.
+
+      Every timeout leaf is 'lte 300 and gt 0' (convention 3): 'no
+      exec-timeout' is recorded as 0 seconds because that is what IOS means by
+      it - never time out - so a bare 'lte 300' would pass the least secure
+      setting the platform offers.
+
+      The HTTP branch is an any_of because the timeout only exists if the server
+      does: a device with 'no ip http secure-server' has no HTTPS management
+      session to time out, and requiring 'ip http timeout-policy' on it would
+      be a finding against a device that closed the interface entirely. The
+      first branch reads on_missing: pass for the same textual reason as
+      V-215678 - DISA's example pairs 'ip http secure-server' with the timeout,
+      so a configuration mentioning neither has nothing to time out.
+
+      Units differ between the two and are kept in the publisher's own: the
+      line 'exec-timeout 5 0' is minutes and seconds, normalised to 300 by the
+      pack, while 'ip http timeout-policy idle 300' is already seconds.
+    condition:
+      type: all_of
+      conditions:
+        - type: for_each
+          block: line.console.id
+          on_no_blocks: fail
+          condition:
+            type: all_of
+            conditions:
+              - {type: fact_check, path: line.console.exec_timeout, operator: lte, expected: 300, on_missing: fail}
+              - {type: fact_check, path: line.console.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+        - type: for_each
+          block: line.vty.id
+          on_no_blocks: fail
+          condition:
+            type: all_of
+            conditions:
+              - {type: fact_check, path: line.vty.exec_timeout, operator: lte, expected: 300, on_missing: fail}
+              - {type: fact_check, path: line.vty.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+        - type: any_of
+          conditions:
+            - {type: fact_check, path: mgmt.http.secure_server_enabled, operator: eq, expected: false, on_missing: pass}
+            - type: all_of
+              conditions:
+                - {type: fact_check, path: mgmt.http.idle_timeout, operator: lte, expected: 300, on_missing: fail}
+                - {type: fact_check, path: mgmt.http.idle_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  # ══ Log storage, alerting and off-load ═════════════════════════════════
+
+  - id: stig-ios-router-ndm-v215691
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215691}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      'logging buffered <size>'. The check sets no threshold - "If a logging
+      buffer size is not configured, this is a finding" - so the condition is
+      the weakest one that is still a test: a size greater than zero.
+
+      'gt 0' rather than presence because 'logging buffered 0' parses to a fact
+      and would satisfy a presence check while allocating no storage at all.
+
+      Not verified: that the size meets the organization-defined requirement,
+      which is not a number the configuration file contains.
+    condition:
+      type: fact_check
+      path: logging.buffered_size
+      operator: gt
+      expected: 0
+      on_missing: fail
+
+  - id: stig-ios-router-ndm-v215692
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215692}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      The check asks for 'logging trap critical' and then widens it: "The
+      parameter critical can [be] replaced with a lesser severity level (i.e.,
+      error, warning, notice, informational)." The acceptable set is therefore
+      everything from critical downward, and the failing set is the two levels
+      above it - emergencies and alerts - plus 'none', which disables trap
+      logging outright. Expressed as not_in over those three rather than in_
+      over the six that pass, so a spelling the pack learns later does not
+      silently start failing.
+
+      No on_missing clause: the pack defaults logging.trap_level to
+      informational, citing the same fact DISA does - "Informational is the
+      default severity level; hence, if the severity level is configured to
+      informational, the logging trap command will not be shown in the
+      configuration." The silent device is compliant, and the platform default
+      is recorded in the pack where it belongs rather than assumed in the rule.
+    condition:
+      type: fact_check
+      path: logging.trap_level
+      operator: not_in
+      expected: [emergencies, alerts, none]
+      case_sensitive: false
+
+  - id: stig-ios-router-ndm-v220136
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-220136}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      "At least two syslog servers" is a count of distinct 'logging <host>'
+      destinations. A single server is a single point of failure for the audit
+      trail, which is why the control is CAT I and why this is a count rather
+      than a presence check.
+    condition:
+      type: count
+      path: logging.remote_syslog
+      operator: gte
+      expected: 2
+
+  # ══ Time ════════════════════════════════════════════════════════════════
+
+  - id: stig-ios-router-ndm-v215693
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215693}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Primary and secondary time sources - two 'ntp server' statements. A
+      device with one authoritative source loses time synchronisation, and with
+      it the ordering of every audit record, when that source goes away.
+
+      Not verified: that the sources are authoritative, or that they are the
+      two the organisation designated. Neither is in the configuration.
+    condition:
+      type: count
+      path: time.ntp.server
+      operator: gte
+      expected: 2
+
+  - id: stig-ios-router-ndm-v215698
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215698}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      This control cannot be passed on Cisco IOS, and the mapping says so
+      rather than quietly passing devices that have done everything available
+      to them. DISA's own note: "Cisco IOS is limited to MD5 for NTP
+      authentication, and incurs a permanent finding as it is not FIPS
+      compliant."
+
+      Both halves are still checked, so the finding distinguishes a device that
+      configured NTP authentication as well as the platform allows from one
+      that configured none at all. The first is a permanent finding the
+      publisher acknowledges; the second is a permanent finding plus an
+      unauthenticated clock. 'ne md5' is the half that can never pass, and it
+      is written as a real condition rather than a hardcoded fail so that the
+      day IOS gains SHA support this rule starts passing without being touched.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: time.ntp.authentication, operator: eq, expected: true}
+        - {type: fact_check, path: time.ntp.key, operator: ne, expected: md5, on_missing: fail, case_sensitive: false}
+
+  # ══ SNMPv3 ══════════════════════════════════════════════════════════════
+  #
+  # Both SNMP controls are gated on the device actually running SNMP.
+  # snmp.enabled is observed only when a community, group, user or host is
+  # configured, so its pack default of false is what a silent device carries -
+  # which is why the gate is a value test inside an any_of rather than
+  # requires_paths, exactly as in the CIS pack's 1.5.7 and 1.5.8.
+
+  - id: stig-ios-router-ndm-v215696
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215696}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      A FIPS-validated HMAC for SNMP means the v3 user's authentication
+      protocol is SHA and the group requires authentication at all. Both are
+      checked: 'snmp-server group V3GROUP v3 noauth' with a SHA user still
+      accepts unauthenticated messages, and a group demanding auth with an MD5
+      user authenticates with a broken hash.
+
+      The first branch passes a device with SNMP switched off, which cannot
+      fail a requirement about how it authenticates SNMP messages. Both leaves
+      of the second branch fail on missing evidence, without which an any_of
+      would return unknown for a device running SNMPv1 - where the absence of
+      any v3 auth protocol is precisely the finding.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: snmp.enabled, operator: eq, expected: false}
+        - type: all_of
+          conditions:
+            - {type: fact_check, path: snmp.v3_auth, operator: regex_match, expected: '^sha', case_sensitive: false, on_missing: fail}
+            - {type: fact_check, path: snmp.group_security, operator: in, expected: [auth, priv], on_missing: fail}
+
+  - id: stig-ios-router-ndm-v215697
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215697}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Encryption, where V-215696 was authentication: the privacy protocol must
+      be AES, and the group must require privacy rather than merely
+      authentication. 'priv' exactly, not in [auth, priv] as the previous rule
+      allows - a group configured 'v3 auth' authenticates its messages and
+      sends them in cleartext, which passes V-215696 and fails this one. That
+      difference is the whole distinction between the two controls.
+    condition:
+      type: any_of
+      conditions:
+        - {type: fact_check, path: snmp.enabled, operator: eq, expected: false}
+        - type: all_of
+          conditions:
+            - {type: fact_check, path: snmp.v3_priv, operator: regex_match, expected: '^aes', case_sensitive: false, on_missing: fail}
+            - {type: fact_check, path: snmp.group_security, operator: eq, expected: priv, on_missing: fail}
+
+  # ══ Remote-management cryptography ══════════════════════════════════════
+
+  - id: stig-ios-router-ndm-v215699
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215699}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      SSHv2 plus a MAC list restricted to FIPS-validated HMACs. subset_of, not
+      contains: the configured list must contain nothing *but* the approved
+      algorithms, because 'ip ssh server algorithm mac hmac-sha2-256 hmac-sha1'
+      offers a strong MAC and still negotiates a compromised one. A contains
+      check would pass it.
+
+      SHA-1 is excluded from the approved set on DISA's own instruction:
+      "Unless required for legacy use, DoD systems should not be configured to
+      use SHA-1 for integrity of remote access sessions."
+
+      on_missing: fail is a statement about the platform, not an assumption of
+      guilt. Absent 'ip ssh server algorithm mac', IOS negotiates its built-in
+      default set, which includes hmac-sha1 - so the silent device is offering
+      a non-compliant MAC. mgmt.ssh.version needs no such clause: the pack
+      defaults it to 1, citing that without 'ip ssh version 2' IOS negotiates
+      1.99 and still accepts SSHv1.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.ssh.version, operator: eq, expected: 2}
+        - type: fact_check
+          path: mgmt.ssh.mac
+          operator: subset_of
+          expected: [hmac-sha2-256, hmac-sha2-512]
+          case_sensitive: false
+          on_missing: fail
+
+  - id: stig-ios-router-ndm-v215700
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215700}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Confidentiality, where V-215699 was integrity: the SSH cipher list must
+      be a subset of the AES counter and GCM modes DISA's example names. CBC
+      modes and 3des-cbc are excluded, and subset_of is used for the same
+      reason as in V-215699 - offering aes256-ctr alongside 3des-cbc lets a
+      client negotiate the weak one.
+
+      on_missing: fail because the IOS default cipher set includes 3des-cbc and
+      the CBC variants of AES, so a device that never issued the command is
+      offering them.
+
+      Not verified: the HTTPS alternative the check also shows
+      ('ip http secure-ciphersuite'). A device managed only over HTTPS with a
+      compliant ciphersuite and no SSH algorithm configuration fails this rule
+      where the STIG would pass it. Recorded in docs/GAPS.md rather than
+      papered over with an any_of branch, because the pack does not yet parse
+      the ciphersuite line and an any_of branch that can only ever return
+      unknown would turn every SSH finding into an unknown.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.cipher
+      operator: subset_of
+      expected: [aes128-ctr, aes192-ctr, aes256-ctr, aes128-gcm, aes256-gcm]
+      case_sensitive: false
+      on_missing: fail
+
+  # ══ Availability, logging of logons, AAA redundancy, PKI ════════════════
+
+  - id: stig-ios-router-ndm-v215701
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215701}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Control Plane Policing is the safeguard the check describes, and its
+      presence is the one step of four a configuration file can decide: the
+      'control-plane' stanza with a service policy applied to it.
+
+      Not verified, and this is most of the control: whether the class maps
+      classify traffic by importance correctly (Step 1), whether the ACLs they
+      reference match the right neighbours (Step 2), and whether the policy's
+      rates are appropriate (Steps 3 and on). Those are judgements about a
+      specific network's topology and traffic, not facts about a file. A device
+      passing this rule has CoPP configured; whether that CoPP protects it is a
+      manual review, and the finding text says so rather than implying the
+      question was answered.
+
+      on_missing is left at the default of unknown by using presence, which
+      cannot return unknown - a device with no control-plane stanza has no
+      safeguard, which is a decided finding.
+    condition:
+      type: presence
+      path: control_plane.copp
+      must_be_present: true
+
+  - id: stig-ios-router-ndm-v215704
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215704}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      "Successful/unsuccessful" is two requirements, and IOS configures them
+      separately. Both are checked because a device very commonly carries only
+      'login on-failure log': folding them into one boolean would let half a
+      configuration satisfy the whole control, and it is the successful-logon
+      record that establishes who was on the device when a change was made.
+
+      Both fail on missing evidence - neither command has a platform default,
+      and a device that logs no logon events is the finding.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: logging.login_success, operator: eq, expected: true, on_missing: fail}
+        - {type: fact_check, path: logging.login_failure, operator: eq, expected: true, on_missing: fail}
+
+  - id: stig-ios-router-ndm-v215709
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215709}
+    applies_to: {vendors: [cisco_ios], os_families: [ios]}
+    mapping_rationale: >
+      Two authentication servers, counted across every form the pack
+      recognises - 'server' and 'server-private' inside an 'aaa group server'
+      stanza, the 'address ipv4' line of a named tacacs/radius server, and the
+      legacy 'tacacs-server host' global. All four land on aaa.server.host, so
+      the count is of distinct configured servers rather than of one syntax.
+
+      A single AAA server means an outage locks every administrator out of the
+      device, or - worse, if local fallback is configured - silently downgrades
+      the whole estate to local authentication. That is why this is CAT I.
+    condition:
+      type: count
+      path: aaa.server.host
+      operator: gte
+      expected: 2
+
+  - id: stig-ios-router-ndm-v215711
+    catalog: {catalog_id: disa_stig_cisco_ios_router_ndm_security_technical_implementation_guide_v3r8, control_id: V-215711}
+    applies_to:
+      vendors: [cisco_ios]
+      os_families: [ios]
+      requires_paths: [crypto.pki.trustpoint]
+    mapping_rationale: >
+      The check ends with its own applicability note: "This requirement is not
+      applicable if the router does not have any public key certificates."
+      requires_paths on crypto.pki.trustpoint encodes that - a device with no
+      trustpoint reports notapplicable and is excluded from the ratio, rather
+      than passing a control about certificate provenance it was never subject
+      to.
+
+      Where a trustpoint does exist, the testable part is that it carries an
+      enrollment URL, which is what shows the router enrolled with a CA rather
+      than holding a self-signed certificate.
+
+      Not verified: that the CA is DoD or DoD-approved. That is a judgement
+      about the URL's owner, and hardcoding a list of approved CA hostnames
+      into a rule would be stale the day after it shipped and wrong for every
+      non-DoD deployment of this tool.
+    condition:
+      type: presence
+      path: crypto.pki.enrollment
+      must_be_present: true

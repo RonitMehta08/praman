@@ -1,0 +1,535 @@
+# DISA STIG — Arista MLS EOS 4.x (NDM v2r2, Layer-2 Switch v2r3) — canonical mappings
+#
+# Arista is the one vendor in this corpus with no CIS benchmark, which makes it the
+# useful demonstration that the rule layer is not CIS-shaped. The two catalogs
+# mapped here are DISA STIGs: the control ids are V-numbers rather than dotted
+# section numbers, the severity comes from the catalog rather than from a house
+# convention, and the wording is a requirement on the *organisation* ("must be
+# configured to…") rather than an audit procedure. None of that changes the shape
+# of a rule, because a rule was never written against a benchmark's prose — it is
+# written against the canonical model, and the catalog only decides which control
+# id the finding carries.
+#
+# One control fails on the shipped fixture and it is real:
+#
+#   * **V-255956** — the SSH and console idle timeouts are 15 minutes; the STIG
+#     ceiling is 10. This one is only visible because the EOS pack now normalises
+#     `idle-timeout` from minutes to seconds. Before that fix the fact was the raw
+#     `15`, which compared against a 600-second ceiling and *passed* — a
+#     non-compliant device reported as compliant, silently, in the permissive
+#     direction. The rule below is unchanged by that fix; the contract lives in the
+#     pack, which is the point of putting units there.
+#
+# **V-255952 used to be listed here as the second failure, and that was wrong.**
+# The fixture has `shutdown` under `management telnet` and always did — telnet is
+# off on that switch. The pack read the line with `negated_bool`, which answers
+# "was the directive negated", so a bare `shutdown` produced
+# `mgmt.telnet.enabled = true`. The verdict was inverted in both directions: a
+# hardened switch was reported non-compliant, and a switch actually running telnet
+# — `no shutdown` — would have been reported clean. Only the first direction was
+# visible, so the failure was read as a true finding and written up here as one.
+# Corrected 2026-09-12: the pack now matches the two states as separate patterns
+# and this control passes on the fixture, which is the correct verdict for it.
+# The same inversion was fixed at `mgmt.restconf.enabled` (EOS) and at
+# `interface.admin_state` (EOS, ASA, NX-OS), where it was also emitting a bool
+# onto a path whose vocabulary is the string `shutdown`/`no-shutdown`.
+# `tests/test_pattern_polarity.py` now gates the pairing that caused it.
+#
+# Deliberately NOT mapped, with reasons — a STIG is a compliance floor for systems
+# that get audited by people, so a false pass here is worse than in most places:
+#
+#   * **V-255953** (exactly one local account of last resort). The device does have
+#     more local accounts than the STIG allows alongside an authentication server,
+#     so this would be a true finding — but `count` counts *facts*, and
+#     `mgmt.local_user.name` carries a duplicate where an account is named on two
+#     lines. A count rule would therefore report the wrong number in the evidence
+#     even when it reached the right verdict, and an auditor reading "4 accounts"
+#     against a device with 3 loses confidence in every other finding in the report.
+#   * **V-255967** (running a vendor-supported release). Whether 4.30.3M is still
+#     supported is a fact about Arista's lifecycle calendar, not about this file.
+#     A presence check on `device.os_version` would pass unconditionally, which is
+#     a rule that looks like coverage and provides none.
+#   * **V-255968** (uniquely identify endpoints). The STIG means 802.1X. The pack
+#     sees MAC-limit port security, which is a different and weaker mechanism.
+#     Passing this control on that evidence would be the tool substituting a
+#     compensating control for the required one on the auditor's behalf.
+#   * **V-255947** (limit concurrent sessions). `aaa.max_sessions` is in the
+#     canonical vocabulary and five of the seven pattern packs file it, but the EOS
+#     pack does not, because EOS has no single directive that states a global
+#     session ceiling the way `set admin-concurrent` or `login-limit` do. The gap is
+#     in the pattern pack, not here: a rule written against a fact nothing emits
+#     would report `notchecked` with a reason that blamed the wrong layer.
+#   * **V-255964, V-255975, V-255976, V-255980, V-255983, V-255984, V-255986.**
+#     No canonical fact decides them.
+
+rules:
+
+  # ══ NDM — access to the management plane ═══════════════════════════════
+
+  - id: stig-eos-v255948
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255948
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      "Enforce approved authorizations for controlling the flow of management
+      information" is an access-list on the management services. Either binding
+      satisfies it — EOS expresses the same restriction as an ACL on the SSH stanza
+      or as an access class on the VTY lines, and which one an operator used is not
+      a security difference.
+    condition:
+      type: any_of
+      conditions:
+        - {type: presence, path: mgmt.ssh.acl, must_be_present: true}
+        - {type: presence, path: line.vty.access_class, must_be_present: true}
+
+  - id: stig-eos-v255949
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255949
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      Three consecutive invalid attempts, stated as a number in the control text and
+      checked as one. `gt 0` excludes the setting that disables the limit entirely.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.authentication_attempts, operator: lte, expected: 3, on_missing: fail}
+        - {type: fact_check, path: aaa.authentication_attempts, operator: gt, expected: 0, on_missing: fail}
+
+  - id: stig-eos-v255950
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255950
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      The Standard Mandatory DOD Notice and Consent Banner must appear *before*
+      authentication, which is the login banner rather than the MOTD. Whether the
+      text matches DOD's wording verbatim is a human review the tool does not
+      claim to perform; that its presence is checked automatically is what stops
+      the manual review being wasted on devices that have no banner at all.
+    condition: {type: presence, path: mgmt.login_banner, must_be_present: true}
+
+  - id: stig-eos-v255951
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255951
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      Command accounting is the record of what an administrator actually typed. Its
+      absence is what makes an insider action unreconstructable — the device keeps
+      working perfectly and the audit trail simply does not exist.
+    condition: {type: presence, path: aaa.accounting_commands, must_be_present: true}
+
+  - id: stig-eos-v255952
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255952
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      "Prohibit the use of all unnecessary and/or nonsecure functions" is open-ended
+      in the STIG and unbounded rules are useless, so this is narrowed to the one
+      nonsecure function EOS still ships a stanza for: Telnet, which carries the
+      administrative password in cleartext across the datacentre fabric. The pack
+      records `management telnet` with a decided enable state, so this is a real
+      `false` rather than an absence — which matters, because a device with the
+      stanza present and not shut down is the exact configuration the control
+      exists to catch.
+    condition:
+      type: fact_check
+      path: mgmt.telnet.enabled
+      operator: eq
+      expected: false
+      on_missing: fail
+
+  - id: stig-eos-v255954
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255954
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      Fifteen characters — noticeably longer than the CIS benchmarks in this project
+      ask for, and honoured exactly as the STIG states it rather than normalised to
+      a common house minimum. Divergence between two frameworks on the same setting
+      is information the report should carry, not noise to be smoothed away.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.min_length
+      operator: gte
+      expected: 15
+      on_missing: fail
+
+  - id: stig-eos-v255955
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255955
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      FIPS 140-2 mode is a single switch on EOS and it changes which algorithms the
+      crypto library will offer at all — which is why the STIG asks for the mode
+      rather than enumerating ciphers here.
+    condition:
+      type: fact_check
+      path: crypto.fips_mode
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: stig-eos-v255956
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255956
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      Ten minutes of inactivity before a management session is torn down. Both the
+      SSH stanza and the console are checked, because an idle console in an unlocked
+      rack is the same exposure as an idle SSH session and the STIG does not
+      distinguish them. Seconds — the EOS pack converts `idle-timeout`, which the
+      platform states in minutes, so 600 here is the control's ten minutes and the
+      comparison is not silently off by a factor of sixty.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.ssh.timeout, operator: lte, expected: 600, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: line.console.exec_timeout, operator: lte, expected: 600, quantifier: all, on_missing: fail}
+
+  - id: stig-eos-v255957
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255957
+    applies_to:
+      vendors: [arista_eos]
+      os_families: [eos]
+      requires_paths: [mgmt.local_user.name]
+    mapping_rationale: >
+      The control is conditional — "if the network device uses role-based access
+      control" — so the rule is scoped to devices with local accounts and asks that
+      each one carry an explicit privilege or role. An account with no role named
+      inherits the platform default, which on EOS is full administrative access.
+    condition: {type: presence, path: mgmt.local_user.privilege, must_be_present: true}
+
+  - id: stig-eos-v255958
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255958
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      The control asks for *redundant* and *authenticated* time sources, so both
+      halves are required and neither substitutes for the other. Unauthenticated
+      NTP lets an on-path attacker move the clock, which backdates every log entry
+      the device will write and can bring an expired certificate back to life.
+    condition:
+      type: all_of
+      conditions:
+        - {type: count, path: time.ntp.server, operator: gte, expected: 2}
+        - {type: fact_check, path: time.ntp.authentication, operator: eq, expected: true, quantifier: any, on_missing: fail}
+
+  - id: stig-eos-v255959
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255959
+    applies_to:
+      vendors: [arista_eos]
+      os_families: [eos]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      A FIPS-validated HMAC for SNMP message authentication, which in practice means
+      the SHA family rather than MD5. Stated as "not MD5" so that SHA-2 members
+      satisfy it without the rule needing revision each time the platform adds one.
+      Scoped to devices actually running the agent.
+    condition:
+      type: fact_check
+      path: snmp.v3_auth
+      operator: regex_not_match
+      expected: "(?i)\\Amd5"
+      quantifier: all
+      on_missing: fail
+
+  - id: stig-eos-v255960
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255960
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      Integrity protection for the remote maintenance session — the SSH MAC list.
+      Stated as "the offered MACs and the broken MACs are disjoint" rather than as
+      a whitelist, because that is the correct shape for a list-valued fact and the
+      correct reading of the control: offering HMAC-SHA2-512 alongside HMAC-MD5 is
+      not compliance, since the client chooses.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.mac
+      operator: disjoint_from
+      expected: [hmac-md5, 'hmac-md5-96', hmac-sha1, 'hmac-sha1-96', umac-64]
+      case_sensitive: false
+      on_missing: fail
+
+  - id: stig-eos-v255961
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255961
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      Confidentiality half of V-255960: the negotiated cipher must be a FIPS 140-2
+      approved algorithm, so the offered list must not include the legacy CBC and
+      stream ciphers EOS will still speak if asked.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.cipher
+      operator: disjoint_from
+      expected: [3des-cbc, des-cbc, arcfour, arcfour128, arcfour256, blowfish-cbc, cast128-cbc, aes128-cbc, aes192-cbc, aes256-cbc]
+      case_sensitive: false
+      on_missing: fail
+
+  - id: stig-eos-v255962
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255962
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      "All DOD auditable events" is a severity floor in practice: a device logging
+      only at `warning` discards the authentication and configuration events the
+      STIG is asking to capture. Informational or finer is the threshold, and the
+      ordered comparison cannot be used here because these are named levels, so the
+      acceptable set is enumerated.
+    condition:
+      type: fact_check
+      path: logging.trap_level
+      operator: in
+      expected: [informational, debugging, debug, info]
+      case_sensitive: false
+      on_missing: fail
+
+  - id: stig-eos-v255963
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255963
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      An authentication server, so that revoking an administrator's access is one
+      action rather than one per device. Checked as a configured server group
+      rather than as a protocol name, because the STIG accepts either RADIUS or
+      TACACS+ and the distinction does not affect this control.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: aaa.server.group, must_be_present: true}
+        - {type: presence, path: aaa.authentication_login, must_be_present: true}
+
+  - id: stig-eos-v255965
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255965
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      A named certificate from a real trust chain rather than the self-signed one
+      the platform generates on first boot. The self-signed default trains
+      administrators to click through the browser warning, which removes the only
+      signal that would reveal an interception.
+    condition: {type: presence, path: crypto.pki.trustpoint, must_be_present: true}
+
+  - id: stig-eos-v255966
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_ndm_security_technical_implementation_guide_v2r2
+      control_id: V-255966
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      Off-box log forwarding. On-box logs are the first thing an attacker with
+      administrative access clears, and they rotate away on their own regardless.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 1}
+
+  # ══ L2S — switching-plane hardening ════════════════════════════════════
+
+  - id: stig-eos-v255969
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3
+      control_id: V-255969
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      Storm control bounds the effect of a broadcast or multicast flood, which on a
+      flat layer-2 fabric is an availability event for every host in the VLAN
+      rather than for the one misbehaving port.
+    condition: {type: presence, path: interface.storm_control, must_be_present: true}
+
+  - id: stig-eos-v255970
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3
+      control_id: V-255970
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      Root guard stops a downstream switch from winning the root bridge election and
+      pulling the fabric's traffic through itself — a topology change that is also a
+      transparent interception.
+    condition:
+      type: fact_check
+      path: stp.rootguard
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: stig-eos-v255971
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3
+      control_id: V-255971
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      BPDU guard errdisables an access port that receives a BPDU, which is what a
+      rogue switch plugged into a wall jack sends first. Checked as the global
+      default rather than per port, because that is the form the STIG's fix text
+      prescribes and the form that stays correct when a new port is added.
+    condition:
+      type: fact_check
+      path: stp.bpduguard_default
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: stig-eos-v255972
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3
+      control_id: V-255972
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      Loop guard covers the failure BPDU guard does not: a nondesignated port that
+      stops hearing BPDUs because of a unidirectional link, and so transitions to
+      forwarding and creates a loop no one configured.
+    condition:
+      type: fact_check
+      path: stp.loopguard_default
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: stig-eos-v255973
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3
+      control_id: V-255973
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      DHCP snooping validates messages from untrusted ports, which is what stops a
+      host on the access VLAN from advertising itself as the default gateway. It is
+      also the binding table that IP Source Guard and DAI depend on, so this control
+      is a prerequisite for V-255974 rather than a peer of it.
+    condition:
+      type: fact_check
+      path: service.dhcp_snooping
+      operator: eq
+      expected: true
+      quantifier: any
+      on_missing: fail
+
+  - id: stig-eos-v255974
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3
+      control_id: V-255974
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      IP Source Guard drops traffic whose source address does not match the DHCP
+      snooping binding for that port, which defeats source spoofing from a
+      compromised host inside the VLAN.
+    condition: {type: presence, path: interface.ip_verify_source, must_be_present: true}
+
+  - id: stig-eos-v255977
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3
+      control_id: V-255977
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      Rapid convergence where VLANs span multiple switches. MST is accepted
+      alongside RSTP because MST *is* rapid — it is RSTP with per-instance VLAN
+      mapping — and rejecting it would fail the more capable configuration.
+    condition:
+      type: fact_check
+      path: stp.mode
+      operator: in
+      expected: [mstp, mst, rstp, 'rapid-pvst', 'rapid-pvst+']
+      case_sensitive: false
+      on_missing: fail
+
+  - id: stig-eos-v255979
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3
+      control_id: V-255979
+    applies_to:
+      vendors: [arista_eos]
+      os_families: [eos]
+    mapping_rationale: >
+      Trunks enabled statically, never negotiated. A negotiated trunk can be brought
+      up by an attached host, which turns an access port into a path to every VLAN
+      on the switch — the classic VLAN-hopping setup.
+
+      The negotiating-mode list below is Cisco vocabulary, and no Arista config can
+      produce it, because EOS implements no DTP. DISA's own Arista L2S STIG says so
+      by omission: the DTP paragraph is inherited narrative — it cites ISL, which
+      Arista never supported — every `switchport mode` DISA writes for this platform
+      is `trunk` or `access`, and the `switchport nonegotiate` carried in the fix
+      text of the identical Cisco IOS control is absent here. On EOS this control
+      therefore reduces to its other half: is a static mode configured at all.
+
+      Which is why there is no `requires_paths`. It named `interface.switchport_mode`,
+      so absence returned `notapplicable` and the `on_missing: fail` below was dead
+      code: the rule could only ever answer `pass` or `notapplicable`, and a control
+      that cannot fail is not a check. Absence is exactly the finding the check text
+      describes — an Ethernet port carrying trunk attributes with no static mode set
+      is a trunk that was not "enabled statically". The bad-value list stays as a
+      superset so the rule remains correct if a pack ever learns a negotiating mode.
+    condition:
+      type: fact_check
+      path: interface.switchport_mode
+      operator: not_in
+      expected: [dynamic, auto, desirable, 'dynamic auto', 'dynamic desirable']
+      quantifier: all
+      case_sensitive: false
+      on_missing: fail
+
+  - id: stig-eos-v255981
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3
+      control_id: V-255981
+    applies_to:
+      vendors: [arista_eos]
+      os_families: [eos]
+      requires_paths: [interface.access_vlan]
+    mapping_rationale: >
+      VLAN 1 must not be assigned to a host-facing port. It is the default on every
+      switch and carries control-plane protocol traffic, so a host on it sees more
+      of the fabric than any access port should. Quantifier `all` — one port on
+      VLAN 1 is the finding, regardless of how many others are placed correctly.
+    condition:
+      type: fact_check
+      path: interface.access_vlan
+      operator: ne
+      expected: 1
+      quantifier: all
+      on_missing: fail
+
+  - id: stig-eos-v255982
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3
+      control_id: V-255982
+    applies_to: {vendors: [arista_eos], os_families: [eos]}
+    mapping_rationale: >
+      The default VLAN pruned from trunks that do not need it, so that a trunk
+      compromise does not reach VLAN 1's control-plane traffic.
+    condition: {type: presence, path: interface.trunk_allowed_vlan, must_be_present: true}
+
+  - id: stig-eos-v255985
+    catalog:
+      catalog_id: disa_stig_arista_mls_eos_4_x_l2s_security_technical_implementation_guide_v2r3
+      control_id: V-255985
+    applies_to:
+      vendors: [arista_eos]
+      os_families: [eos]
+      requires_paths: [interface.native_vlan]
+    mapping_rationale: >
+      The native VLAN on a trunk carries untagged frames. Leaving it at 1 means an
+      attacker who can inject untagged frames on the trunk lands in the default
+      VLAN — which is the other half of VLAN hopping, and the half that survives
+      V-255979 being configured correctly.
+    condition:
+      type: fact_check
+      path: interface.native_vlan
+      operator: ne
+      expected: 1
+      quantifier: all
+      on_missing: fail

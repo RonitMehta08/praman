@@ -1,0 +1,183 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /FR 3 0 R /FB 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 2999 >>
+stream
+BT
+1 0 0 1 56.00 785.89 Tm
+11.00 TL
+/FB 8.50 Tf
+(PRAMAN COMPLIANCE REPORT \(TEXT-ONLY RENDERING\)) Tj
+T*
+/FR 8.50 Tf
+(probe, so this report carries no charts, colour or typography. Every figure below is the same) Tj
+T*
+(figure the full renderer would print. Install ReportLab to restore the graphical report.) Tj
+T*
+() Tj
+T*
+/FB 8.50 Tf
+(DEVICE IDENTITY) Tj
+T*
+/FR 8.50 Tf
+(Device ID: d) Tj
+T*
+(Hostname: h) Tj
+T*
+(Vendor: cisco_ios) Tj
+T*
+(OS family: ios) Tj
+T*
+(OS version: not present in the supplied input -- upload 'show version' and 'show inventory') Tj
+T*
+(output alongside the configuration to populate this) Tj
+T*
+(Hardware: not present in the supplied input -- upload 'show version' and 'show inventory') Tj
+T*
+(output alongside the configuration to populate this) Tj
+T*
+(Serial numbers: not present in the supplied input -- upload 'show version' and 'show) Tj
+T*
+(inventory' output alongside the configuration to populate this) Tj
+T*
+(Configuration SHA-256:) Tj
+T*
+(Audit ID: a) Tj
+T*
+(Audited at: 2026-01-01T00:00:00Z) Tj
+T*
+(Ledger sequence: 1) Tj
+T*
+() Tj
+T*
+/FB 8.50 Tf
+(COMPLIANCE POSTURE) Tj
+T*
+/FR 8.50 Tf
+(Score: 0.0%) Tj
+T*
+(Basis: score = pass / \(pass + fail\) over automated checks; notchecked, notapplicable and) Tj
+T*
+(unknown are excluded from the ratio) Tj
+T*
+(Counts: 0 pass, 1 fail of 1 scored; 1 controls evaluated) Tj
+T*
+(fail: 1) Tj
+T*
+() Tj
+T*
+/FB 8.50 Tf
+(BY FRAMEWORK) Tj
+T*
+/FR 8.50 Tf
+(CIS: 0 pass, 1 fail) Tj
+T*
+() Tj
+T*
+/FB 8.50 Tf
+(FAILURES BY SEVERITY) Tj
+T*
+/FR 8.50 Tf
+(high: 1) Tj
+T*
+() Tj
+T*
+/FB 8.50 Tf
+(FINDINGS) Tj
+T*
+/FR 8.50 Tf
+() Tj
+T*
+(1.1.1 t) Tj
+T*
+14.00 0 Td
+(FAIL / high severity / CIS CIS Cisco IOS 15 v4.1.1) Tj
+-14.00 0 Td
+T*
+14.00 0 Td
+(r) Tj
+-14.00 0 Td
+T*
+14.00 0 Td
+(NOTE: Publisher's stated impact: Implementing Cisco AAA is significantly disruptive as) Tj
+-14.00 0 Td
+T*
+14.00 0 Td
+(former access methods are) Tj
+-14.00 0 Td
+T*
+14.00 0 Td
+(immediately disabled. Therefore, before implementing Cisco AAA, the organization should) Tj
+-14.00 0 Td
+T*
+14.00 0 Td
+(carefully review and plan their authentication criteria \(logins & passwords, challenges &) Tj
+-14.00 0 Td
+T*
+14.00 0 Td
+(responses, and token technologies\), authorization methods, and accounting requirements.) Tj
+-14.00 0 Td
+T*
+14.00 0 Td
+(1. h\(config\)#aaa new-model) Tj
+-14.00 0 Td
+T*
+14.00 0 Td
+(Source: CIS Cisco IOS 15 v4.1.1, control 1.1.1 ?) Tj
+-14.00 0 Td
+T*
+14.00 0 Td
+(CIS_Cisco_IOS_15_Benchmark_v4.1.1_ARCHIVE.pdf) Tj
+-14.00 0 Td
+T*
+() Tj
+T*
+/FB 8.50 Tf
+(VERIFICATION) Tj
+T*
+/FR 8.50 Tf
+(Printed in full. Recompute the record hash over the ledger row's canonical JSON to confirm) Tj
+T*
+(this report describes an unaltered audit.) Tj
+T*
+(Ledger sequence: 1) Tj
+T*
+(Previous record hash: \(none -- this is the first record in the ledger\)) Tj
+T*
+(Record hash: abababababababababababababababababababababababababababababababab) Tj
+T*
+(Merkle root over findings: cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd) Tj
+T*
+(Ed25519 signature: s) Tj
+T*
+ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000210 00000 n 
+0000000310 00000 n 
+0000000452 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R /Info << /Title (PRAMAN report h) /Producer (PRAMAN minimal writer) >> >>
+startxref
+3503
+%%EOF

@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praman.local/schema/rule.schema.json",
+  "title": "PRAMAN mapping rule",
+  "description": "Structure of one rule in a mapping pack. A rule binds a canonical-model condition to a control that the catalog already publishes; it carries no title, severity text, or remediation prose of its own. The 'canonicalPath' enum is injected at load time from backend/canonical/schema/canonical_paths.schema.json so a rule cannot reference a path no parser emits.",
+  "type": "object",
+  "required": ["id", "catalog", "condition"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$",
+      "description": "Stable unique rule id. Appears in reports and in the ledger, so it must not be renamed once published."
+    },
+    "catalog": {
+      "type": "object",
+      "required": ["catalog_id", "control_id"],
+      "additionalProperties": false,
+      "description": "The catalog control this rule automates. Title, severity, discussion, check text and official fix text all come from here.",
+      "properties": {
+        "catalog_id": { "type": "string", "minLength": 1 },
+        "control_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "condition": { "$ref": "#/$defs/condition" },
+    "applies_to": { "$ref": "#/$defs/applicability" },
+    "severity_override": {
+      "type": ["string", "null"],
+      "enum": ["high", "medium", "low", null],
+      "description": "Only for publishers that state no severity (CIS). Never use it to disagree with a publisher that does."
+    },
+    "remediation_ref": {
+      "type": ["string", "null"],
+      "description": "Id of a remediation template under backend/remediation/. Omit to use the catalog's own fix_text."
+    },
+    "mapping_rationale": {
+      "type": "string",
+      "description": "Why this canonical check stands in for the control. Shown to the auditor as the basis of the verdict."
+    },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "enabled": { "type": "boolean", "default": true }
+  },
+  "$defs": {
+    "canonicalPath": {
+      "type": "string",
+      "description": "Enum injected at load time from the canonical path schema."
+    },
+    "operator": {
+      "type": "string",
+      "enum": [
+        "eq", "ne", "gt", "gte", "lt", "lte",
+        "in", "not_in", "contains", "not_contains",
+        "regex_match", "regex_not_match",
+        "subset_of", "superset_of", "disjoint_from"
+      ]
+    },
+    "onMissing": {
+      "type": "string",
+      "enum": ["unknown", "fail", "pass", "notapplicable"],
+      "default": "unknown",
+      "description": "What the absence of evidence means for this control. Defaults to 'unknown'; 'pass' must be justified in mapping_rationale."
+    },
+    "applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Devices this rule may run against. Empty vendors means vendor-neutral.",
+      "properties": {
+        "vendors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "cisco_ios", "cisco_xe", "cisco_nxos", "cisco_xr", "cisco_asa",
+              "juniper_junos", "paloalto_panos", "fortinet", "arista_eos"
+            ]
+          }
+        },
+        "os_families": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ios", "iosxe", "nxos", "iosxr", "asa",
+              "junos", "panos", "fortios", "eos"
+            ]
+          }
+        },
+        "os_version_regex": { "type": ["string", "null"] },
+        "requires_paths": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/canonicalPath" }
+        }
+      }
+    },
+    "condition": {
+      "oneOf": [
+        { "$ref": "#/$defs/factCheck" },
+        { "$ref": "#/$defs/presence" },
+        { "$ref": "#/$defs/count" },
+        { "$ref": "#/$defs/forEach" },
+        { "$ref": "#/$defs/allOf" },
+        { "$ref": "#/$defs/anyOf" },
+        { "$ref": "#/$defs/noneOf" }
+      ]
+    },
+    "factCheck": {
+      "type": "object",
+      "required": ["type", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "fact_check" },
+        "path": { "$ref": "#/$defs/canonicalPath" },
+        "operator": { "$ref": "#/$defs/operator" },
+        "expected": {},
+        "on_missing": { "$ref": "#/$defs/onMissing" },
+        "quantifier": { "type": "string", "enum": ["all", "any"], "default": "all" },
+        "case_sensitive": { "type": "boolean", "default": true }
+      }
+    },
+    "presence": {
+      "type": "object",
+      "required": ["type", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "presence" },
+        "path": { "$ref": "#/$defs/canonicalPath" },
+        "must_be_present": { "type": "boolean", "default": true }
+      }
+    },
+    "count": {
+      "type": "object",
+      "required": ["type", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "count" },
+        "path": { "$ref": "#/$defs/canonicalPath" },
+        "operator": { "$ref": "#/$defs/operator" },
+        "expected": { "type": "integer" }
+      }
+    },
+    "forEach": {
+      "type": "object",
+      "required": ["type", "block", "condition"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "for_each" },
+        "block": { "$ref": "#/$defs/canonicalPath" },
+        "condition": { "$ref": "#/$defs/condition" },
+        "skip_block_regex": { "type": ["string", "null"] },
+        "on_no_blocks": { "$ref": "#/$defs/onMissing" }
+      }
+    },
+    "allOf": {
+      "type": "object",
+      "required": ["type", "conditions"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "all_of" },
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/condition" }
+        }
+      }
+    },
+    "anyOf": {
+      "type": "object",
+      "required": ["type", "conditions"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "any_of" },
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/condition" }
+        }
+      }
+    },
+    "noneOf": {
+      "type": "object",
+      "required": ["type", "conditions"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "none_of" },
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/condition" }
+        }
+      }
+    }
+  }
+}

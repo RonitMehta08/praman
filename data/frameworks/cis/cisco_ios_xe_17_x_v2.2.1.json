@@ -1,0 +1,2474 @@
+{
+  "benchmark": "Cisco IOS XE 17.x",
+  "benchmark_version": "v2.2.1",
+  "benchmark_date": "07-17-2025",
+  "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+  "source_url": "https://workbench.cisecurity.org/",
+  "extracted_at": "2026-08-26T22:24:18.090303+00:00",
+  "control_count": 84,
+  "controls": [
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.1.1",
+      "title": "Enable 'aaa new-model'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "This command enables the AAA access control system.",
+      "rationale": "Authentication, authorization and accounting (AAA) services provide an authoritative\nsource for managing and monitoring access for devices. Centralizing control improves\nconsistency of access control, the services that may be accessed once authenticated\nand accountability by tracking services accessed. Additionally, centralizing access\ncontrol simplifies and reduces administrative costs of account provisioning and de-\nprovisioning, especially when managing a large number of devices.",
+      "impact": "Implementing Cisco AAA is significantly disruptive as former access methods are\nimmediately disabled. Therefore, before implementing Cisco AAA, the organization\nshould carefully review and plan their authentication criteria (logins & passwords,\nchallenges & responses, and token technologies), authorization methods, and\naccounting requirements.",
+      "audit": "Perform the following to determine if AAA services are enabled:\nhostname#show running-config | inc aaa new-model\nIf the result includes a \"no\", the feature is not enabled.",
+      "remediation": "Globally enable authentication, authorization and accounting (AAA) using the new-\nmodel command.\nhostname(config)#aaa new-model",
+      "default_value": "AAA is not enabled.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/a1/sec-cr-a2.html#GUID-E05C2E00-C01E-4053-9D12-EC37C7E8EEC5"
+      ],
+      "cis_controls": [
+        "5.6 Centralize Account Management",
+        "16.2 Configure Centralized Point of Authentication"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.1.2",
+      "title": "Enable 'aaa authentication login'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Sets authentication, authorization and accounting (AAA) authentication at login.",
+      "rationale": "Using AAA authentication for interactive management access to the device provides\nconsistent, centralized control of your network. The default under AAA (local or network)\nis to require users to log in using a valid user name and password. This rule applies for\nboth local and network AAA. Fallback mode should also be enabled to allow emergency\naccess to the router or switch in the event that the AAA server was unreachable, by\nutilizing the LOCAL keyword after the AAA server-tag.",
+      "impact": "Implementing Cisco AAA is significantly disruptive as former access methods are\nimmediately disabled. Therefore, before implementing Cisco AAA, the organization\nshould carefully review and plan their authentication methods such as logins and\npasswords, challenges and responses, and which token technologies will be used.",
+      "audit": "Perform the following to determine if AAA authentication for login is enabled:\nhostname#show running-config | incl aaa authentication login\nIf a result does not return, the feature is not enabled.",
+      "remediation": "Configure AAA authentication method(s) for login authentication.\nhostname(config)#aaa authentication login {default | aaa_list_name} [passwd-\nexpiry]\n[method1] [method2]",
+      "default_value": "AAA authentication at login is disabled.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/a1/sec-cr-a1.html#GUID-3DB1CC8A-4A98-400B-A906-C42F265C7EA2"
+      ],
+      "cis_controls": [
+        "5.6 Centralize Account Management",
+        "16.2 Configure Centralized Point of Authentication"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.1.3",
+      "title": "Enable 'aaa authentication enable default'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Authenticates users who access privileged EXEC mode when they use the enable\ncommand.",
+      "rationale": "Using AAA authentication for interactive management access to the device provides\nconsistent, centralized control of your network. The default under AAA (local or network)\nis to require users to log in using a valid user name and password. This rule applies for\nboth local and network AAA.",
+      "impact": "Enabling Cisco AAA 'authentication enable' mode is significantly disruptive as former\naccess methods are immediately disabled. Therefore, before enabling 'aaa\nauthentication enable default' mode, the organization should plan and implement\nauthentication logins and passwords, challenges and responses, and token\ntechnologies.",
+      "audit": "Perform the following to determine if AAA authentication enable mode is enabled:\nhostname#show running-config | incl aaa authentication enable\nIf a result does not return, the feature is not enabled",
+      "remediation": "Configure AAA authentication method(s) for enable authentication.\nhostname(config)#aaa authentication enable default {method1} enable",
+      "default_value": "By default, fallback to the local database is disabled.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/a1/sec-cr-a1.html#GUID-4171D649-2973-4707-95F3-9D96971893D0"
+      ],
+      "cis_controls": [
+        "5.6 Centralize Account Management",
+        "16.2 Configure Centralized Point of Authentication"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.1.4",
+      "title": "Set 'login authentication for 'line vty'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Authenticates users who access the router or switch remotely through the VTY port.",
+      "rationale": "Using AAA authentication for interactive management access to the device provides\nconsistent, centralized control of your network. The default under AAA (local or network)\nis to require users to log in using a valid user name and password. This rule applies for\nboth local and network AAA.",
+      "impact": "Enabling Cisco AAA 'login authentication for line VTY' is significantly disruptive as\nformer access methods are immediately disabled. Therefore, before enabling Cisco\nAAA 'login authentication for line VTY', the organization should plan and implement\nauthentication logins and passwords, challenges and responses, and token\ntechnologies.",
+      "audit": "Perform the following to determine if AAA authentication for line login is enabled:\nIf the command does not return a result for each management access method, the\nfeature is not enabled\nhostname#show running-config | sec line | incl login authentication",
+      "remediation": "Configure management lines to require login using the default or a named AAA\nauthentication list. This configuration must be set individually for all line types.\nhostname(config)#line vty {line-number} [<em>ending-line-number]\nhostname(config-line)#login authentication {default | aaa_list_name}",
+      "default_value": "Login authentication is not enabled.\nUses the default set with aaa authentication login.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/d1/sec-cr-k1.html#GUID-297BDF33-4841-441C-83F3-4DA51C3C7284"
+      ],
+      "cis_controls": [
+        "5.6 Centralize Account Management",
+        "16.2 Configure Centralized Point of Authentication"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.1.5",
+      "title": "Set 'login authentication for 'ip http'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "If account management functions are not automatically enforced, an attacker could gain\nprivileged access to a vital element of the network security architecture",
+      "rationale": "Configure the device to enforce authentication for the HTTP server (ip http) by defining\na valid login method. This ensures that only authorized users can access the device's\nweb-based management interface. Use AAA (Authentication, Authorization, and\nAccounting) or a predefined local username and password database to enforce login\nauthentication",
+      "impact": "Enabling Cisco AAA 'line login' is significantly disruptive as former access methods are\nimmediately disabled. Therefore, before enabling Cisco AAA 'line login', the\norganization should plan and implement authentication logins and passwords,\nchallenges and responses, and token technologies.",
+      "audit": "Perform the following to determine if AAA authentication for line login is enabled:\nIf the command does not return a result for each management access method, the\nfeature is not enabled\nhostname#show running-config | inc ip http authentication",
+      "remediation": "Configure management lines to require login using the default or a named AAA\nauthentication list. This configuration must be set individually for all line types.\nhostname#(config)ip http secure-server\nhostname#(config)ip http authentication {default | _aaa\\_list\\_name_}",
+      "default_value": "Login authentication is not enabled.\nUses the default set with aaa authentication login.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/d1/sec-cr-k1.html#GUID-297BDF33-4841-441C-83F3-4DA51C3C7284"
+      ],
+      "cis_controls": [
+        "5.6 Centralize Account Management",
+        "16.2 Configure Centralized Point of Authentication"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.1.6",
+      "title": "Set 'aaa accounting' to log all privileged use commands using 'commands 15'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Runs accounting for all commands at the specified privilege level.",
+      "rationale": "Authentication, authorization and accounting (AAA) systems provide an authoritative\nsource for managing and monitoring access for devices. Centralizing control improves\nconsistency of access control, the services that may be accessed once authenticated\nand accountability by tracking services accessed. Additionally, centralizing access\ncontrol simplifies and reduces administrative costs of account provisioning and de-\nprovisioning, especially when managing a large number of devices. AAA Accounting\nprovides a management and audit trail for user and administrative sessions through\nTACACS+.",
+      "impact": "Enabling 'aaa accounting' for privileged commands records and sends activity to the\naccounting servers and enables organizations to monitor and analyze privileged activity.",
+      "audit": "Perform the following to determine if aaa accounting for commands is required:\nVerify a command string result returns\nhostname#show running-config | incl aaa accounting commands",
+      "remediation": "Configure AAA accounting for commands.\nhostname(config)#aaa accounting commands 15 {default | list-name | guarantee-\nfirst}\n{start-stop | stop-only | none} {radius | group group-name}",
+      "default_value": "AAA accounting is disabled.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [],
+      "cis_controls": [
+        "8.2 Collect Audit Logs",
+        "8.5 Collect Detailed Audit Logs",
+        "6.3 Enable Detailed Logging"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.1.7",
+      "title": "Set 'aaa accounting connection'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Provides information about all outbound connections made from the network access\nserver.",
+      "rationale": "Authentication, authorization and accounting (AAA) systems provide an authoritative\nsource for managing and monitoring access for devices. Centralizing control improves\nconsistency of access control, the services that may be accessed once authenticated\nand accountability by tracking services accessed. Additionally, centralizing access\ncontrol simplifies and reduces administrative costs of account provisioning and de-\nprovisioning, especially when managing a large number of devices. AAA Accounting\nprovides a management and audit trail for user and administrative sessions through\nRADIUS and TACACS+.",
+      "impact": "Implementing aaa accounting connection creates accounting records about connections\nfrom the network access server. Organizations should regular monitor these connection\nrecords for exceptions, remediate issues, and report findings regularly.",
+      "audit": "Perform the following to determine if aaa accounting for connection is required:\nVerify a command string result returns\nhostname#show running-config | incl aaa accounting connection",
+      "remediation": "Configure AAA accounting for connections.\nhostname(config)#aaa accounting connection {default | list-name | guarantee-\nfirst}\n{start-stop | stop-only | none} {radius | group group-name}",
+      "default_value": "AAA accounting is not enabled.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/a1/sec-cr-a1.html#GUID-0520BCEF-89FB-4505-A5DF-D7F1389F1BBA"
+      ],
+      "cis_controls": [
+        "5.6 Centralize Account Management",
+        "16.2 Configure Centralized Point of Authentication"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.1.8",
+      "title": "Set 'aaa accounting exec'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Runs accounting for the EXEC shell session.",
+      "rationale": "Authentication, authorization and accounting (AAA) systems provide an authoritative\nsource for managing and monitoring access for devices. Centralizing control improves\nconsistency of access control, the services that may be accessed once authenticated\nand accountability by tracking services accessed. Additionally, centralizing access\ncontrol simplifies and reduces administrative costs of account provisioning and de-\nprovisioning, especially when managing a large number of devices. AAA Accounting\nprovides a management and audit trail for user and administrative sessions through\nRADIUS and TACACS+.",
+      "impact": "Enabling aaa accounting exec creates accounting records for the EXEC terminal\nsessions on the network access server. These records include start and stop times,\nusernames, and date information. Organizations should regularly monitor these records\nfor exceptions, remediate issues, and report findings.",
+      "audit": "Perform the following to determine if aaa accounting for EXEC shell session is required:\nVerify a command string result returns\nhostname#show running-config | incl aaa accounting exec",
+      "remediation": "Configure AAA accounting for EXEC shell session.\nhostname(config)#aaa accounting exec {default | list-name | guarantee-first}\n{start-stop | stop-only | none} {radius | group group-name}",
+      "default_value": "AAA accounting is not enabled.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/a1/sec-cr-a1.html#GUID-0520BCEF-89FB-4505-A5DF-D7F1389F1BBA"
+      ],
+      "cis_controls": [
+        "8.2 Collect Audit Logs",
+        "8.5 Collect Detailed Audit Logs",
+        "6.3 Enable Detailed Logging"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.1.9",
+      "title": "Set 'aaa accounting network'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Runs accounting for all network-related service requests.",
+      "rationale": "Authentication, authorization and accounting (AAA) systems provide an authoritative\nsource for managing and monitoring access for devices. Centralizing control improves\nconsistency of access control, the services that may be accessed once authenticated\nand accountability by tracking services accessed. Additionally, centralizing access\ncontrol simplifies and reduces administrative costs of account provisioning and de-\nprovisioning, especially when managing a large number of devices. AAA Accounting\nprovides a management and audit trail for user and administrative sessions through\nRADIUS and TACACS+.",
+      "impact": "Implementing aaa accounting network creates accounting records for a method list\nincluding ARA, PPP, SLIP, and NCPs sessions. Organizations should regular monitor\nthese records for exceptions, remediate issues, and report findings.",
+      "audit": "Perform the following to determine if aaa accounting for connection is required:\nVerify a command string result returns\nhostname#show running-config | incl aaa accounting network",
+      "remediation": "Configure AAA accounting for connections.\nhostname(config)#aaa accounting network {default | list-name | guarantee-\nfirst}\n{start-stop | stop-only | none} {radius | group group-name}",
+      "default_value": "AAA accounting is not enabled.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/a1/sec-cr-a1.html#GUID-0520BCEF-89FB-4505-A5DF-D7F1389F1BBA"
+      ],
+      "cis_controls": [
+        "8.2 Collect Audit Logs",
+        "8.5 Collect Detailed Audit Logs",
+        "6.3 Enable Detailed Logging"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.1.10",
+      "title": "Set 'aaa accounting system'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Performs accounting for all system-level events not associated with users, such as\nreloads.",
+      "rationale": "Authentication, authorization and accounting (AAA) systems provide an authoritative\nsource for managing and monitoring access for devices. Centralizing control improves\nconsistency of access control, the services that may be accessed once authenticated\nand accountability by tracking services accessed. Additionally, centralizing access\ncontrol simplifies and reduces administrative costs of account provisioning and de-\nprovisioning, especially when managing a large number of devices. AAA Accounting\nprovides a management and audit trail for user and administrative sessions through\nRADIUS and TACACS+.",
+      "impact": "Enabling aaa accounting system creates accounting records for all system-level events.\nOrganizations should regular monitor these records for exceptions, remediate issues,\nand report findings regularly.",
+      "audit": "Perform the following to determine if aaa accounting system is required:\nVerify a command string result returns\nhostname#show running-config | incl aaa accounting system",
+      "remediation": "Configure AAA accounting system.\nhostname(config)#aaa accounting system {default | list-name | guarantee-\nfirst}\n{start-stop | stop-only | none} {radius | group group-name}",
+      "default_value": "AAA accounting is not enabled.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/a1/sec-cr-a1.html#GUID-0520BCEF-89FB-4505-A5DF-D7F1389F1BBA"
+      ],
+      "cis_controls": [
+        "8.2 Collect Audit Logs",
+        "8.5 Collect Detailed Audit Logs",
+        "6.3 Enable Detailed Logging",
+        "1.2 Access Rules"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.2.1",
+      "title": "Set 'privilege 1' for local users",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Sets the privilege level for the user.",
+      "rationale": "Default device configuration does not require strong user authentication potentially\nenabling unfettered access to an attacker that is able to reach the device. Creating a\nlocal account with privilege level 1 permissions only allows the local user to access the\ndevice with EXEC-level permissions and will be unable to modify the device without\nusing the enable password. In addition, require the use of an encrypted password as\nwell (see Section 1.1.4.4 - Require Encrypted User Passwords).",
+      "impact": "Organizations should create policies requiring all local accounts with 'privilege level 1'\nwith encrypted passwords to reduce the risk of unauthorized access. Default\nconfiguration settings do not provide strong user authentication to the device.",
+      "audit": "Perform the following to determine if a user with an encrypted password is enabled:\nVerify all username results return \"privilege 1\"\nhostname#show running-config | incl privilege",
+      "remediation": "Set the local user to privilege level 1.\nhostname(config)#username <LOCAL_USERNAME> privilege 1",
+      "default_value": "",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/s1/sec-cr-t2-z.html#GUID-34B3E43E-0F79-40E8-82B6-A4B5F1AFF1AD"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "0.0 Explicitly Not Mapped"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.2.2",
+      "title": "Set 'transport input ssh' for 'line vty' connections",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Selects the Secure Shell (SSH) protocol.",
+      "rationale": "Configuring VTY access control restricts remote access to only those authorized to\nmanage the device and prevents unauthorized users from accessing the system.",
+      "impact": "To reduce risk of unauthorized access, organizations should require all VTY\nmanagement line protocols to be limited to ssh.",
+      "audit": "Perform the following to determine if SSH is the only transport method for incoming VTY\nlogins:\nThe result should show only \"ssh\" for \"transport input\"\nhostname#show running-config | sec vty",
+      "remediation": "Apply SSH to transport input on all VTY management lines\nhostname(config)#line vty <line-number> <ending-line-number>\nhostname(config-line)#transport input ssh",
+      "default_value": "",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios/termserv/command/reference/tsv_s1.html#wp1069219"
+      ],
+      "cis_controls": [
+        "6.5 Require MFA for Administrative Access",
+        "4.5 Use Multifactor Authentication For All Administrative"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.2.3",
+      "title": "Set 'no exec' for 'line aux 0'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "The 'no exec' command restricts a line to outgoing connections only.",
+      "rationale": "Unused ports should be disabled, if not required, since they provide a potential access\npath for attackers. Some devices include both an auxiliary and console port that can be\nused to locally connect to and configure the device. The console port is normally the\nprimary port used to configure the device; even when remote, backup administration is\nrequired via console server or Keyboard, Video, Mouse (KVM) hardware. The auxiliary\nport is primarily used for dial-up administration via an external modem; instead, use\nother available methods.",
+      "impact": "Organizations can reduce the risk of unauthorized access by disabling the 'aux' port\nwith the 'no exec' command. Conversely, not restricting access through the 'aux' port\nincreases the risk of remote unauthorized access.",
+      "audit": "Perform the following to determine if the EXEC process for the aux port is disabled:\nVerify no exec\nhostname#show running-config all | sec aux\nVerify you see the following \"no exec\"",
+      "remediation": "Disable the EXEC process on the auxiliary port.\nhostname(config)#line aux 0\nhostname(config-line)#no exec",
+      "default_value": "",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9200/software/release/17-6/command_reference/b_176_9200_cr.html"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.2.4",
+      "title": "Create 'access-list' for use with 'line vty'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Access lists control the transmission of packets on an interface, control Virtual Terminal\nLine (VTY) access, and restrict the contents of routing updates. The Cisco IOS software\nstops checking the extended access list after a match occurs.",
+      "rationale": "VTY ACLs control what addresses may attempt to log in to the router. Configuring VTY\nlines to use an ACL, restricts the sources where a user can manage the device. You\nshould limit the specific host(s) and or network(s) authorized to connect to and configure\nthe device, via an approved protocol, to those individuals or systems authorized to\nadminister the device. For example, you could limit access to specific hosts, so that only\nnetwork managers can configure the devices only by using specific network\nmanagement workstations. Make sure you configure all VTY lines to use the same ACL.",
+      "impact": "Organizations can reduce the risk of unauthorized access by implementing access-lists\nfor all VTY lines. Conversely, using VTY lines without access-lists increases the risk of\nunauthorized access.",
+      "audit": "Perform the following to determine if the ACL is created:\nVerify the appropriate access-list definitions\nhostname#sh ip access-list <vty_acl_number>",
+      "remediation": "Configure the VTY ACL that will be used to restrict management access to the device.\nhostname(config)#access-list <vty_acl_number> permit tcp\n<vty_acl_block_with_mask> any\nhostname(config)#access-list <vty_acl_number> permit tcp host <vty_acl_host>\nany\nhostname(config)#deny ip any any log",
+      "default_value": "",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/a1/sec-cr-a2.html#GUID-9EA733A3-1788-4882-B8C3-AB0A2949120C"
+      ],
+      "cis_controls": [
+        "12.8 Establish and Maintain Dedicated Computing",
+        "11.7 Manage Network Infrastructure Through a Dedicated"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.2.5",
+      "title": "Set 'access-class' for 'line vty'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "The 'access-class' setting restricts incoming and outgoing connections between a\nparticular vty (into a Cisco device) and the networking devices associated with\naddresses in an access list.",
+      "rationale": "Restricting the type of network devices, associated with the addresses on the access-\nlist, further restricts remote access to those devices authorized to manage the device\nand reduces the risk of unauthorized access.",
+      "impact": "Applying 'access'class' to line VTY further restricts remote access to only those devices\nauthorized to manage the device and reduces the risk of unauthorized access.\nConversely, using VTY lines with 'access class' restrictions increases the risks of\nunauthorized access.",
+      "audit": "Perform the following to determine if the ACL is set:\nVerify you see the access-class defined\nhostname#sh run | sec vty <line-number> <ending-line-number>",
+      "remediation": "Configure remote management access control restrictions for all VTY lines.\nhostname(config)#line vty <line-number> <ending-line-number>\nhostname(config-line)# access-class <vty_acl_number> in",
+      "default_value": "",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/a1/sec-cr-a2.html#GUID-FB9BC58A-F00A-442A-8028-1E9E260E54D3"
+      ],
+      "cis_controls": [
+        "12.8 Establish and Maintain Dedicated Computing",
+        "11.7 Manage Network Infrastructure Through a Dedicated"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.2.6",
+      "title": "Set 'exec-timeout' to less than or equal to 10 minutes for 'line aux 0'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "If no input is detected during the interval, the EXEC facility resumes the current\nconnection. If no connections exist, the EXEC facility returns the terminal to the idle\nstate and disconnects the incoming session.",
+      "rationale": "This prevents unauthorized users from misusing abandoned sessions. For example, if\nthe network administrator leaves for the day and leaves a computer open with an\nenabled login session accessible. There is a trade-off here between security (shorter\ntimeouts) and usability (longer timeouts). Review your local policies and operational\nneeds to determine the best timeout value. In most cases, this should be no more than\n10 minutes.",
+      "impact": "Organizations should prevent unauthorized use of unattended or abandoned sessions\nby an automated control. Enabling 'exec-timeout' with an appropriate length of minutes\nor seconds prevents unauthorized access of abandoned sessions.",
+      "audit": "Perform the following to determine if the timeout is configured:\nVerify you return a result\nhostname#show running-config all | sec line aux 0",
+      "remediation": "Configure device timeout (10 minutes or less) to disconnect sessions after a fixed idle\ntime.\nhostname(config)#line aux 0\nhostname(config-line)#exec-timeout <timeout_in_minutes> <timeout_in_seconds>",
+      "default_value": "",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/fundamentals/command/D_through_E.html#GUID-76805E6F-9E89-4457-A9DC-5944C8FE5419"
+      ],
+      "cis_controls": [
+        "4.3 Configure Automatic Session Locking on Enterprise",
+        "15 minutes. For mobile end-user devices, the period must not exceed 2 minutes.",
+        "16.11 Lock Workstation Sessions After Inactivity"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.2.7",
+      "title": "Set 'exec-timeout' to less than or equal to 10 minutes 'line console 0'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "If no input is detected during the interval, the EXEC facility resumes the current\nconnection. If no connections exist, the EXEC facility returns the terminal to the idle\nstate and disconnects the incoming session.",
+      "rationale": "This prevents unauthorized users from misusing abandoned sessions. For example, if\nthe network administrator leaves for the day and leaves a computer open with an\nenabled login session accessible. There is a trade-off here between security (shorter\ntimeouts) and usability (longer timeouts). Review your local policies and operational\nneeds to determine the best timeout value. In most cases, this should be no more than\n10 minutes.",
+      "impact": "Organizations should prevent unauthorized use of unattended or abandoned sessions\nby an automated control. Enabling 'exec-timeout' with an appropriate length reduces the\nrisk of unauthorized access of abandoned sessions.",
+      "audit": "Perform the following to determine if the timeout is configured:\nVerify you return a result\nhostname#show running-config all | section line con 0",
+      "remediation": "Configure device timeout (10 minutes or less) to disconnect sessions after a fixed idle\ntime.\nhostname(config)#line con 0\nhostname(config-line)#exec-timeout <timeout_in_minutes> <timeout_in_seconds>",
+      "default_value": "",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/fundamentals/command/D_through_E.html#GUID-76805E6F-9E89-4457-A9DC-5944C8FE5419"
+      ],
+      "cis_controls": [
+        "4.3 Configure Automatic Session Locking on Enterprise",
+        "15 minutes. For mobile end-user devices, the period must not exceed 2 minutes.",
+        "16.11 Lock Workstation Sessions After Inactivity"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.2.8",
+      "title": "Set 'exec-timeout' to less than or equal to 10 minutes 'line vty'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "If no input is detected during the interval, the EXEC facility resumes the current\nconnection. If no connections exist, the EXEC facility returns the terminal to the idle\nstate and disconnects the incoming session.",
+      "rationale": "This prevents unauthorized users from misusing abandoned sessions. For example, if\nthe network administrator leaves for the day and leaves a computer open with an\nenabled login session accessible. There is a trade-off here between security (shorter\ntimeouts) and usability (longer timeouts). Review your local policies and operational\nneeds to determine the best timeout value. In most cases, this should be no more than\n10 minutes.",
+      "impact": "Organizations should prevent unauthorized use of unattended or abandoned sessions\nby an automated control. Enabling 'exec-timeout' with an appropriate length of minutes\nor seconds prevents unauthorized access of abandoned sessions.",
+      "audit": "Perform the following to determine if the timeout is configured:\nVerify you return a result NOTE: If you set an exec-timeout of 10 minutes, this will not\nshow up in the configuration\nhostname#sh line vty <tty_line_number> | begin Timeout",
+      "remediation": "Configure device timeout (10 minutes or less) to disconnect sessions after a fixed idle\ntime.\nhostname(config)#line vty {line_number} [ending_line_number]\nhostname(config-line)#exec-timeout <<span>timeout_in_minutes>\n<timeout_in_seconds</span>>",
+      "default_value": "",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "https://www.cisco.com/c/en/us/td/docs/switches/datacenter/mds9000/sw/command/b_cisco_mds_9000_cr_book/l_commands.html#wp3716128869"
+      ],
+      "cis_controls": [
+        "4.3 Configure Automatic Session Locking on Enterprise",
+        "15 minutes. For mobile end-user devices, the period must not exceed 2 minutes.",
+        "16.11 Lock Workstation Sessions After Inactivity"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.2.9",
+      "title": "Set 'http Secure-server' limit",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Device management includes the ability to control the number of administrators and\nmanagement sessions that manage a device. Limiting the number of allowed\nadministrators and sessions per administrator based on account type, role, or access\ntype is helpful in limiting risks related to denial-of-service (DoS) attacks.",
+      "rationale": "This requirement addresses concurrent sessions for administrative accounts and does\nnot address concurrent sessions by a single administrator via multiple administrative\naccounts. The maximum number of concurrent sessions should be defined based upon\nmission needs and the operational environment for each system. At a minimum, limits\nmust be set for SSH, HTTPS, account of last resort, and root account sessions. Center\nfor Internet Security recommends a limit of 2",
+      "impact": "",
+      "audit": "The result should show ip http secure-server with max connections on following line\nhostname#show run | inc ip http secure-server",
+      "remediation": "hostname(config)#ip http max-connections 2",
+      "default_value": "",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "NIST SP 800-53 :: AC-10"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "0.0 Explicitly Not Mapped"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.2.10",
+      "title": "Set 'exec-timeout' to less than or equal to 10 min on 'ip http'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "If no input is detected during the interval, the EXEC facility resumes the current\nconnection. If no connections exist, the EXEC facility returns the terminal to the idle\nstate and disconnects the incoming session.",
+      "rationale": "This prevents unauthorized users from misusing abandoned sessions. For example, if\nthe network administrator leaves for the day and leaves a computer open with an\nenabled login session accessible. There is a trade-off here between security (shorter\ntimeouts) and usability (longer timeouts). Review your local policies and operational\nneeds to determine the best timeout value. In most cases, this should be no more than\n10 minutes.\nThis prevents unauthorized users from misusing abandoned sessions. For example, if\nthe network administrator leaves for the day and leaves a computer open with an\nenabled login session accessible. There is a trade-off here between security (shorter\ntimeouts) and usability (longer timeouts). Review your local policies and operational\nneeds to determine the best timeout value. In most cases, this should be no more than\n10 minutes.",
+      "impact": "",
+      "audit": "Perform the following to determine if the timeout is configured:\nsh run | beg ip http timeout-policy",
+      "remediation": "Configure device timeout (10 minutes or less) to disconnect sessions after a fixed idle\ntime.\nip http timeout-policy idle 600 life {nnnn} requests {nn}",
+      "default_value": "disabled",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/fundamentals/command/D_through_E.html#GUID-76805E6F-9E89-4457-A9DC-5944C8FE5419"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "0.0 Explicitly Not Mapped",
+        "1.3 Banner Rules"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.3.1",
+      "title": "Set the 'banner-text' for 'banner exec'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "This command specifies a message to be displayed when an EXEC process is created\n(a line is activated, or an incoming connection is made to a vty). Follow this command\nwith one or more blank spaces and a delimiting character of your choice. Then enter\none or more lines of text, terminating the message with the second occurrence of the\ndelimiting character.\nWhen a user connects to a router, the message-of-the-day (MOTD) banner appears\nfirst, followed by the login banner and prompts. After the user logs in to the router, the\nEXEC banner or incoming banner will be displayed, depending on the type of\nconnection. For a reverse Telnet login, the incoming banner will be displayed. For all\nother connections, the router will display the EXEC banner.",
+      "rationale": "\"Network banners are electronic messages that provide notice of legal rights to users of\ncomputer networks. From a legal standpoint, banners have four primary functions.\n• First, banners may be used to generate consent to real-time monitoring under\nTitle III.\n• Second, banners may be used to generate consent to the retrieval of stored files\nand records pursuant to ECPA.\n• Third, in the case of government networks, banners may eliminate any Fourth\nAmendment \"reasonable expectation of privacy\" that government employees or\nother users might otherwise retain in their use of the government's network under\nO'Connor v. Ortega, 480 U.S. 709 (1987).\n• Fourth, in the case of a non-government network, banners may establish a\nsystem administrator's \"common authority\" to consent to a law enforcement\nsearch pursuant to United States v. Matlock, 415 U.S. 164 (1974).\" (US\nDepartment of Justice APPENDIX A: Sample Network Banner Language)",
+      "impact": "Organizations provide appropriate legal notice(s) and warning(s) to persons accessing\ntheir networks by using a 'banner-text' for the banner exec command.",
+      "audit": "Perform the following to determine if the exec banner is set:\nhostname#sh running-config | beg banner exec\nIf the command does not return a result, the banner is not enabled",
+      "remediation": "Configure the EXEC banner presented to a user when accessing the devices enable\nprompt.\nhostname(config)#banner exec c\nEnter TEXT message. End with the character 'c'.\n<banner-text>\nc",
+      "default_value": "No banner is set by default",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/fundamentals/command/A_through_B.html#GUID-0DEF5B57-A7D9-4912-861F-E837C82A3881"
+      ],
+      "cis_controls": [
+        "14.1 Establish and Maintain a Security Awareness",
+        "17.3 Implement a Security Awareness Program"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.3.2",
+      "title": "Set the 'banner-text' for 'banner login'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Follow the banner login command with one or more blank spaces and a delimiting\ncharacter of your choice. Then enter one or more lines of text, terminating the message\nwith the second occurrence of the delimiting character.\nWhen a user connects to the router, the message-of-the-day (MOTD) banner (if\nconfigured) appears first, followed by the login banner and prompts. After the user\nsuccessfully logs in to the router, the EXEC banner or incoming banner will be\ndisplayed, depending on the type of connection. For a reverse Telnet login, the\nincoming banner will be displayed. For all other connections, the router will display the\nEXEC banner.",
+      "rationale": "\"Network banners are electronic messages that provide notice of legal rights to users of\ncomputer networks. From a legal standpoint, banners have four primary functions.\n• First, banners may be used to generate consent to real-time monitoring under\nTitle III.\n• Second, banners may be used to generate consent to the retrieval of stored files\nand records pursuant to ECPA.\n• Third, in the case of government networks, banners may eliminate any Fourth\nAmendment \"reasonable expectation of privacy\" that government employees or\nother users might otherwise retain in their use of the government's network under\nO'Connor v. Ortega, 480 U.S. 709 (1987).\n• Fourth, in the case of a non-government network, banners may establish a\nsystem administrator's \"common authority\" to consent to a law enforcement\nsearch pursuant to United States v. Matlock, 415 U.S. 164 (1974).\" (US\nDepartment of Justice APPENDIX A: Sample Network Banner Language)",
+      "impact": "Organizations provide appropriate legal notice(s) and warning(s) to persons accessing\ntheir networks by using a 'banner-text' for the banner login command.",
+      "audit": "Perform the following to determine if the login banner is set:\nhostname#show running-config | beg banner login\nIf the command does not return a result, the banner is not enabled.",
+      "remediation": "Configure the device so a login banner presented to a user attempting to access the\ndevice.\nhostname(config)#banner login c\nEnter TEXT message. End with the character 'c'.\n<banner-text>\nc",
+      "default_value": "No banner is set by default",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/fundamentals/command/A_through_B.html#GUID-FF0B6890-85B8-4B6A-90DD-1B7140C5D22F"
+      ],
+      "cis_controls": [
+        "14.1 Establish and Maintain a Security Awareness",
+        "17.3 Implement a Security Awareness Program"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.3.3",
+      "title": "Set the 'banner-text' for 'banner motd'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "This MOTD banner is displayed to all terminals connected and is useful for sending\nmessages that affect all users (such as impending system shutdowns). Use the no\nexec-banner or no motd-banner command to disable the MOTD banner on a line. The\nno exec-banner command also disables the EXEC banner on the line.\nWhen a user connects to the router, the MOTD banner appears before the login prompt.\nAfter the user logs in to the router, the EXEC banner or incoming banner will be\ndisplayed, depending on the type of connection. For a reverse Telnet login, the\nincoming banner will be displayed. For all other connections, the router will display the\nEXEC banner.",
+      "rationale": "\"Network banners are electronic messages that provide notice of legal rights to users of\ncomputer networks. From a legal standpoint, banners have four primary functions.\n• First, banners may be used to generate consent to real-time monitoring under\nTitle III.\n• Second, banners may be used to generate consent to the retrieval of stored files\nand records pursuant to ECPA.\n• Third, in the case of government networks, banners may eliminate any Fourth\nAmendment \"reasonable expectation of privacy\" that government employees or\nother users might otherwise retain in their use of the government's network under\nO'Connor v. Ortega, 480 U.S. 709 (1987).\n• Fourth, in the case of a non-government network, banners may establish a\nsystem administrator's \"common authority\" to consent to a law enforcement\nsearch pursuant to United States v. Matlock, 415 U.S. 164 (1974).\" (US\nDepartment of Justice APPENDIX A: Sample Network Banner Language)",
+      "impact": "Organizations provide appropriate legal notice(s) and warning(s) to persons accessing\ntheir networks by using a 'banner-text' for the banner motd command.",
+      "audit": "Perform the following to determine if the login banner is set:\nhostname#sh running-config | beg banner motd\nIf the command does not return a result, the banner is not enabled.",
+      "remediation": "Configure the message of the day (MOTD) banner presented when a user first connects\nto the device.\nhostname(config)#banner motd c\nEnter TEXT message. End with the character 'c'.\n<banner-text>\nc",
+      "default_value": "No banner is set by default",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/fundamentals/command/A_through_B.html#GUID-7416C789-9561-44FC-BB2A-D8D8AFFB77DD"
+      ],
+      "cis_controls": [
+        "14.1 Establish and Maintain a Security Awareness",
+        "17.3 Implement a Security Awareness Program"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.3.4",
+      "title": "Set the 'banner-text' for 'webauth banner'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "This banner is displayed to all terminals connected and is useful for sending messages\nthat affect all users (such as impending system shutdowns). Use the no exec-banner or\nno motd-banner command to disable the banner on a line. The no exec-banner\ncommand also disables the EXEC banner on the line.\nWhen a user connects to the router, the MOTD banner appears before the login prompt.\nAfter the user logs in to the router, the EXEC banner or incoming banner will be\ndisplayed, depending on the type of connection. For a reverse Telnet login, the\nincoming banner will be displayed. For all other connections, the router will display the\nEXEC banner.",
+      "rationale": "\"Network banners are electronic messages that provide notice of legal rights to users of\ncomputer networks. From a legal standpoint, banners have four primary functions.\n• First, banners may be used to generate consent to real-time monitoring under\nTitle III.\n• Second, banners may be used to generate consent to the retrieval of stored files\nand records pursuant to ECPA.\n• Third, in the case of government networks, banners may eliminate any Fourth\nAmendment \"reasonable expectation of privacy\" that government employees or\nother users might otherwise retain in their use of the government's network under\nO'Connor v. Ortega, 480 U.S. 709 (1987).\n• Fourth, in the case of a non-government network, banners may establish a\nsystem administrator's \"common authority\" to consent to a law enforcement\nsearch pursuant to United States v. Matlock, 415 U.S. 164 (1974).\" (US\nDepartment of Justice APPENDIX A: Sample Network Banner Language)",
+      "impact": "Organizations provide appropriate legal notice(s) and warning(s) to persons accessing\ntheir networks by using a 'banner-text' for the banner motd command.",
+      "audit": "Perform the following to determine if the login banner is set:\nhostname#show ip admission auth-proxy-banner http\nIf the command does not return a result, the banner is not enabled.",
+      "remediation": "Configure the webauth banner presented when a user connects to the device.\nhostname(config)#ip admission auth-proxy-banner http {banner-text | filepath}",
+      "default_value": "No banner is set by default",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9500/software/release/16-9/configuration_guide/sec/b_169_sec_9500_cg/configuring_web_based_authentication.html"
+      ],
+      "cis_controls": [
+        "14.1 Establish and Maintain a Security Awareness",
+        "17.3 Implement a Security Awareness Program",
+        "1.4 Password Rules"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.4.1",
+      "title": "Set 'password' for 'enable secret'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Use the enable secret command to provide an additional layer of security over the\nenable password. The enable secret command provides better security by storing the\nenable secret password using a nonreversible cryptographic function. The added layer\nof security encryption provides is useful in environments where the password crosses\nthe network or is stored on a TFTP server.",
+      "rationale": "In Cisco IOS XE, password types 8 and 9 are considered more secure than older\npassword types because they use strong hashing algorithms.\n• Type 8 passwords use PBKDF2 with SHA-256, which is an improvement over\nolder MD5-based hashing methods.\n• Type 9 passwords use SCRYPT, which is designed to be memory-intensive,\nmaking it harder for attackers to brute-force.\nCisco generally recommends using Type 8 or Type 9 for better security, but Type 9 is\nthe default in IOS XE. However, some auditors may prefer Type 8 because Type 9 is\nnot NIST-approved, especially in U.S. Defense and Public Sector environments.",
+      "impact": "While enable secret in Cisco IOS XE enhances security, it can have some potential\ndrawbacks:\n• Password Recovery Complexity: If the password is lost, recovering access can\nbe difficult,\n• Performance Overhead: Stronger hashing algorithms (like SCRYPT) can slightly\nincrease CPU usage, especially on older hardware.\n• Configuration Management Issues: If not properly documented, administrators\nmay struggle with access control changes.\n• Potential Lockout Risks: If centralized authentication fails and the enable secret\nis unknown, network administrators could be locked out.\n• Security Misconfiguration: If weak passwords are used, even with encryption,\nattackers could still brute-force them.",
+      "audit": "Perform the following to determine enable secret is set:\nIf the command does not return a result, the enable password is not set.\nhostname#sh run | incl enable secret",
+      "remediation": "Configure a strong, enable secret password.\nhostname(config)#enable secret 9 {ENABLE_SECRET_PASSWORD}",
+      "default_value": "No enable secret password setup by default",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9600/software/release/16-12/configuration_guide/sec/b_1612_sec_9600_cg/controlling_switch_access_with_passwords_and_privilege_levels.html"
+      ],
+      "cis_controls": [
+        "5.4 Restrict Administrator Privileges to Dedicated",
+        "4.3 Ensure the Use of Dedicated Administrative Accounts"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.4.2",
+      "title": "Enable 'service password-encryption'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "When password encryption is enabled, the encrypted form of the passwords is\ndisplayed when a more system:running-config command is entered.",
+      "rationale": "This requires passwords to be encrypted in the configuration file to prevent\nunauthorized users from learning the passwords just by reading the configuration. When\nnot enabled, many of the device's passwords will be rendered in plain text in the\nconfiguration file. This service ensures passwords are rendered as encrypted strings\npreventing an attacker from easily determining the configured value.",
+      "impact": "Organizations implementing 'service password-encryption' reduce the risk of\nunauthorized users learning clear text passwords to Cisco IOS configuration files.\nHowever, the algorithm used is not designed to withstand serious analysis and should\nbe treated like clear-text.",
+      "audit": "Perform the following to determine if a user with an encrypted password is enabled:\nEnsure a result that matches the command return\nhostname#sh run | incl service password-encryption",
+      "remediation": "Enable password encryption service to protect sensitive access passwords in the device\nconfiguration.\nhostname(config)#service password-encryption",
+      "default_value": "Service password encryption is not set by default",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/s1/sec-cr-s1.html#GUID-CC0E305A-604E-4A74-8A1A-975556CE5871"
+      ],
+      "cis_controls": [
+        "3.11 Encrypt Sensitive Data at Rest",
+        "16.4 Encrypt or Hash all Authentication Credentials"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.4.3",
+      "title": "Set 'username secret' for all local users",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Username secret password type 5 and enable secret password type 5 must be migrated\nto the stronger password type 8 or 9. IF a device is upgraded from IOS XE 16.9 or later\nthe type 5 is auto converted to type 9.\nThe username secret command provides an additional layer of security over the\nusername password.",
+      "rationale": "Default device configuration does not require strong user authentication potentially\nenabling unfettered access to an attacker that is able to reach the device. Creating a\nlocal account with an encrypted password enforces login authentication and provides a\nfallback authentication mechanism for configuration in a named method list in a situation\nwhere centralized authentication, authorization, and accounting services are\nunavailable.",
+      "impact": "Organizations implementing 'username secret' across their enterprise reduce the risk of\nunauthorized users gaining access to Cisco IOS devices by applying a MD5 hash and\nencrypting user passwords.",
+      "audit": "Perform the following to determine if a user with an encrypted password is enabled:\nIf a result does not return with secret, the feature is not enabled\nhostname#show run | incl username",
+      "remediation": "Create a local user with an encrypted, complex (not easily guessed) password.\nhostname(config)#username {{em}LOCAL_USERNAME{/em}} secret\n{{em}LOCAL_PASSWORD{/em}}",
+      "default_value": "No passwords are set by default",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9600/software/release/16-12/configuration_guide/sec/b_1612_sec_9600_cg/controlling_switch_access_with_passwords_and_privilege_levels.html"
+      ],
+      "cis_controls": [
+        "3.11 Encrypt Sensitive Data at Rest",
+        "16.4 Encrypt or Hash all Authentication Credentials",
+        "1.5 SNMP Rules"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.5.1",
+      "title": "Set 'no snmp-server' to disable SNMP when unused",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "If not in use, disable simple network management protocol (SNMP), read and write\naccess.",
+      "rationale": "SNMP read access allows remote monitoring and management of the device.",
+      "impact": "Organizations not using SNMP should require all SNMP services to be disabled by\nrunning the 'no snmp-server' command.",
+      "audit": "Verify the result reads \"SNMP agent not enabled\"\nhostname#show snmp community",
+      "remediation": "Disable SNMP read and write access if not in used to monitor and/or manage device.\nhostname(config)#no snmp-server",
+      "default_value": "",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/snmp/command/nm-snmp-cr-book.html"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.5.2",
+      "title": "Unset 'private' for 'snmp-server community'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "An SNMP community string permits read-only access to all objects.",
+      "rationale": "The default community string \"private\" is well known. Using easy to guess, well known\ncommunity string poses a threat that an attacker can effortlessly gain unauthorized\naccess to the device.",
+      "impact": "To reduce the risk of unauthorized access, Organizations should disable default, easy\nto guess, settings such as the 'private' setting for snmp-server community.",
+      "audit": "Perform the following to determine if the public community string is enabled:\nEnsure private does not show as a result\nhostname# show snmp community",
+      "remediation": "Disable the default SNMP community string private\nhostname(config)#no snmp-server community {private}",
+      "default_value": "",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/snmp/command/nm-snmp-cr-s2.html#GUID-2F3F13E4-EE81-4590-871D-6AE1043473DE"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.5.3",
+      "title": "Unset 'public' for 'snmp-server community'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "An SNMP community string permits read-only access to all objects.",
+      "rationale": "The default community string \"public\" is well known. Using easy to guess, well known\ncommunity string poses a threat that an attacker can effortlessly gain unauthorized\naccess to the device.",
+      "impact": "To reduce the risk of unauthorized access, Organizations should disable default, easy\nto guess, settings such as the 'public' setting for snmp-server community.",
+      "audit": "Perform the following to determine if the public community string is enabled: Ensure\npublic does not show as a result\nhostname# show snmp community",
+      "remediation": "Disable the default SNMP community string \"public\"\nhostname(config)#no snmp-server community {public}",
+      "default_value": "",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/snmp/command/nm-snmp-cr-s2.html#GUID-2F3F13E4-EE81-4590-871D-6AE1043473DE"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.5.4",
+      "title": "Do not set 'RW' for any 'snmp-server community'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Specifies read-write access. Authorized management stations can both retrieve and\nmodify MIB objects.",
+      "rationale": "Enabling SNMP read-write enables remote management of the device. Unless\nabsolutely necessary, do not allow simple network management protocol (SNMP) write\naccess.",
+      "impact": "To reduce the risk of unauthorized access, Organizations should disable the SNMP\n'write' access for snmp-server community.",
+      "audit": "Perform the following to determine if a read/write community string is enabled:\nVerify the result does not show a community string with a \"RW\"\nhostname#show run | incl snmp-server community",
+      "remediation": "Disable SNMP write access.\nhostname(config)#no snmp-server community {<em>write_community_string</em>}",
+      "default_value": "",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/snmp/command/nm-snmp-cr-s2.html#GUID-2F3F13E4-EE81-4590-871D-6AE1043473DE"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.5.5",
+      "title": "Set the ACL for each 'snmp-server community'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "This feature specifies a list of IP addresses that are allowed to use the community string\nto gain access to the SNMP agent.",
+      "rationale": "If ACLs are not applied, then anyone with a valid SNMP community string can\npotentially monitor and manage the router. An ACL should be defined and applied for all\nSNMP access to limit access to a small number of authorized management stations\nsegmented in a trusted management zone. If possible, use SNMPv3 which uses\nauthentication, authorization, and data privatization (encryption).",
+      "impact": "To reduce the risk of unauthorized access, Organizations should enable access control\nlists for all snmp-server communities and restrict the access to appropriate trusted\nmanagement zones. If possible, implement SNMPv3 to apply authentication,\nauthorization, and data privatization (encryption) for additional benefits to the\norganization.",
+      "audit": "Perform the following to determine if an ACL is enabled:\nVerify the result shows a number after the community string\nhostname#show run | incl snmp-server community",
+      "remediation": "Configure authorized SNMP community string and restrict access to authorized\nmanagement systems.\nhostname(config)#snmp-server community <<em>community_string</em>> ro\n{<em>snmp_access-list_number |\n<span>snmp_access-list_name</span></em><span>}</span>",
+      "default_value": "No ACL is set for SNMP",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/snmp/command/nm-snmp-cr-s2.html#GUID-2F3F13E4-EE81-4590-871D-6AE1043473DE"
+      ],
+      "cis_controls": [
+        "12.8 Establish and Maintain Dedicated Computing",
+        "11.7 Manage Network Infrastructure Through a Dedicated"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.5.6",
+      "title": "Create an 'access-list' for use with SNMP",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "You can use access lists to control the transmission of packets on an interface, control\nSimple Network Management Protocol (SNMP) access, and restrict the contents of\nrouting updates. The Cisco IOS software stops checking the extended access list after a\nmatch occurs.",
+      "rationale": "SNMP ACLs control what addresses are authorized to manage and monitor the device\nvia SNMP. If ACLs are not applied, then anyone with a valid SNMP community string\nmay monitor and manage the router. An ACL should be defined and applied for all\nSNMP community strings to limit access to a small number of authorized management\nstations segmented in a trusted management zone.",
+      "impact": "",
+      "audit": "Perform the following to determine if the ACL is created:\nVerify you the appropriate access-list definitions\nhostname#sh ip access-list <<em>snmp_acl_number</em>>",
+      "remediation": "Configure SNMP ACL for restricting access to the device from authorized management\nstations segmented in a trusted management zone.\nhostname(config)#access-list <<em>snmp_acl_number</em>> permit\n<<em>snmp_access-list</em>>\nhostname(config)#access-list deny any log",
+      "default_value": "SNMP does not use an access list.",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/a1/sec-cr-a2.html#GUID-9EA733A3-1788-4882-B8C3-AB0A2949120C"
+      ],
+      "cis_controls": [
+        "12.8 Establish and Maintain Dedicated Computing",
+        "11.7 Manage Network Infrastructure Through a Dedicated"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.5.7",
+      "title": "Set 'snmp-server host' when using SNMP",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "SNMP notifications can be sent as traps to authorized management systems.",
+      "rationale": "If SNMP is enabled for device management and device alerts are required, then ensure\nthe device is configured to submit traps only to authorize management systems.",
+      "impact": "Organizations using SNMP should restrict sending SNMP messages only to explicitly\nnamed systems to reduce unauthorized access.",
+      "audit": "Perform the following to determine if SNMP traps are enabled:\nIf the command returns configuration values, then SNMP is enabled.\nhostname#show run | incl snmp-server",
+      "remediation": "Configure authorized SNMP trap community string and restrict sending messages to\nauthorized management systems.\nhostname(config)#snmp-server host {ip_address} {trap_community_string}\n{notification-type}",
+      "default_value": "A recipient is not specified to receive notifications.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/snmp/command/nm-snmp-cr-s5.html#GUID-D84B2AB5-6485-4A23-8C26-73E50F73EE61"
+      ],
+      "cis_controls": [
+        "12.8 Establish and Maintain Dedicated Computing",
+        "11.7 Manage Network Infrastructure Through a Dedicated"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.5.8",
+      "title": "Set 'snmp-server enable traps snmp'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "SNMP notifications can be sent as traps to authorized management systems.",
+      "rationale": "SNMP has the ability to submit traps .",
+      "impact": "Organizations using SNMP should restrict trap types only to explicitly named traps to\nreduce unintended traffic. Enabling SNMP traps without specifying trap type will enable\nall SNMP trap types.",
+      "audit": "Perform the following to determine if SNMP traps are enabled:\nIf the command returns configuration values, then SNMP is enabled.\nhostname#show run | incl snmp-server",
+      "remediation": "Enable SNMP traps.\nhostname(config)#snmp-server enable traps snmp authentication linkup linkdown\ncoldstart",
+      "default_value": "SNMP notifications are disabled.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/snmp/command/nm-snmp-cr-s3.html#GUID-EB3EB677-A355-42C6-A139-85BA30810C54"
+      ],
+      "cis_controls": [
+        "12.8 Establish and Maintain Dedicated Computing",
+        "11.7 Manage Network Infrastructure Through a Dedicated"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.5.9",
+      "title": "Set 'priv' for each 'snmp-server group' using SNMPv3",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Specifies authentication of a packet with encryption when using SNMPv3",
+      "rationale": "SNMPv3 provides much improved security over previous versions by offering options\nfor Authentication and Encryption of messages. When configuring a user for SNMPv3\nyou have the option of using a range of encryption schemes, or no encryption at all, to\nprotect messages in transit. AES128 is the minimum strength encryption method that\nshould be deployed.",
+      "impact": "Organizations using SNMP can significantly reduce the risks of unauthorized access by\nusing the 'snmp-server group v3 priv' setting to encrypt messages in transit.",
+      "audit": "Verify the result show the appropriate group name and security model\nhostname#show snmp group",
+      "remediation": "For each SNMPv3 group created on your router add privacy options by issuing the\nfollowing command...\nhostname(config)#snmp-server group {<em>group_name</em>} v3 priv",
+      "default_value": "No SNMP server groups are configured.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/snmp/command/nm-snmp-cr-s5.html#GUID-56E87D02-C56F-4E2D-A5C8-617E31740C3F"
+      ],
+      "cis_controls": [
+        "6.5 Require MFA for Administrative Access",
+        "4.5 Use Multifactor Authentication For All Administrative"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "1.5.10",
+      "title": "Require 'aes 128' as minimum for 'snmp-server user' when using SNMPv3",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Specify the use of a minimum of 128-bit AES algorithm for encryption when using\nSNMPv3.",
+      "rationale": "SNMPv3 provides much improved security over previous versions by offering options\nfor Authentication and Encryption of messages. When configuring a user for SNMPv3\nyou have the option of using a range of encryption schemes, or no encryption at all, to\nprotect messages in transit. AES128 is the minimum strength encryption method that\nshould be deployed.",
+      "impact": "Organizations using SNMP can significantly reduce the risks of unauthorized access by\nusing the 'snmp-server user' setting with appropriate authentication and privacy\nprotocols to encrypt messages in transit.",
+      "audit": "Verify the result show the appropriate user name and security settings\nhostname#show snmp user",
+      "remediation": "For each SNMPv3 user created on your router add privacy options by issuing the\nfollowing command.\nhostname(config)#snmp-server user {user_name} {group_name} v3 auth sha\n{auth_password} priv aes 128 {priv_password} {acl_name_or_number}",
+      "default_value": "SNMP username as not set by default.",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/snmp/command/nm-snmp-cr-s5.html#GUID-4EED4031-E723-4B84-9BBF-610C3CF60E31"
+      ],
+      "cis_controls": [
+        "6.5 Require MFA for Administrative Access",
+        "4.5 Use Multifactor Authentication For All Administrative",
+        "2 Control Plane",
+        "2.1 Global Service Rules"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.1.1.1",
+      "title": "Set the 'hostname'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "The hostname is used in prompts and default configuration filenames.",
+      "rationale": "The domain name is prerequisite for setting up SSH.",
+      "impact": "Organizations should plan the enterprise network and identify an appropriate host name\nfor each router.",
+      "audit": "Perform the following to determine if the local time zone is configured:\nVerify the result shows the summer-time recurrence is configured properly.\nhostname#sh run | incl hostname",
+      "remediation": "Configure an appropriate host name for the router.\nhostname(config)#hostname {<em>router_name</em>}",
+      "default_value": "The default hostname is Router.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/fundamentals/command/F_through_K.html#GUID-F3349988-EC16-484A-BE81-4C40110E6625"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "0.0 Explicitly Not Mapped"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.1.1.2",
+      "title": "Set the 'ip domain-name'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Define a default domain name that the Cisco IOS software uses to complete unqualified\nhostnames",
+      "rationale": "The domain name is a prerequisite for setting up SSH.",
+      "impact": "Organizations should plan the enterprise network and identify an appropriate domain\nname for the router.",
+      "audit": "Perform the following to determine if the domain name is configured:\nVerify the domain name is configured properly.\nhostname#sh run | incl domain-name",
+      "remediation": "Configure an appropriate domain name for the router.\nhostname (config)#ip domain-name {<em>domain-name</em>}",
+      "default_value": "No domain is set.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/ipaddr/command/ipaddr-i3.html#GUID-A706D62B-9170-45CE-A2C2-7B2052BE2CAB"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "0.0 Explicitly Not Mapped"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.1.1.3",
+      "title": "Set 'modulus' to greater than or equal to 2048 for 'crypto key generate rsa'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Use this command to generate RSA key pairs for your Cisco device.\nRSA keys are generated in pairs--one public RSA key and one private RSA key.",
+      "rationale": "An RSA key pair is a prerequisite for setting up SSH and should be at least 2048 bits.\nNOTE: IOS does NOT display the modulus bit value in the Audit Procedure.",
+      "impact": "Organizations should plan and implement enterprise network cryptography and\ngenerate an appropriate RSA key pairs, such as 'modulus', greater than or equal to\n2048.",
+      "audit": "Perform the following to determine if the RSA key pair is configured:\nhostname#sh crypto key mypubkey rsa",
+      "remediation": "Generate an RSA key pair for the router.\nhostname(config)#crypto key generate rsa general-keys modulus <em>2048</em>",
+      "default_value": "RSA key pairs do not exist.",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/a1/sec-cr-c4.html#GUID-2AECF701-D54A-404E-9614-D3AAB049BC13"
+      ],
+      "cis_controls": [
+        "16.11 Leverage Vetted Modules or Services for Application",
+        "18.5 Use Only Standardized and Extensively Reviewed"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.1.1.4",
+      "title": "Set 'seconds' for 'ip ssh timeout' for 60 seconds or less",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "The time interval that the router waits for the SSH client to respond before\ndisconnecting an uncompleted login attempt.",
+      "rationale": "This reduces the risk of an administrator leaving an authenticated session logged in for\nan extended period of time.",
+      "impact": "Organizations should implement a security policy requiring minimum timeout settings for\nall network administrators and enforce the policy through the 'ip ssh timeout' command.",
+      "audit": "Perform the following to determine if the SSH timeout is configured:\nVerify the timeout is configured properly.\nhostname#sh ip ssh",
+      "remediation": "Configure the SSH timeout\nhostname(config)#ip ssh time-out [<em>60</em>]",
+      "default_value": "SSH in not enabled by default.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/d1/sec-cr-i3.html#GUID-5BAC7A2B-0A25-400F-AEE9-C22AE08513C6"
+      ],
+      "cis_controls": [
+        "4.3 Configure Automatic Session Locking on Enterprise",
+        "15 minutes. For mobile end-user devices, the period must not exceed 2 minutes.",
+        "16.11 Lock Workstation Sessions After Inactivity"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.1.1.5",
+      "title": "Set maximum value for 'ip ssh authentication-retries'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "The number of retries before the SSH login session disconnects.",
+      "rationale": "This limits the number of times an unauthorized user can attempt a password without\nhaving to establish a new SSH login attempt. This reduces the potential for success\nduring online brute force attacks by limiting the number of login attempts per SSH\nconnection.",
+      "impact": "Organizations should implement a security policy limiting the number of authentication\nattempts for network administrators and enforce the policy through the 'ip ssh\nauthentication-retries' command.",
+      "audit": "Perform the following to determine if SSH authentication retries is configured:\nVerify the authentication retries is configured properly.\nhostname#sh ip ssh",
+      "remediation": "Configure the SSH timeout: 3 or less\nhostname(config)#ip ssh authentication-retries [<em>3</em>]",
+      "default_value": "SSH is not enabled by default. When set, the default value is 3. When set using the\ndefault value it will not display under a show running-configuration.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/d1/sec-cr-i3.html#GUID-5BAC7A2B-0A25-400F-AEE9-C22AE08513C6"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "0.0 Explicitly Not Mapped"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.1.2",
+      "title": "Set version 2 for 'ip ssh version'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Specify the version of Secure Shell (SSH) to be run on a router",
+      "rationale": "SSH Version 1 has been subject to a number of serious vulnerabilities and is no longer\nconsidered to be a secure protocol, resulting in the adoption of SSH Version 2 as an\nInternet Standard in 2006.\nCisco routers support both versions, but due to the weakness of SSH Version 1 only the\nlater standard should be used.",
+      "impact": "To reduce the risk of unauthorized access, organizations should implement a security\npolicy to review their current protocols to ensure the most secure protocol versions are\nin use.",
+      "audit": "Perform the following to determine if SSH version 2 is configured:\nVerify that SSH version 2 is configured properly.\nhostname#sh ip ssh",
+      "remediation": "Configure the router to use SSH version 2\nhostname(config)#ip ssh version 2",
+      "default_value": "SSH is not enabled by default. When enabled, SSH operates in compatibility mode\n(versions 1 and 2 supported).",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/d1/sec-cr-i3.html#GUID-170AECF1-4B5B-462A-8CC8-999DEDC45C21"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "0.0 Explicitly Not Mapped"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.2",
+      "title": "Set 'no cdp run'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Disable Cisco Discovery Protocol (CDP) service at device level.",
+      "rationale": "The Cisco Discovery Protocol is a proprietary protocol that Cisco devices use to identify\neach other on a LAN segment. It is useful only in network monitoring and\ntroubleshooting situations but is considered a security risk because of the amount of\ninformation provided from queries. In addition, there have been published denial-of-\nservice (DoS) attacks that use CDP. CDP should be completely disabled unless\nnecessary.",
+      "impact": "To reduce the risk of unauthorized access, organizations should implement a security\npolicy restricting network protocols and explicitly require disabling all insecure or\nunnecessary protocols.",
+      "audit": "Perform the following to determine if CDP is enabled:\nVerify the result shows \"CDP is not enabled\"\nhostname#show cdp",
+      "remediation": "Disable Cisco Discovery Protocol (CDP) service globally.\nhostname(config)#no cdp run",
+      "default_value": "Enabled on all platforms except the Cisco 10000 Series Edge Services Router",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/cdp/command/cdp-cr-a1.html#GUID-E006FAC8-417E-4C3F-B732-4D47B0447750"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.3",
+      "title": "Set 'no ip bootp server'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Disable the Bootstrap Protocol (BOOTP) service on your routing device.",
+      "rationale": "BootP allows a router to issue IP addresses. This should be disabled unless there is a\nspecific requirement.",
+      "impact": "To reduce the risk of unauthorized access, organizations should implement a security\npolicy restricting network protocols and explicitly require disabling all insecure or\nunnecessary protocols such as 'ip bootp server'.",
+      "audit": "Perform the following to determine if bootp is enabled:\nVerify a \"no ip bootp server\" result returns\nhostname#show run | incl bootp",
+      "remediation": "Disable the bootp server.\nhostname(config)#ip dhcp bootp ignore",
+      "default_value": "Enabled",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "Cisco IOS software receives Cisco Discovery Protocol information"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.4",
+      "title": "Set 'no service dhcp'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Disable the Dynamic Host Configuration Protocol (DHCP) server and relay agent\nfeatures on your router.",
+      "rationale": "The DHCP server supplies automatic configuration parameters, such as dynamic IP\naddress, to requesting systems. A dedicated server located in a secured management\nzone should be used to provide DHCP services instead. Attackers can potentially be\nused for denial-of-service (DoS) attacks.",
+      "impact": "To reduce the risk of unauthorized access, organizations should implement a security\npolicy restricting network protocols and explicitly require disabling all insecure or\nunnecessary protocols such as the Dynamic Host Configuration Protocol (DHCP).",
+      "audit": "Perform the following to determine if the DHCP service is enabled:\nVerify no result returns\nhostname#show run | incl dhcp",
+      "remediation": "Disable the DHCP server.\nhostname(config)#<strong>no service dhcp</strong>",
+      "default_value": "Enabled by default, but also requires a DHCP pool to be set to activate the DHCP\nserver.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/ipaddr/command/ipaddr-r1.html#GUID-1516B259-AA28-4839-B968-8DDBF0B382F6"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.5",
+      "title": "Set 'service tcp-keepalives-in'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Generate keepalive packets on idle incoming network connections.",
+      "rationale": "Stale connections use resources and could potentially be hijacked to gain illegitimate\naccess. The TCP keepalives-in service generates keepalive packets on idle incoming\nnetwork connections (initiated by remote host). This service allows the device to detect\nwhen the remote host fails and drop the session. If enabled, keepalives are sent once\nper minute on idle connections. The connection is closed within five minutes if no\nkeepalives are received or immediately if the host replies with a reset packet.",
+      "impact": "To reduce the risk of unauthorized access, organizations should implement a security\npolicy restricting how long to allow terminated sessions and enforce this policy through\nthe use of 'tcp-keepalives-in' command.",
+      "audit": "Perform the following to determine if the feature is enabled:\nVerify a command string result returns\nhostname#show run | incl service tcp",
+      "remediation": "Enable TCP keepalives-in service:\nhostname(config)#service tcp-keepalives-in",
+      "default_value": "Disabled by default.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/fundamentals/command/R_through_setup.html#GUID-1489ABA3-2428-4A64-B252-296A035DB85E"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.6",
+      "title": "Set 'service tcp-keepalives-out'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Generate keepalive packets on idle outgoing network connections.",
+      "rationale": "Stale connections use resources and could potentially be hijacked to gain illegitimate\naccess. The TCP keepalives-in service generates keepalive packets on idle incoming\nnetwork connections (initiated by remote host). This service allows the device to detect\nwhen the remote host fails and drop the session. If enabled, keepalives are sent once\nper minute on idle connections. The closes connection is closed within five minutes if no\nkeepalives are received or immediately if the host replies with a reset packet.",
+      "impact": "To reduce the risk of unauthorized access, organizations should implement a security\npolicy restricting how long to allow terminated sessions and enforce this policy through\nthe use of 'tcp-keepalives-out' command.",
+      "audit": "Perform the following to determine if the feature is enabled:\nVerify a command string result returns\nhostname#show run | incl service tcp",
+      "remediation": "Enable TCP keepalives-out service:\nhostname(config)#service tcp-keepalives-out",
+      "default_value": "Disabled by default.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/fundamentals/command/R_through_setup.html#GUID-9321ECDC-6284-4BF6-BA4A-9CEEF5F993E5"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.1.7",
+      "title": "Set 'no service pad'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Disable X.25 Packet Assembler/Disassembler (PAD) service.",
+      "rationale": "If the PAD service is not necessary, disable the service to prevent intruders from\naccessing the X.25 PAD command set on the router.",
+      "impact": "To reduce the risk of unauthorized access, organizations should implement a security\npolicy restricting unnecessary services such as the 'PAD' service.",
+      "audit": "Perform the following to determine if the feature is disabled:\nVerify no result returns\nhostname#show run all| incl service pad",
+      "remediation": "Disable the PAD service.\nhostname(config)#no service pad",
+      "default_value": "Enabled by default.",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/wan/command/wan-s1.html#GUID-C5497B77-3FD4-4D2F-AB08-1317D5F5473B"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services",
+        "2.2 Logging Rules"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.2.1",
+      "title": "Set 'logging enable'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Enable logging of system messages.",
+      "rationale": "Logging provides a chronological record of activities on the Cisco device and allows\nmonitoring of both operational and security related events.",
+      "impact": "Enabling the Cisco IOS 'logging enable' command enforces the monitoring of\ntechnology risks for the organizations' network devices.",
+      "audit": "Perform the following to determine if the feature is enabled:\nVerify no result returns\nhostname#show run | i logging host",
+      "remediation": "Enable system logging.\nhostname(config)#archive\nhostname(config-archive)#log config\nhostname(config-archive-log-cfg)#logging enable\nhostname(config-archive-log-cfg)#end",
+      "default_value": "Logging is not enabled/",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "https://community.cisco.com/t5/networking-knowledge-base/how-to-configure-logging-in-cisco-ios/ta-p/3132434"
+      ],
+      "cis_controls": [
+        "8.5 Collect Detailed Audit Logs",
+        "6.3 Enable Detailed Logging"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.2.2",
+      "title": "Set 'buffer size' for 'logging buffered'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Enable system message logging to a local buffer.",
+      "rationale": "The device can copy and store log messages to an internal memory buffer. The\nbuffered data is available only from a router exec or enabled exec session. This form of\nlogging is useful for debugging and monitoring when logged in to a router.",
+      "impact": "Data forensics is effective for managing technology risks and an organization can\nenforce such policies by enabling the 'logging buffered' command.",
+      "audit": "Perform the following to determine if the feature is enabled:\nVerify a command string result returns\nhostname#show run | incl logging buffered",
+      "remediation": "Configure buffered logging (with minimum size). Recommended size is 64000.\nhostname(config)#logging buffered [<em>log_buffer_size</em>]",
+      "default_value": "No logging buffer is set by default",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios/netmgmt/command/reference/nm_09.html#wp1060051"
+      ],
+      "cis_controls": [
+        "8.5 Collect Detailed Audit Logs",
+        "6.3 Enable Detailed Logging"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.2.3",
+      "title": "Set 'logging console critical'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Verify logging to device console is enabled and limited to a rational severity level to\navoid impacting system performance and management.",
+      "rationale": "This configuration determines the severity of messages that will generate console\nmessages. Logging to console should be limited only to those messages required for\nimmediate troubleshooting while logged into the device. This form of logging is not\npersistent; messages printed to the console are not stored by the router. Console\nlogging is handy for operators when they use the console.",
+      "impact": "Logging critical messages at the console is important for an organization managing\ntechnology risk. The 'logging console' command should capture appropriate severity\nmessages to be effective.",
+      "audit": "Perform the following to determine if the feature is enabled:\nVerify a command string result returns\nhostname#show run | incl logging console",
+      "remediation": "Configure console logging level.\nhostname(config)#logging console critical",
+      "default_value": "Tthe default is to log all messages",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [],
+      "cis_controls": [
+        "8.5 Collect Detailed Audit Logs",
+        "6.3 Enable Detailed Logging"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.2.4",
+      "title": "Set IP address for 'logging host'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Log system messages and debug output to a remote host.",
+      "rationale": "Cisco routers can send their log messages to a Unix-style Syslog service. A syslog\nservice simply accepts messages and stores them in files or prints them according to a\nsimple configuration file. This form of logging is best because it can provide protected\nlong-term storage for logs (the devices internal logging buffer has limited capacity to\nstore events.) In addition, logging to an external system is highly recommended or\nrequired by most security standards. If desired or required by policy, law and/or\nregulation, enable a second syslog server for redundancy.",
+      "impact": "Logging is an important process for an organization managing technology risk. The\n'logging host' command sets the IP address of the logging host and enforces the logging\nprocess.",
+      "audit": "Perform the following to determine if a syslog server is enabled:\nVerify one or more IP address(es) returns\nhostname#sh log | incl logging host",
+      "remediation": "Designate one or more syslog servers by IP address.\nhostname(config)#logging host {syslog_server}",
+      "default_value": "System logging messages are not sent to any remote host.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios/netmgmt/command/reference/nm_09.html#wp1082864"
+      ],
+      "cis_controls": [
+        "13.1 Centralize Security Event Alerting",
+        "13.11 Tune Security Event Alerting Thresholds",
+        "6.6 Deploy SIEM or Log Analytic tool",
+        "6.8 Regularly Tune SIEM"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.2.5",
+      "title": "Set 'logging trap informational'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Limit messages logged to the syslog servers based on severity level informational.",
+      "rationale": "This determines the severity of messages that will generate simple network\nmanagement protocol (SNMP) trap and or syslog messages. This setting should be set\nto either \"debugging\" (7) or \"informational\" (6), but no lower.",
+      "impact": "Logging is an important process for an organization managing technology risk. The\n'logging trap' command sets the severity of messages and enforces the logging\nprocess.",
+      "audit": "Perform the following to determine if a syslog server for SNMP traps is enabled:\nVerify \"level informational\" returns\nhostname#sh log | incl trap logging",
+      "remediation": "Configure SNMP trap and syslog logging level.\nhostname(config)#logging trap informational",
+      "default_value": "Disabled",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios/netmgmt/command/reference/nm_09.html#wp1015177"
+      ],
+      "cis_controls": [
+        "8.5 Collect Detailed Audit Logs",
+        "6.3 Enable Detailed Logging"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.2.6",
+      "title": "Set 'service timestamps debug datetime'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Configure the system to apply a time stamp to debugging messages or system logging\nmessages",
+      "rationale": "Including timestamps in log messages allows correlating events and tracing network\nattacks across multiple devices. Enabling service timestamp to mark the time log\nmessages were generated simplifies obtaining a holistic view of events enabling faster\ntroubleshooting of issues or attacks.",
+      "impact": "Logging is an important process for an organization managing technology risk and\nestablishing a timeline of events is critical. The 'service timestamps' command sets the\ndate and time on entries sent to the logging host and enforces the logging process.",
+      "audit": "Perform the following to determine if the additional detail is enabled:\nVerify a command string result returns\nhostname#sh run | incl service timestamps",
+      "remediation": "Configure debug messages to include timestamps.\nhostname(config)#service timestamps debug datetime {<em>msec</em>} show-\ntimezone",
+      "default_value": "Time stamps are applied to debug and logging messages.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/fundamentals/command/R_through_setup.html#GUID-DC110E59-D294-4E3D-B67F-CCB06E607FC6"
+      ],
+      "cis_controls": [
+        "8.5 Collect Detailed Audit Logs",
+        "6.3 Enable Detailed Logging"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.2.7",
+      "title": "Set 'logging source interface'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Specify the source IPv4 or IPv6 address of system logging packets",
+      "rationale": "This is required so that the router sends log messages to the logging server from a\nconsistent IP address.",
+      "impact": "Logging is an important process for an organization managing technology risk and\nestablishing a consistent source of messages for the logging host is critical. The 'logging\nsource interface loopback' command sets a consistent IP address to send messages to\nthe logging host and enforces the logging process.",
+      "audit": "Perform the following to determine if logging services are bound to a source interface:\nVerify a command string result returns\nhostname#sh run | incl logging source",
+      "remediation": "Bind logging to the loopback interface.\nhostname(config)#logging source-interface loopback\n{<em>loopback_interface_number</em>}",
+      "default_value": "The wildcard interface address is used.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios/netmgmt/command/reference/nm_09.html#wp1095099"
+      ],
+      "cis_controls": [
+        "8.5 Collect Detailed Audit Logs",
+        "6.3 Enable Detailed Logging"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.2.8",
+      "title": "Set 'login success/failure logging'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Without generating audit records that are specific to the security and mission needs of\nthe organization, it would be difficult to establish, correlate, and investigate the events\nrelating to an incident or identify those responsible for one.",
+      "rationale": "Audit records can be generated from various components within the information system\n(e.g., module or policy filter).",
+      "impact": "",
+      "audit": "hostname(config)#sho running-config | inc login on-",
+      "remediation": "hostname(config)#login on-failure log\nhostname(config)#login on-success log\nhostname(config)#end",
+      "default_value": "",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/config-mgmt/configuration/xe-16-6/config-mgmt-xe-16-6-book/cm-config-logger.pdf"
+      ],
+      "cis_controls": [
+        "8.5 Collect Detailed Audit Logs",
+        "6.3 Enable Detailed Logging",
+        "2.3 NTP Rules"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.3.1.1",
+      "title": "Set 'ntp authenticate'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Enable NTP authentication.",
+      "rationale": "Using authenticated NTP ensures the Cisco device only permits time updates from\nauthorized NTP servers.",
+      "impact": "Organizations should establish three Network Time Protocol (NTP) hosts to set\nconsistent time across the enterprise. Enabling the 'ntp authenticate' command enforces\nauthentication between NTP hosts.",
+      "audit": "From the command prompt, execute the following commands:\nhostname#show run | include ntp",
+      "remediation": "Configure NTP authentication:\nhostname(config)#ntp authenticate",
+      "default_value": "NTP authentication is not enabled.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/bsm/command/bsm-cr-n1.html#GUID-8BEBDAF4-6D03-4C3E-B8D6-6BCBC7D0F324"
+      ],
+      "cis_controls": [
+        "8.4 Standardize Time Synchronization",
+        "6.1 Utilize Three Synchronized Time Sources"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.3.1.2",
+      "title": "Set 'ntp authentication-key'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Define an authentication key for Network Time Protocol (NTP).",
+      "rationale": "Using an authentication key provides a higher degree of security as only authenticated\nNTP servers will be able to update time for the Cisco device.",
+      "impact": "Organizations should establish three Network Time Protocol (NTP) hosts to set\nconsistent time across the enterprise. Enabling the 'ntp authentication-key' command\nenforces encrypted authentication between NTP hosts.",
+      "audit": "From the command prompt, execute the following commands:\nhostname#show run | include ntp authentication-key",
+      "remediation": "Configure at the NTP key ring and encryption key using the following command\nhostname(config)#ntp authentication-key {ntp_key_id} md5 {ntp_key_hash}",
+      "default_value": "No authentication key is defined for NTP.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/bsm/command/bsm-cr-n1.html#GUID-0435BFD1-D7D7-41D4-97AC-7731C11226BC"
+      ],
+      "cis_controls": [
+        "8.4 Standardize Time Synchronization",
+        "6.1 Utilize Three Synchronized Time Sources"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.3.1.3",
+      "title": "Set the 'ntp trusted-key'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Ensure you authenticate the identity of a system to which Network Time Protocol (NTP)\nwill synchronize",
+      "rationale": "This authentication function provides protection against accidentally synchronizing the\nsystem to another system that is not trusted, because the other system must know the\ncorrect authentication key.",
+      "impact": "Organizations should establish three Network Time Protocol (NTP) hosts to set\nconsistent time across the enterprise. Enabling the 'ntp trusted-key' command enforces\nencrypted authentication between NTP hosts.",
+      "audit": "From the command prompt, execute the following commands:\nhostname#show run | include ntp trusted-key\nThe above command should return any NTP server(s) configured with encryption keys.\nThis value should be the same as the total number of servers configured as tested in.",
+      "remediation": "Configure the NTP trusted key using the following command\nhostname(config)#ntp trusted-key {ntp_key_id}",
+      "default_value": "Authentication of the identity of the system is disabled.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/bsm/command/bsm-cr-n1.html#GUID-89CA798D-0F12-4AE8-B382-DE10CBD261DB"
+      ],
+      "cis_controls": [
+        "8.4 Standardize Time Synchronization",
+        "6.1 Utilize Three Synchronized Time Sources"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.3.1.4",
+      "title": "Set 'key' for each 'ntp server'",
+      "automated": false,
+      "profile": "Level 2",
+      "description": "Specifies the authentication key for NTP.",
+      "rationale": "This authentication feature provides protection against accidentally synchronizing the\nntp system to another system that is not trusted, because the other system must know\nthe correct authentication key.",
+      "impact": "Organizations should establish three Network Time Protocol (NTP) hosts to set\nconsistent time across the enterprise. Enabling the 'ntp server key' command enforces\nencrypted authentication between NTP hosts.",
+      "audit": "From the command prompt, execute the following commands:\nhostname#show run | include ntp server",
+      "remediation": "Configure each NTP Server to use a key ring using the following command.\nhostname(config)#ntp server {<em>ntp-server_ip_address</em>}{key\n<em>ntp_key_id</em>}",
+      "default_value": "No NTP key is set by default",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [],
+      "cis_controls": [
+        "8.4 Standardize Time Synchronization",
+        "6.1 Utilize Three Synchronized Time Sources"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.3.2",
+      "title": "Set 'ip address' for 'ntp server'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Use this command if you want to allow the system to synchronize the system software\nclock with the specified NTP server.",
+      "rationale": "To ensure that the time on your Cisco router is consistent with other devices in your\nnetwork, at least two (and preferably at least three) NTP Server/s external to the router\nshould be configured.\nEnsure you also configure consistent timezone and daylight savings time setting for all\ndevices. For simplicity, the default of Coordinated Universal Time (UTC).",
+      "impact": "Organizations should establish multiple Network Time Protocol (NTP) hosts to set\nconsistent time across the enterprise. Enabling the 'ntp server ip address' enforces\nencrypted authentication between NTP hosts.",
+      "audit": "From the command prompt, execute the following commands:\nhostname#sh ntp associations",
+      "remediation": "Configure at least one external NTP Server using the following commands\nhostname(config)#ntp server {ntp-server_ip_address}\nor\nhostname(config)#ntp server {ntp server vrf [vrf name] ip address}",
+      "default_value": "No servers are configured by default.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/bsm/command/bsm-cr-n1.html#GUID-255145EB-D656-43F0-B361-D9CBCC794112",
+        "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/bsm/command/bsm-cr-book/bsm-cr-n1.html#wp3294676008"
+      ],
+      "cis_controls": [
+        "8.4 Standardize Time Synchronization",
+        "6.1 Utilize Three Synchronized Time Sources",
+        "2.4 Loopback Rules"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.4.1",
+      "title": "Create a single 'interface loopback'",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Configure a single loopback interface.",
+      "rationale": "Software-only loopback interface that emulates an interface that is always up. It is a\nvirtual interface supported on all platforms.\nAlternate loopback addresses create a potential for abuse, mis-configuration, and\ninconsistencies. Additional loopback interfaces must be documented and approved prior\nto use by local security personnel.",
+      "impact": "Organizations should plan and establish 'loopback interfaces' for the enterprise network.\nLoopback interfaces enable critical network information such as OSPF Router IDs and\nprovide termination points for routing protocol sessions.",
+      "audit": "Perform the following to determine if a loopback interface is defined:\nVerify an IP address returns for the defined loopback interface\nhostname#sh ip int brief | incl Loopback",
+      "remediation": "Define and configure one loopback interface. Below is an example\nhostname(config)#interface loopback 0\nhostname(config-if)#ip address 10.10.10.10 255.255.255.0",
+      "default_value": "There are no loopback interfaces defined by default.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/interface/command/ir-i1.html#GUID-0D6BDFCD-3FBB-4D26-A274-C1221F8592DF"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.4.2",
+      "title": "Set AAA 'source-interface'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Force AAA to use the IP address of a specified interface for all outgoing AAA packets",
+      "rationale": "This is required so that the AAA server (RADIUS or TACACS+) can easily identify\nrouters and authenticate requests by their IP address.",
+      "impact": "Organizations should design and implement authentication, authorization, and\naccounting (AAA) services for effective monitoring of enterprise network devices.\nBinding AAA services to the source-interface loopback enables these services.",
+      "audit": "Perform the following to determine if AAA services are bound to a source interface:\nVerify a command string result returns\nhostname#sh run | incl tacacs source | radius source",
+      "remediation": "Bind AAA services to the loopback interface.\nHostname(config)#ip radius source-interface loopback\n{loopback_interface_number}\nor\nHostname(config)#aaa group server tacacs+ {group_name} hostname(config-sg-\ntacacs+)#ip tacacs source-interface {loopback_interface_number}",
+      "default_value": "",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/d1/sec-cr-i2.html#GUID-22E8B211-751F-48E0-9C76-58F0FE0AABA8",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/d1/sec-cr-i3.html#GUID-54A00318-CF69-46FC-9ADC-313BFC436713"
+      ],
+      "cis_controls": [
+        "5.6 Centralize Account Management",
+        "16.2 Configure Centralized Point of Authentication"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.4.3",
+      "title": "Set 'ntp source' to Loopback Interface",
+      "automated": true,
+      "profile": "Level 1",
+      "description": "Use a particular source address in Network Time Protocol (NTP) packets.",
+      "rationale": "Set the source address to be used when sending NTP traffic. This may be required if\nthe NTP servers you peer with filter based on IP address.",
+      "impact": "Organizations should plan and implement network time protocol (NTP) services to\nestablish official time for all enterprise network devices. Setting 'ntp source loopback'\nenforces the proper IP address for NTP services.",
+      "audit": "Perform the following to determine if NTP services are bound to a source interface:\nVerify a command string result returns\nhostname#sh run | incl ntp source",
+      "remediation": "Bind the NTP service to the loopback interface.\nhostname(config)#ntp source loopback {<em>loopback_interface_number}</em>",
+      "default_value": "Source address is determined by the outgoing interface.",
+      "scored": null,
+      "designation": "Automated",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/bsm/command/bsm-cr-n1.html#GUID-DF29FBFB-E1C0-4E5C-9013-D4CE59CA0B88"
+      ],
+      "cis_controls": [
+        "8.4 Standardize Time Synchronization",
+        "6.1 Utilize Three Synchronized Time Sources"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "2.4.4",
+      "title": "Set 'ip tftp source-interface' to the Loopback Interface",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Specify the IP address of an interface as the source address for TFTP connections.",
+      "rationale": "This is required so that the TFTP servers can easily identify routers and authenticate\nrequests by their IP address.",
+      "impact": "Organizations should plan and implement trivial file transfer protocol (TFTP) services in\nthe enterprise by setting 'tftp source-interface loopback', which enables the TFTP\nservers to identify routers and authenticate requests by IP address.",
+      "audit": "Perform the following to determine if TFTP services are bound to a source interface:\nVerify a command string result returns\nhostname#sh run | incl tftp source-interface",
+      "remediation": "Bind the TFTP client to the loopback interface.\nhostname(config)#ip tftp source-interface loopback\n{<em>loobpback_interface_number</em>}",
+      "default_value": "The address of the closest interface to the destination is selected as the source\naddress.",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/fundamentals/command/F_through_K.html#GUID-9AA27050-A578-47CD-9F1D-5A8E2B449209"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services",
+        "3 Data Plane",
+        "3.1 Routing Rules"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.1.1",
+      "title": "Set 'no ip source-route'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Disable the handling of IP datagrams with source routing header options.",
+      "rationale": "Source routing is a feature of IP whereby individual packets can specify routes. This\nfeature is used in several kinds of attacks. Cisco routers normally accept and process\nsource routes. Unless a network depends on source routing, it should be disabled.",
+      "impact": "Organizations should plan and implement network policies to ensure unnecessary\nservices are explicitly disabled. The 'ip source-route' feature has been used in several\nattacks and should be disabled.",
+      "audit": "Verify the command string result returns\nhostname#sh run | incl ip source-route",
+      "remediation": "Disable source routing.\nhostname(config)#no ip source-route",
+      "default_value": "Enabled by default",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/ipaddr/command/ipaddr-i4.html#GUID-C7F971DD-358F-4B43-9F3E-244F5D4A3A93"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.1.2",
+      "title": "Set 'no ip proxy-arp'",
+      "automated": false,
+      "profile": "Level 2",
+      "description": "Disable proxy ARP on all interfaces.",
+      "rationale": "Address Resolution Protocol (ARP) provides resolution between IP and MAC\nAddresses (or other Network and Link Layer addresses on none IP networks) within a\nLayer 2 network.\nProxy ARP is a service where a device connected to one network (in this case the Cisco\nrouter) answers ARP Requests which are addressed to a host on another network,\nreplying with its own MAC Address and forwarding the traffic on to the intended host.\nSometimes used for extending broadcast domains across WAN links, in most cases\nProxy ARP on enterprise networks is used to enable communication for hosts with mis-\nconfigured subnet masks, a situation which should no longer be a common problem.\nProxy ARP effectively breaks the LAN Security Perimeter, extending a network across\nmultiple Layer 2 segments. Using Proxy ARP can also allow other security controls such\nas PVLAN to be bypassed.",
+      "impact": "Organizations should plan and implement network policies to ensure unnecessary\nservices are explicitly disabled. The 'ip proxy-arp' feature effectively breaks the LAN\nsecurity perimeter and should be disabled.",
+      "audit": "Verify the proxy ARP status\nhostname#sh ip int {<em>interface</em>} | incl proxy-arp",
+      "remediation": "Disable proxy ARP on all interfaces.\nhostname(config)#interface {interface}\nhostname(config-if)#no ip proxy-arp",
+      "default_value": "Enabled",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/ipaddr/command/ipaddr-i4.html#GUID-AEB7DDCB-7B3D-4036-ACF0-0A0250F3002E"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.1.3",
+      "title": "Set 'no interface tunnel'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Verify no tunnel interfaces are defined.",
+      "rationale": "Tunnel interfaces should not exist in general. They can be used for malicious purposes.\nIf they are necessary, the network admin's should be well aware of them and their\npurpose.",
+      "impact": "Organizations should plan and implement enterprise network security policies that\ndisable insecure and unnecessary features that increase attack surfaces such as 'tunnel\ninterfaces'.",
+      "audit": "Verify no tunnel interfaces are defined\nhostname#sh ip int brief | incl tunnel",
+      "remediation": "Remove any tunnel interfaces.\nhostname(config)#no interface tunnel {<em>instance</em>}",
+      "default_value": "No tunnel interfaces are defined",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/interface/command/ir-i1.html#GUID-0D6BDFCD-3FBB-4D26-A274-C1221F8592DF"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.1.4",
+      "title": "Set 'ip verify unicast source reachable-via'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Examines incoming packets to determine whether the source address is in the\nForwarding Information Base (FIB) and permits the packet only if the source is\nreachable through the interface on which the packet was received (sometimes referred\nto as strict mode).",
+      "rationale": "Enabled uRPF helps mitigate IP spoofing by ensuring only packet source IP addresses\nonly originate from expected interfaces. Configure unicast reverse-path forwarding\n(uRPF) on all external or high risk interfaces.",
+      "impact": "Organizations should plan and implement enterprise security policies that protect the\nconfidentiality, integrity, and availability of network devices. The 'unicast Reverse-Path\nForwarding' (uRPF) feature dynamically uses the router table to either accept or drop\npackets when arriving on an interface.",
+      "audit": "Verify uRPF is running on the appropriate interface(s)\nhostname#sh ip int {<em>interface</em>} | incl verify source",
+      "remediation": "Configure uRPF.\nhostname(config)#interface {<em>interface_name</em>}\nhostname(config-if)#ip verify unicast source reachable-via rx allow-default",
+      "default_value": "Unicast RPF is disabled.",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/d1/sec-cr-i3.html#GUID-2ED313DB-3D3F-49D7-880A-047463632757",
+        "https://community.cisco.com/t5/routing/ip-verify-unicast-source-reachable-via-rx/td-p/1710172"
+      ],
+      "cis_controls": [
+        "0.0 Explicitly Not Mapped",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services",
+        "3.2 Border Router Filtering"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.2.1",
+      "title": "Set 'ip access-list extended' to Forbid Private Source Addresses from External Networks",
+      "automated": false,
+      "profile": "Level 2",
+      "description": "This command places the router in access-list configuration mode, where you must\ndefine the denied or permitted access conditions by using the deny and permit\ncommands.",
+      "rationale": "Configuring access controls can help prevent spoofing attacks. To reduce the\neffectiveness of IP spoofing, configure access control to deny any traffic from the\nexternal network that has a source address that should reside on the internal network.\nInclude local host address or any reserved private addresses (RFC 1918).\nEnsure the permit rule(s) above the final deny rule only allow traffic according to your\norganization's least privilege policy.",
+      "impact": "Organizations should plan and implement enterprise security policies that explicitly\nseparate internal from external networks. Adding 'ip access-list' explicitly permitting and\ndenying internal and external networks enforces these policies.",
+      "audit": "Verify you have the appropriate access-list definitions\nhostname#sh ip access-list {<em>name | number</em>}",
+      "remediation": "Configure ACL for private source address restrictions from external networks.\nhostname(config)#ip access-list extended {<span><em>name | number</em>}\n</span><span>hostname(config-nacl)#deny ip\n{</span><em>internal_networks</em>} any log\nhostname(config<span>-nacl</span>)#deny ip 127.0.0.0 0.255.255.255 any log\nhostname(config<span>-nacl</span>)#deny ip 10.0.0.0 0.255.255.255 any log\nhostname(config<span>-nacl</span>)#deny ip 0.0.0.0 0.255.255.255 any log\nhostname(config<span>-nacl</span>)#deny ip 172.16.0.0 0.15.255.255 any log\nhostname(config<span>-nacl</span>)#deny ip 192.168.0.0 0.0.255.255 any log\nhostname(config<span>-nacl</span>)#deny ip 192.0.2.0 0.0.0.255 any log\nhostname(config<span>-nacl</span>)#deny ip 169.254.0.0 0.0.255.255 any log\nhostname(config<span>-nacl</span>)#deny ip 224.0.0.0 31.255.255.255 any log\nhostname(config<span>-nacl</span>)#deny ip host 255.255.255.255 any log\nhostname(config<span>-nacl</span>)#permit {protocol} {source_ip}\n{source_mask} {destination} {destination_mask} log\nhostname(config<span>-nacl</span>)#deny any any log\nhostname(config)#interface <external_<em>interface</em>>\nhostname(config-if)#access-group <<em>access-list</em>> in",
+      "default_value": "No access list defined",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/d1/sec-cr-i1.html#GUID-BD76E065-8EAC-4B32-AF25-04BA94DD2B11"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.2.2",
+      "title": "Set inbound 'ip access-group' on the External Interface",
+      "automated": false,
+      "profile": "Level 2",
+      "description": "This command places the router in access-list configuration mode, where you must\ndefine the denied or permitted access conditions by using the deny and permit\ncommands.",
+      "rationale": "Configuring access controls can help prevent spoofing attacks. To reduce the\neffectiveness of IP spoofing, configure access control to deny any traffic from the\nexternal network that has a source address that should reside on the internal network.\nInclude local host address or any reserved private addresses (RFC 1918).\nEnsure the permit rule(s) above the final deny rule only allow traffic according to your\norganization's least privilege policy.",
+      "impact": "Organizations should plan and implement enterprise security policies explicitly\npermitting and denying access based upon access lists. Using the 'ip access-group'\ncommand enforces these policies by explicitly identifying groups permitted access.",
+      "audit": "Verify the access-group is applied to the appropriate interface\nhostname#sh run | sec interface {<em>external_interface</em>}",
+      "remediation": "Apply the access-group for the external (untrusted) interface\nhostname(config)#interface {external_interface}\nhostname(config-if)#ip access-group {name | number} in",
+      "default_value": "No access-group defined",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/interface/command/ir-i1.html#GUID-0D6BDFCD-3FBB-4D26-A274-C1221F8592DF",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/security/d1/sec-cr-i1.html#GUID-D9FE7E44-7831-4C64-ACB8-840811A0C993"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services",
+        "3.3 Neighbor Authentication"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.1.1",
+      "title": "Set 'key chain'",
+      "automated": false,
+      "profile": "Level 2",
+      "description": "Define an authentication key chain to enable authentication for routing protocols. A key\nchain must have at least one key and can have up to 2,147,483,647 keys.\nNOTE: Only DRP Agent, EIGRP, and RIPv2 use key chains.",
+      "rationale": "Routing protocols such as DRP Agent, EIGRP, and RIPv2 use key chains for\nauthentication.",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Using 'key chains' for routing\nprotocols enforces these policies.",
+      "audit": "Verify the appropriate key chain is defined\nhostname#sh run | sec key chain",
+      "remediation": "Establish the key chain.\nhostname(config)#key chain {<em>key-chain_name</em>}",
+      "default_value": "Not set",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_pi/command/iri-cr-a1.html#GUID-A62E89F5-0B8B-4CF0-B4EB-08F2762D88BB"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.1.2",
+      "title": "Set 'key'",
+      "automated": false,
+      "profile": "Level 2",
+      "description": "Configure an authentication key on a key chain.",
+      "rationale": "This is part of the routing authentication setup",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Using 'key numbers' for key\nchains for routing protocols enforces these policies.",
+      "audit": "Verify the appropriate key chain is defined\nhostname#sh run | sec key chain",
+      "remediation": "Configure the key number.\nhostname(config-keychain)#key {<em>key-number</em>}",
+      "default_value": "",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_pi/command/iri-cr-a1.html#GUID-3F31B2E0-0E4B-4F49-A4A8-8ADA1CA0D73F"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.1.3",
+      "title": "Set 'key-string'",
+      "automated": false,
+      "profile": "Level 2",
+      "description": "Configure the authentication string for a key.",
+      "rationale": "This is part of the routing authentication setup",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Using 'key strings' for key chains\nfor routing protocols enforces these policies.",
+      "audit": "Verify the appropriate key chain is defined\nhostname#sh run | sec key chain",
+      "remediation": "Configure the key string.\nhostname(config-keychain-key)#key-string <<em>key-string</em>>",
+      "default_value": "Not set",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_pi/command/iri-cr-a1.html#GUID-D7A8DC18-2E16-4EA5-8762-8B68B94CC43E"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.1.4",
+      "title": "Set 'address-family ipv4 autonomous-system'",
+      "automated": false,
+      "profile": "Level 2",
+      "description": "Configure the EIGRP address family.",
+      "rationale": "Rationale: EIGRP is a true multi-protocol routing protocol and the 'address-family'\nfeature enables restriction of exchanges with specific neighbors",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Using 'address-family' for EIGRP\nenforces these policies by restricting the exchanges between predefined network\ndevices.",
+      "audit": "Verify the appropriate address family is set\nhostname#sh run | sec router eigrp",
+      "remediation": "Configure the EIGRP address family.\nhostname(config)#router eigrp <<em>virtual-instance-name</em>>\nhostname(config-router)#address-family ipv4 autonomous-system {<em>eigrp_as-\nnumber</em>}",
+      "default_value": "Not set",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-i1.html#GUID-67388D6C-AE9C-47CA-8C35-2A2CF9FA668E",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-a1.html#GUID-C03CFC8A-3CE3-4CF9-9D65-52990DBD3377"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.1.5",
+      "title": "Set 'af-interface default'",
+      "automated": false,
+      "profile": "Level 2",
+      "description": "Defines user defaults to apply to EIGRP interfaces that belong to an address-family.",
+      "rationale": "Part of the EIGRP address-family setup",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Using 'af-interface default' for\nEIGRP interfaces enforces these policies by restricting the exchanges between\npredefined network devices.",
+      "audit": "Verify the setting\nhostname#sh run | sec router eigrp",
+      "remediation": "Configure the EIGRP address family.\nhostname(config)#router eigrp <<em>virtual-instance-name</em>>\nhostname(config-router)#address-family ipv4 autonomous-system {<em>eigrp_as-\nnumber</em>}\nhostname(config-router-af)#af-interface default",
+      "default_value": "Not set",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-i1.html#GUID-67388D6C-AE9C-47CA-8C35-2A2CF9FA668E",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-a1.html#GUID-C03CFC8A-3CE3-4CF9-9D65-52990DBD3377",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-a1.html#GUID-DC0EF1D3-DFD4-45DF-A553-FA432A3E7233"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.1.6",
+      "title": "Set 'authentication key-chain'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Configure the EIGRP address family key chain.",
+      "rationale": "This is part of the EIGRP authentication configuration",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Using the address-family 'key\nchain' for EIGRP enforces these policies by restricting the exchanges between\npredefined network devices.",
+      "audit": "Verify the appropriate key chain is set\nhostname#sh run | sec router eigrp",
+      "remediation": "Configure the EIGRP address family key chain.\nhostname(config)#router eigrp <virtual-instance-name>\nhostname(config-router)#address-family ipv4 autonomous-system {eigrp_as-\nnumber}\nhostname(config-router-af)#af-interface {interface-name}\nhostname(config-router-af-interface)#authentication key-chain {eigrp_key-\nchain_name}",
+      "default_value": "No key chains are specified for EIGRP",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-i1.html#GUID-67388D6C-AE9C-47CA-8C35-2A2CF9FA668E",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-a1.html#GUID-C03CFC8A-3CE3-4CF9-9D65-52990DBD3377",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-a1.html#GUID-6B6ED6A3-1AAA-4EFA-B6B8-9BF11EEC37A0"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.1.7",
+      "title": "Set 'authentication mode md5'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Configure authentication to prevent unapproved sources from introducing unauthorized\nor false service messages.",
+      "rationale": "This is part of the EIGRP authentication configuration",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Using the 'authentication mode'\nfor EIGRP address-family or service-family packets enforces these policies by\nrestricting the type of authentication between network devices.",
+      "audit": "Verify the appropriate address family authentication mode is set\nhostname#sh run | sec router eigrp",
+      "remediation": "Configure the EIGRP address family authentication mode.\nhostname(config)#router eigrp <virtual-instance-name>\nhostname(config-router)#address-family ipv4 autonomous-system {eigrp_as-\nnumber}\nhostname(config-router-af)#af-interface {interface-name}\nhostname(config-router-af-interface)#authentication mode md5",
+      "default_value": "Not defined",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-i1.html#GUID-67388D6C-AE9C-47CA-8C35-2A2CF9FA668E",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-a1.html#GUID-C03CFC8A-3CE3-4CF9-9D65-52990DBD3377",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-a1.html#GUID-A29E0EF6-4CEF-40A7-9824-367939001B73"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.1.8",
+      "title": "Set 'ip authentication key-chain eigrp'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Specify the type of authentication used in Enhanced Interior Gateway Routing Protocol\n(EIGRP) packets per interface.",
+      "rationale": "Configuring EIGRP authentication key-chain number and name to restrict packet\nexchanges between network devices.",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Configuring the interface with 'ip\nauthentication key chain' for EIGRP by name and number enforces these policies by\nrestricting the exchanges between network devices.",
+      "audit": "Verify the appropriate key chain is set on the appropriate interface(s)\nhostname#sh ip eigrp int\nhostname#sh run int {<em>interface_name</em>} | incl key-chain",
+      "remediation": "Configure the interface with the EIGRP key chain.\nhostname(config)#interface {<em>interface_name</em>}\nhostname(config-if)#ip authentication key-chain eigrp {<em>eigrp_as-\nnumber</em>} {<em>eigrp_key-chain_name</em>}",
+      "default_value": "Not set",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/interface/command/ir-i1.html#GUID-0D6BDFCD-3FBB-4D26-A274-C1221F8592DF",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-i1.html#GUID-0B344B46-5E8E-4FE2-A3E0-D92410CE5E91"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.1.9",
+      "title": "Set 'ip authentication mode eigrp'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Configure authentication to prevent unapproved sources from introducing unauthorized\nor false routing messages.",
+      "rationale": "This is part of the EIGRP authentication configuration",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Configuring the interface with 'ip\nauthentication mode' for EIGRP by number and mode enforces these policies by\nrestricting the exchanges between network devices.",
+      "audit": "Verify the appropriate authentication mode is set on the appropriate interface(s)\nhostname#sh ip eigrp int\nhostname#sh run int {<em>interface_name</em>} | incl authentication mode",
+      "remediation": "Configure the interface with the EIGRP authentication mode.\nhostname(config)#interface {<em>interface_name</em>}\nhostname(config-if)#ip authentication mode eigrp {<em><span>eigrp_as-\nnumber</span></em><span>}</span> md5",
+      "default_value": "Not set",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/interface/command/ir-i1.html#GUID-0D6BDFCD-3FBB-4D26-A274-C1221F8592DF",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_eigrp/command/ire-i1.html#GUID-8D1B0697-8E96-4D8A-BD20-536956D68506"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.2.1",
+      "title": "Set 'authentication message-digest' for OSPF area",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Enable MD5 authentication for OSPF.",
+      "rationale": "This is part of the OSPF authentication setup.",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Configuring the area\n'authentication message-digest' for OSPF enforces these policies by restricting\nexchanges between network devices.",
+      "audit": "Verify message digest for OSPF is defined\nhostname#sh run | sec router ospf",
+      "remediation": "Configure the Message Digest option for OSPF.\nhostname(config)#router ospf <<em>ospf_process-id</em>>\nhostname(config-router)#area <<em>ospf_area-id</em>> authentication message-\ndigest",
+      "default_value": "Not set",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_ospf/command/ospf-i1.html#GUID-3D5781A3-F8DF-4760-A551-6A3AB80A42ED",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_ospf/command/ospf-a1.html#GUID-81D0F753-D8D5-494E-9A10-B15433CFD445"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.2.2",
+      "title": "Set 'ip ospf message-digest-key md5'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Enable Open Shortest Path First (OSPF) Message Digest 5 (MD5) authentication.",
+      "rationale": "This is part of the OSPF authentication setup",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Configuring the proper\ninterface(s) for 'ip ospf message-digest-key md5' enforces these policies by restricting\nexchanges between network devices.",
+      "audit": "Verify the appropriate md5 key is defined on the appropriate interface(s)\nhostname#sh run int {<em>interface</em>}",
+      "remediation": "Configure the appropriate interface(s) for Message Digest authentication\nhostname(config)#interface {<em>interface_name</em>}\nhostname(config-if)#ip ospf message-digest-key {<em>ospf_md5_key-id</em>} md5\n{<em>ospf_md5_key</em>}",
+      "default_value": "Not set",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/interface/command/ir-i1.html#GUID-0D6BDFCD-3FBB-4D26-A274-C1221F8592DF",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_ospf/command/ospf-i1.html#GUID-939C79FF-8C09-4D5A-AEB5-DAF25038CA18"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    },
+    {
+      "benchmark": "Cisco IOS XE 17.x",
+      "benchmark_version": "v2.2.1",
+      "section": "3.3.3.1",
+      "title": "Set 'neighbor password'",
+      "automated": false,
+      "profile": "Level 1",
+      "description": "Enable message digest5 (MD5) authentication on a TCP connection between two BGP\npeers",
+      "rationale": "Enforcing routing authentication reduces the likelihood of routing poisoning and\nunauthorized routers from joining BGP routing.",
+      "impact": "Organizations should plan and implement enterprise security policies that require\nrigorous authentication methods for routing protocols. Using the 'neighbor password' for\nBGP enforces these policies by restricting the type of authentication between network\ndevices.",
+      "audit": "Verify you see the appropriate neighbor password is defined:\nhostname#sh run | sec router bgp",
+      "remediation": "Configure BGP neighbor authentication where feasible.\nhostname(config)#router bgp <<em>bgp_as-number</em>>\nhostname(config-router)#neighbor <<em>bgp_neighbor-ip</em> | <em>peer-group-\nname</em>> password <<em>password</em>>",
+      "default_value": "Not set",
+      "scored": null,
+      "designation": "Manual",
+      "designation_vocabulary": "automated_manual",
+      "references": [
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_bgp/command/bgp-n1.html#GUID-A8900842-ECF3-42D3-B188-921BE0EC060B",
+        "http://www.cisco.com/en/US/docs/ios-xml/ios/iproute_bgp/command/bgp-m1.html#GUID-159A8006-F0DF-4B82-BB71-C39D2C134205"
+      ],
+      "cis_controls": [
+        "4.2 Establish and Maintain a Secure Configuration",
+        "4.4 Implement and Manage a Firewall on Servers",
+        "4.5 Implement and Manage a Firewall on End-User",
+        "9.2 Ensure Only Approved Ports, Protocols and Services",
+        "1 Management Plane",
+        "1.1 Local Authentication, Authorization and Accounting (AAA) Rules",
+        "1.2 Access Rules",
+        "1.3 Banner Rules",
+        "1.4 Password Rules",
+        "1.5 SNMP Rules",
+        "2 Control Plane",
+        "2.1 Global Service Rules",
+        "2.2 Logging Rules",
+        "2.3 NTP Rules",
+        "2.4 Loopback Rules",
+        "3 Data Plane",
+        "3.1 Routing Rules",
+        "3.2 Border Router Filtering",
+        "3.3 Neighbor Authentication",
+        "17 - Assessment failing (ip"
+      ],
+      "source_document": "CIS_Cisco_IOS_XE_17.x_Benchmark_v2.2.1.pdf",
+      "source_version": "v2.2.1",
+      "retrieved_at": "2026-08-26T22:24:18.074611+00:00",
+      "source_url": "https://workbench.cisecurity.org/"
+    }
+  ]
+}

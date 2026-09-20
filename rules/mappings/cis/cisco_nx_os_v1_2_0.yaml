@@ -1,0 +1,593 @@
+# CIS Cisco NX-OS Benchmark v1.2.0 — canonical mappings
+#
+# NX-OS is the clearest demonstration that the canonical layer is doing real
+# work: it is a Cisco platform whose CLI looks like IOS and whose semantics are
+# not. `feature telnet` replaces `transport input telnet`, password policy lives
+# under `password` rather than `aaa`, and CoPP is a first-class feature instead of
+# a service-policy convention. None of that appears below, because the pattern
+# pack has already normalised it. Several rules here are byte-identical to their
+# cisco_ios counterparts apart from the catalog id — that is the intended result,
+# not duplication to be factored away: the two benchmarks are different documents
+# and an auditor tracing one must land on its own finding.
+#
+# Conventions are inherited from cisco_ios_15_v4_1_1.yaml. The two that bite most
+# often on NX-OS:
+#
+#   * Every timeout is `all_of[lte N, gt 0]`. NX-OS accepts `exec-timeout 0` for
+#     "never", so a bare `lte 600` passes the worst setting available.
+#   * Feature-conditional controls use `applies_to.requires_paths`. A leaf switch
+#     with no BGP process is *not applicable* to the BGP authentication control;
+#     writing that as a condition would credit it with a pass.
+
+rules:
+
+  # ══ 1.1 AAA ════════════════════════════════════════════════════════════
+
+  - id: cis-nxos-1.1.1.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.1.1.1}
+    severity_override: high
+    applies_to:
+      vendors: [cisco_nxos]
+      os_families: [nxos]
+      requires_paths: [aaa.server.group]
+    mapping_rationale: >
+      "If applicable" in the control title is the scope, and requires_paths is how
+      it is expressed: a switch with no AAA server group is not running centralised
+      authentication and the control does not bind. Where a group does exist, the
+      protocol must be TACACS+.
+    condition:
+      type: fact_check
+      path: aaa.server.protocol
+      operator: contains
+      expected: tacacs
+      quantifier: any
+      case_sensitive: false
+      on_missing: fail
+
+  - id: cis-nxos-1.1.1.2
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.1.1.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      A public key on a local account is what lets an administrator authenticate
+      without a reusable secret crossing the wire, and it is the fallback that
+      still works when the TACACS+ servers are unreachable.
+    condition: {type: presence, path: mgmt.local_user.ssh_key, must_be_present: true}
+
+  - id: cis-nxos-1.1.2.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.1.2.1}
+    severity_override: high
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      VTY authentication on NX-OS is global rather than per-line, so the evidence
+      is the default login method list rather than a per-line directive.
+    condition: {type: presence, path: aaa.authentication_login, must_be_present: true}
+
+  # ══ 1.2 Management access ══════════════════════════════════════════════
+
+  - id: cis-nxos-1.2.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.2.1}
+    severity_override: high
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      An access class on the VTY lines is what stops the management plane from
+      accepting a TCP connection from the data plane. Checked per line block so
+      the evidence names the unprotected line rather than the device.
+    condition:
+      type: for_each
+      block: line.vty.id
+      on_no_blocks: fail
+      condition: {type: presence, path: line.vty.access_class, must_be_present: true}
+
+  - id: cis-nxos-1.2.2
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.2.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Login blocking turns an online password guess from unlimited into rate
+      limited; without it a retry cap on one session is defeated by opening
+      another.
+    condition: {type: presence, path: aaa.login_block, must_be_present: true}
+
+  - id: cis-nxos-1.2.3
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.2.3}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      The benchmark's cap is three attempts per SSH connection.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.maxretries
+      operator: lte
+      expected: 3
+      on_missing: fail
+
+  - id: cis-nxos-1.2.4
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.2.4}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Ten minutes is the benchmark's ceiling; 0 means never time out and must
+      fail, which is why the `gt 0` half is present.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: line.console.exec_timeout, operator: lte, expected: 600, on_missing: fail}
+        - {type: fact_check, path: line.console.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-nxos-1.2.5
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.2.5}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Same ceiling as the console, applied to remote sessions, where an abandoned
+      session is more exposed because the attacker need not be in the building.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: line.vty.exec_timeout, operator: lte, expected: 600, on_missing: fail}
+        - {type: fact_check, path: line.vty.exec_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-nxos-1.2.6
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.2.6}
+    severity_override: low
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      A session limit bounds how much of the control plane a single source can
+      consume; it is denial-of-service hardening rather than access control.
+    condition: {type: presence, path: line.vty.session_limit, must_be_present: true}
+
+  - id: cis-nxos-1.2.7
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.2.7}
+    severity_override: high
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      `feature telnet` is off by default on NX-OS and the pack records that
+      default, so absence of the feature is a decided pass rather than missing
+      evidence — which is why this is `eq false` and not a presence check.
+    condition:
+      type: fact_check
+      path: mgmt.telnet.enabled
+      operator: eq
+      expected: false
+      on_missing: fail
+
+  # ══ 1.3 Banners ════════════════════════════════════════════════════════
+
+  - id: cis-nxos-1.3.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.3.1}
+    severity_override: low
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      The pre-authentication banner is the legal notice; its absence is what an
+      unauthorised-access prosecution founders on.
+    condition: {type: presence, path: mgmt.login_banner, must_be_present: true}
+
+  - id: cis-nxos-1.3.2
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.3.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      The post-authentication banner is the message-of-the-day, shown once the
+      session is established.
+    condition: {type: presence, path: mgmt.motd_banner, must_be_present: true}
+
+  # ══ 1.4 Local credentials ══════════════════════════════════════════════
+
+  - id: cis-nxos-1.4.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.4.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      NX-OS states complexity as a single `password strength-check` toggle, which
+      the pack records as a boolean at mgmt.password_policy.complexity.
+
+      Absence of the line is a pass, not a fail. Strength checking is on by
+      default and does not print when it is on — CIS says exactly that in this
+      control's own default_value ("Password strength checking is enabled by
+      default. When enabled, this setting does not appear in the
+      configuration"), so the pack supplies `true` as a default fact and only the
+      explicit `no password strength-check` line produces `false`. `on_missing`
+      below is therefore unreachable while that default exists; it is kept as the
+      safe answer if it is ever removed.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-nxos-1.4.3
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.4.3}
+    severity_override: low
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      A password lifetime is what bounds the window in which a leaked credential
+      stays useful. The control also asks for warning and grace time; those are
+      operator-chosen values that the canonical model does not separate, so only
+      the lifetime is claimed and the rest is left to the check text.
+    condition: {type: presence, path: mgmt.password_policy.lifetime, must_be_present: true}
+
+  - id: cis-nxos-1.4.4
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.4.4}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Eight characters is the benchmark's floor for the local password database.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.min_length
+      operator: gte
+      expected: 8
+      on_missing: fail
+
+  # ══ 1.5 Logging ════════════════════════════════════════════════════════
+
+  - id: cis-nxos-1.5.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.5.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      At least one off-box collector. On-box logs are the first thing an attacker
+      with administrative access clears, so local logging alone does not satisfy
+      the control.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 1}
+
+  - id: cis-nxos-1.5.2
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.5.2}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      `logging.userinfo` is where the pack records NX-OS's authentication-event
+      logging. Without it a successful password guess leaves no trace, which
+      defeats every detective control downstream.
+    condition:
+      type: fact_check
+      path: logging.userinfo
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-nxos-1.5.4
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.5.4}
+    severity_override: low
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Timestamps are what make two devices' logs correlatable; the benchmark asks
+      only that they be configured.
+    condition: {type: presence, path: logging.timestamps, must_be_present: true}
+
+  # ══ 1.6 Time ═══════════════════════════════════════════════════════════
+
+  - id: cis-nxos-1.6.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.6.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      The control names a number — at least two external servers — so this is a
+      count, not a presence check. One server is a single point of failure for
+      every timestamp the device will ever write.
+    condition: {type: count, path: time.ntp.server, operator: gte, expected: 2}
+
+  - id: cis-nxos-1.6.2
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.6.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      An explicit timezone makes a local timestamp interpretable off-box.
+    condition: {type: presence, path: time.timezone, must_be_present: true}
+
+  - id: cis-nxos-1.6.4
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.6.4}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Unauthenticated NTP lets an attacker on the path move the clock, which
+      backdates log entries and can bring an expired certificate back to life.
+    condition:
+      type: fact_check
+      path: time.ntp.authentication
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  # ══ 1.7 / 1.8 Platform ═════════════════════════════════════════════════
+
+  - id: cis-nxos-1.7.3
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.7.3}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      2048 bits is the benchmark's floor for the SSH host key. A shorter modulus
+      is the weakest link in an otherwise modern cipher suite.
+    condition:
+      type: fact_check
+      path: mgmt.ssh.hostkey_bits
+      operator: gte
+      expected: 2048
+      on_missing: fail
+
+  - id: cis-nxos-1.8.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.8.1}
+    severity_override: low
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      FIPS mode constrains the platform to validated algorithms. Low severity
+      because it is a procurement and accreditation requirement rather than a
+      directly exploitable weakness when absent.
+    condition:
+      type: fact_check
+      path: crypto.fips_mode
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  # ══ 1.9 SNMP ═══════════════════════════════════════════════════════════
+
+  - id: cis-nxos-1.9.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.9.1}
+    severity_override: high
+    applies_to:
+      vendors: [cisco_nxos]
+      os_families: [nxos]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      SNMPv3 configured *and* no v1/v2c community present. Checking only for v3
+      would pass a switch that also answers a cleartext community, which is the
+      common real-world state and the one the control exists to catch.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: snmp.version, operator: contains, expected: '3', quantifier: any, on_missing: fail}
+        - {type: presence, path: snmp.community, must_be_present: false}
+
+  - id: cis-nxos-1.9.2
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.9.2}
+    severity_override: low
+    applies_to:
+      vendors: [cisco_nxos]
+      os_families: [nxos]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      Traps are the push half of SNMP; polling alone means nobody hears about a
+      link failure until the next poll interval.
+    condition: {type: presence, path: snmp.trap_host, must_be_present: true}
+
+  - id: cis-nxos-1.9.3
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 1.9.3}
+    severity_override: low
+    applies_to:
+      vendors: [cisco_nxos]
+      os_families: [nxos]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      A fixed source interface keeps the trap's source address stable across
+      link failures, which is what lets the collector's ACL and its device
+      correlation both keep working.
+    condition: {type: presence, path: snmp.source_interface, must_be_present: true}
+
+  # ══ 2.1 Control plane ══════════════════════════════════════════════════
+
+  - id: cis-nxos-2.1.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 2.1.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      CoPP is what keeps a control-plane flood from starving the supervisor.
+      NX-OS ships a default CoPP policy, and the pack records either the
+      feature-level policy or the applied service-policy, so either satisfies the
+      control.
+    condition:
+      type: any_of
+      conditions:
+        - {type: presence, path: control_plane.copp, must_be_present: true}
+        - {type: presence, path: control_plane.policing, must_be_present: true}
+        - {type: presence, path: control_plane.service_policy, must_be_present: true}
+
+  # ══ 3.1 Routing protocol authentication ════════════════════════════════
+
+  - id: cis-nxos-3.1.2.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 3.1.2.1}
+    severity_override: low
+    applies_to:
+      vendors: [cisco_nxos]
+      os_families: [nxos]
+      requires_paths: [routing.bgp.asn]
+    mapping_rationale: >
+      Neighbour-change logging is the record that a peering session flapped,
+      which is both an operational signal and the first evidence of a hijack
+      attempt. Scoped to devices actually running BGP.
+    condition:
+      type: fact_check
+      path: routing.bgp.log_neighbor_changes
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-nxos-3.1.2.2
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 3.1.2.2}
+    severity_override: medium
+    applies_to:
+      vendors: [cisco_nxos]
+      os_families: [nxos]
+      requires_paths: [routing.bgp.asn]
+    mapping_rationale: >
+      A prefix limit is what stops a misconfigured or hostile peer from
+      exhausting the RIB. "If possible" in the title is scope, not optionality.
+    condition: {type: presence, path: routing.bgp.max_prefix, must_be_present: true}
+
+  - id: cis-nxos-3.1.2.3
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 3.1.2.3}
+    severity_override: high
+    applies_to:
+      vendors: [cisco_nxos]
+      os_families: [nxos]
+      requires_paths: [routing.bgp.asn]
+    mapping_rationale: >
+      Without peer authentication an on-path attacker can inject routes into the
+      table, which is a full traffic redirect rather than a hardening gap.
+    condition: {type: presence, path: routing.bgp.neighbor_auth, must_be_present: true}
+
+  - id: cis-nxos-3.1.3.2
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 3.1.3.2}
+    severity_override: high
+    applies_to:
+      vendors: [cisco_nxos]
+      os_families: [nxos]
+      requires_paths: [routing.ospf.process]
+    mapping_rationale: >
+      Same reasoning as BGP: an unauthenticated OSPF adjacency accepts LSAs from
+      anything on the segment. Scoped to devices running an OSPF process.
+    condition:
+      type: any_of
+      conditions:
+        - {type: presence, path: routing.ospf.message_digest, must_be_present: true}
+        - {type: presence, path: routing.ospf.auth, must_be_present: true}
+
+  # ══ 3.2 Layer-3 hardening ══════════════════════════════════════════════
+  #
+  # All three of these are per-interface Layer-3 controls, and the first draft got
+  # them wrong twice in ways worth recording.
+  #
+  # First, `skip_block_regex` is matched against the block's **header line**, not
+  # against the bare interface name — `^interface\s+(loopback|null)` is the idiom
+  # cisco_ios_15_v4_1_1.yaml uses. Writing `^(loopback|null)` matched nothing, so
+  # the exemption silently did not apply and the rule looked stricter than it read.
+  #
+  # Second, a data-centre switch is mostly access ports — Ethernet1/10 upward here —
+  # that carry no IP address at all. An L2 switchport cannot issue an ICMP redirect,
+  # answer an ARP for someone else, or forward a directed broadcast, so
+  # `no ip redirects` is not merely absent on those ports, it is meaningless.
+  # Flagging them produced findings whose remediation would have been to type a
+  # command with no effect, which is how a compliance report loses its reader. That
+  # scope is therefore expressed *inside* the block, where the facts are: an
+  # interface with no `interface.ip_address` is not a Layer-3 interface and the
+  # control does not bind to it. Unlike a name regex that stays correct when someone
+  # renames a port or routes a VLAN interface.
+  #
+  # Only loopback and null are exempted by name, matching the IOS pack. An
+  # out-of-band management interface is deliberately *not* exempted: it is a routed
+  # interface that can issue redirects and answer proxy ARP, and the benchmark
+  # grants it no exception. Inventing one here would be the tool quietly deciding a
+  # control does not apply, which is the failure mode this whole file exists to
+  # avoid.
+
+  - id: cis-nxos-3.2.2
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 3.2.2}
+    severity_override: low
+    applies_to:
+      vendors: [cisco_nxos]
+      os_families: [nxos]
+      requires_paths: [interface.name]
+    mapping_rationale: >
+      ICMP redirects let a host on the segment be steered to a different gateway.
+      Evaluated per interface so remediation is per interface, and scoped to
+      interfaces that actually route — see the section note above.
+    condition:
+      type: for_each
+      block: interface.name
+      skip_block_regex: '(?i)^interface\s+(loopback|null)'
+      on_no_blocks: notapplicable
+      condition:
+        type: any_of
+        conditions:
+          - {type: presence, path: interface.ip_address, must_be_present: false}
+          - {type: fact_check, path: interface.redirects, operator: eq, expected: false, on_missing: fail}
+
+  - id: cis-nxos-3.2.3
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 3.2.3}
+    severity_override: low
+    applies_to:
+      vendors: [cisco_nxos]
+      os_families: [nxos]
+      requires_paths: [interface.name]
+    mapping_rationale: >
+      Proxy ARP lets the switch answer for addresses it does not own, which
+      breaks the segment boundary the subnet mask is supposed to enforce.
+    condition:
+      type: for_each
+      block: interface.name
+      skip_block_regex: '(?i)^interface\s+(loopback|null)'
+      on_no_blocks: notapplicable
+      condition:
+        type: any_of
+        conditions:
+          - {type: presence, path: interface.ip_address, must_be_present: false}
+          - {type: fact_check, path: interface.proxy_arp, operator: eq, expected: false, on_missing: fail}
+
+  - id: cis-nxos-3.2.4
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 3.2.4}
+    severity_override: medium
+    applies_to:
+      vendors: [cisco_nxos]
+      os_families: [nxos]
+      requires_paths: [interface.name]
+    mapping_rationale: >
+      A directed broadcast turns the subnet into a packet amplifier — the smurf
+      primitive. Medium rather than low because the device becomes a weapon
+      against third parties, not merely a weaker target.
+    condition:
+      type: for_each
+      block: interface.name
+      skip_block_regex: '(?i)^interface\s+(loopback|null)'
+      on_no_blocks: notapplicable
+      condition:
+        type: any_of
+        conditions:
+          - {type: presence, path: interface.ip_address, must_be_present: false}
+          - {type: fact_check, path: interface.directed_broadcast, operator: eq, expected: false, on_missing: fail}
+
+  - id: cis-nxos-3.2.5
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 3.2.5}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Source routing lets the sender pick the path, which is how an ACL applied
+      on one interface gets bypassed by entering through another.
+    condition:
+      type: fact_check
+      path: routing.source_routing
+      operator: eq
+      expected: false
+      on_missing: fail
+
+  # ══ 3.3 / 3.4 Layer-2 hardening ════════════════════════════════════════
+
+  - id: cis-nxos-3.3.1
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 3.3.1}
+    severity_override: medium
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      DHCP snooping is the feature that makes a trust boundary exist at all; the
+      per-port `trust` setting the control describes is meaningless without it.
+    condition:
+      type: fact_check
+      path: service.dhcp_snooping
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-nxos-3.3.2
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 3.3.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      Storm control bounds a broadcast loop's blast radius. Presence on any
+      interface satisfies the control, which asks for it on strategic ports
+      rather than universally.
+    condition: {type: presence, path: interface.storm_control, must_be_present: true}
+
+  - id: cis-nxos-3.4.2
+    catalog: {catalog_id: cis_cisco_nx_os_v1_2_0, control_id: 3.4.2}
+    severity_override: low
+    applies_to: {vendors: [cisco_nxos], os_families: [nxos]}
+    mapping_rationale: >
+      CDP advertises platform, version and management address to anything on the
+      segment, which is free reconnaissance. The benchmark's position is that it
+      should be off where it is not needed, so the compliant state is disabled.
+    condition:
+      type: fact_check
+      path: service.cdp
+      operator: eq
+      expected: false
+      on_missing: fail

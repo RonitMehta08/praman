@@ -1,0 +1,350 @@
+# CIS Palo Alto Firewall 11 Benchmark v1.2.0 — canonical mappings
+#
+# 79 controls, and the vendor where the honest answer is that most of them cannot be
+# decided from a configuration file. That is worth stating plainly rather than
+# working around: sections 4 through 6 are about *content inspection* — antivirus
+# decoder actions, WildFire submission limits, URL-category verdicts, threat
+# signature severities — and a `set`-format export names the profiles without
+# carrying the dynamic update state, licence entitlement, or cloud-analysis
+# posture those controls turn on. Section 2 is User-ID, which is largely about the
+# service account's rights *in Active Directory*, not on the firewall. None of
+# those are guessed at below; they render `notchecked`, which is the verdict that
+# tells an auditor "bring evidence" rather than "you are fine".
+#
+# What a config *does* decide is the whole of section 1 — the device's own
+# management posture — plus HA and default-policy logging. Those are mapped, and
+# three of them fail on the shipped fixture. All three are real:
+#
+#   * **1.3.9** — reuse limit 5, benchmark asks 24.
+#   * **1.4.1** — idle timeout 15 minutes, benchmark ceiling 10.
+#   * **7.4** — one built-in default policy with logging off.
+#
+# PAN-OS notes:
+#
+#   * The pack flattens `set deviceconfig setting management idle-timeout 15` to
+#     `mgmt.http.idle_timeout = 900`. **Seconds**, normalised at parse time, so 600
+#     below is the benchmark's ten minutes.
+#   * `snmp.version` arrives as an int, so it is matched as a regex to stay
+#     indifferent to whether a future pattern files it as `3` or `v3`.
+#
+# Deliberately NOT mapped, with reasons:
+#
+#   * **1.3.3-1.3.6** (minimum uppercase/lowercase/numeric/special). PAN-OS files
+#     complexity as one boolean; the per-class minimums are separate settings the
+#     pack does not yet read. A single `true` cannot answer four distinct controls,
+#     and stretching it to would report four passes off one fact.
+#   * **1.3.10** (password profiles should not exist).
+#     `mgmt.password_policy.name` may be filed from either the global complexity
+#     stanza or a per-user profile, and the two mean opposite things for this
+#     control. Asserting on it would risk failing a correctly configured device.
+#   * **3.2/3.3** (HA link and path monitoring, passive link state). No canonical
+#     fact carries monitoring configuration.
+#   * **6.15-6.18** (zone protection profiles). `control_plane.protection` records
+#     that a profile is attached but not its SYN-cookie action or flood thresholds,
+#     which is exactly what these controls ask about.
+
+rules:
+
+  # ══ 1.1 Logging and notification ═══════════════════════════════════════
+
+  - id: cis-panos-1.1.1.1
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: 1.1.1.1}
+    severity_override: medium
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      A firewall is usually the only device that saw an intrusion's traffic, and
+      its local log rotates. An off-box collector is what makes the record survive
+      both rotation and an attacker with administrative access.
+    condition: {type: count, path: logging.remote_syslog, operator: gte, expected: 1}
+
+  - id: cis-panos-1.1.1.2
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: 1.1.1.2}
+    severity_override: medium
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      Traps carry device-health and threat events to the NMS. v3 rather than v2c
+      because a trap community travels in cleartext and is replayable. Both halves
+      are required: a v3 user with no trap destination sends nothing, and a trap
+      destination with a v2c community sends it insecurely.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: snmp.trap_host, must_be_present: true}
+        - {type: fact_check, path: snmp.version, operator: regex_match, expected: "\\A(3|v3)", quantifier: all, on_missing: fail}
+
+  - id: cis-panos-1.1.2
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: '1.1.2'}
+    severity_override: low
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      The pre-authentication legal notice. Low severity technically, but it is the
+      control an unauthorised-access prosecution actually turns on.
+    condition: {type: presence, path: mgmt.login_banner, must_be_present: true}
+
+  # ══ 1.2 Management interface access ════════════════════════════════════
+
+  - id: cis-panos-1.2.1
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: '1.2.1'}
+    severity_override: high
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      Permitted-IP restriction on the management interface. Without it the web UI
+      and SSH are reachable from every network the firewall touches, including the
+      untrusted one — which is how a perimeter device becomes the entry point
+      rather than the barrier.
+    condition:
+      type: any_of
+      conditions:
+        - {type: presence, path: mgmt.http.acl, must_be_present: true}
+        - {type: presence, path: mgmt.ssh.acl, must_be_present: true}
+
+  - id: cis-panos-1.2.2
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: '1.2.2'}
+    severity_override: high
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      1.2.1 asks about the dedicated management interface; this asks about the
+      *interface management profiles* attached to data-plane interfaces, which is
+      the easier thing to forget and the more exposed place to forget it. Stated
+      as `all_of` over the three services the control names, because a profile
+      that restricts SSH and leaves SNMP open satisfies none of the intent.
+    condition:
+      type: all_of
+      conditions:
+        - {type: presence, path: mgmt.http.acl, must_be_present: true}
+        - {type: presence, path: mgmt.ssh.acl, must_be_present: true}
+        - {type: presence, path: snmp.acl, must_be_present: true}
+
+  - id: cis-panos-1.2.3
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: '1.2.3'}
+    severity_override: high
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      HTTP and Telnet to the management interface carry the administrative session
+      in cleartext. PAN-OS states each explicitly, so both are decided facts rather
+      than absences.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.http.server_enabled, operator: eq, expected: false, on_missing: fail}
+        - {type: fact_check, path: mgmt.telnet.enabled, operator: eq, expected: false, on_missing: fail}
+
+  - id: cis-panos-1.2.4
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: '1.2.4'}
+    severity_override: high
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      The same prohibition as 1.2.3, applied to the management profiles bound to
+      data-plane interfaces. Read from the service-level facts rather than the
+      management-interface ones so the two controls are answered by different
+      evidence, which is what makes both findings worth reading.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: service.http, operator: eq, expected: false, on_missing: fail}
+        - {type: fact_check, path: service.telnet, operator: eq, expected: false, on_missing: fail}
+
+  - id: cis-panos-1.2.5
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: '1.2.5'}
+    severity_override: medium
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      The factory certificate is self-signed and identical across the product line,
+      so HTTPS with it trains administrators to click through the warning — which
+      removes the only signal that would reveal an interception. A named local
+      certificate is what the control asks for; whether the CA is trusted by the
+      browser is outside the config.
+    condition: {type: presence, path: crypto.pki.trustpoint, must_be_present: true}
+
+  # ══ 1.3 Password policy ════════════════════════════════════════════════
+
+  - id: cis-panos-1.3.1
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: 1.3.1}
+    severity_override: medium
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      PAN-OS gates the per-class minimums behind a single complexity switch, so
+      this control is the prerequisite for 1.3.3 through 1.3.6 rather than a
+      duplicate of them.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.complexity
+      operator: eq
+      expected: true
+      on_missing: fail
+
+  - id: cis-panos-1.3.2
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: 1.3.2}
+    severity_override: medium
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      Twelve characters, which is longer than most vendors' benchmarks ask and is
+      honoured exactly rather than normalised to a house standard.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.min_length
+      operator: gte
+      expected: 12
+      on_missing: fail
+
+  - id: cis-panos-1.3.7
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: 1.3.7}
+    severity_override: low
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      Ninety days between forced changes. `gt 0` is load-bearing: PAN-OS reads 0 as
+      "never expire", so a bare `lte 90` would pass the least secure setting the
+      platform offers.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.password_policy.lifetime, operator: lte, expected: 90, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: mgmt.password_policy.lifetime, operator: gt, expected: 0, quantifier: all, on_missing: fail}
+
+  - id: cis-panos-1.3.9
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: 1.3.9}
+    severity_override: low
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      Twenty-four remembered passwords, which is a deliberately high bar: with a
+      90-day rotation it means an administrator cannot return to a previous
+      password for six years. This benchmark asks for 24 and the number is
+      honoured as written — a device remembering five is a genuine deviation even
+      though five is a defensible operational choice, and softening the threshold
+      here would be the tool quietly deciding the benchmark is wrong.
+    condition:
+      type: fact_check
+      path: mgmt.password_policy.history
+      operator: gte
+      expected: 24
+      on_missing: fail
+
+  # ══ 1.4 Session and lockout ════════════════════════════════════════════
+
+  - id: cis-panos-1.4.1
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: 1.4.1}
+    severity_override: medium
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      Ten minutes of idle before the administrative session is dropped, so an
+      unattended browser tab is not a standing session on the device that controls
+      the perimeter. Expressed in seconds because that is the unit this canonical
+      path carries on every platform — the pack converts PAN-OS's minutes at parse
+      time. `gt 0` again excludes the "never" setting.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: mgmt.http.idle_timeout, operator: lte, expected: 600, on_missing: fail}
+        - {type: fact_check, path: mgmt.http.idle_timeout, operator: gt, expected: 0, on_missing: fail}
+
+  - id: cis-panos-1.4.2
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: 1.4.2}
+    severity_override: medium
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      Both halves of a lockout are required and neither works alone: a failure
+      count with no lockout time locks nobody out, and a lockout time with no
+      count never triggers. The benchmark asks for a "non-zero
+      organization-defined value" on both halves rather than a fixed floor, so
+      both are checked for being present and greater than zero and neither is
+      given a threshold the benchmark does not state.
+
+      The lockout duration was checked for presence only until `aaa.login_block`
+      was normalised to seconds across every pack; `gt 0` is unit-independent
+      anyway, but the fact it reads is now comparable with the other vendors'.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: aaa.authentication_attempts, operator: lte, expected: 5, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: aaa.authentication_attempts, operator: gt, expected: 0, quantifier: all, on_missing: fail}
+        - {type: fact_check, path: aaa.login_block, operator: gt, expected: 0, quantifier: all, on_missing: fail}
+
+  # ══ 1.5 SNMP ═══════════════════════════════════════════════════════════
+
+  - id: cis-panos-1.5.1
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: 1.5.1}
+    severity_override: medium
+    applies_to:
+      vendors: [paloalto_panos]
+      os_families: [panos]
+      requires_paths: [snmp.enabled]
+    mapping_rationale: >
+      v3 for polling as well as for traps. Quantifier `all`, so a device offering
+      both v3 and a v2c community fails — a client can always choose the weaker
+      one, which makes "we also support v3" no defence. Scoped to devices actually
+      running the agent: SNMP switched off is not applicable rather than compliant.
+    condition:
+      type: fact_check
+      path: snmp.version
+      operator: regex_match
+      expected: "\\A(3|v3)"
+      quantifier: all
+      on_missing: fail
+
+  # ══ 1.6 Time and certificates ══════════════════════════════════════════
+
+  - id: cis-panos-1.6.2
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: 1.6.2}
+    severity_override: low
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      Redundant time sources. On a firewall the clock is not cosmetic: certificate
+      validity, log correlation with the SIEM, and scheduled content updates all
+      depend on it, and a single NTP server is a single point of failure for all
+      three. The control names a number, so this is a count.
+    condition: {type: count, path: time.ntp.server, operator: gte, expected: 2}
+
+  - id: cis-panos-1.6.3
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: 1.6.3}
+    severity_override: medium
+    applies_to:
+      vendors: [paloalto_panos]
+      os_families: [panos]
+      requires_paths: [vpn.tunnel.encryption]
+    mapping_rationale: >
+      A remote-access VPN authenticated by a named certificate profile rather than
+      by a shared secret. Scoped to devices that actually terminate a tunnel, so a
+      firewall with no VPN is not applicable. Whether the certificate has expired
+      is a runtime property no configuration file states.
+    condition: {type: presence, path: vpn.tunnel.auth, must_be_present: true}
+
+  # ══ 3 High availability ════════════════════════════════════════════════
+
+  - id: cis-panos-3.1
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: '3.1'}
+    severity_override: medium
+    applies_to: {vendors: [paloalto_panos], os_families: [panos]}
+    mapping_rationale: >
+      The control asks for a peer that is *fully synchronised*, not merely present,
+      so both facts are required. An HA pair whose configurations have diverged
+      fails over into a different security posture than the one that was audited —
+      which is worse than having no peer, because it is unexpected.
+    condition:
+      type: all_of
+      conditions:
+        - {type: fact_check, path: ha.redundancy, operator: eq, expected: true, on_missing: fail}
+        - {type: fact_check, path: ha.sync, operator: eq, expected: true, on_missing: fail}
+
+  # ══ 7 Security policy ══════════════════════════════════════════════════
+
+  - id: cis-panos-7.4
+    catalog: {catalog_id: cis_palo_alto_firewall_11_v1_2_0, control_id: '7.4'}
+    severity_override: medium
+    applies_to:
+      vendors: [paloalto_panos]
+      os_families: [panos]
+      requires_paths: [firewall.policy.name]
+    mapping_rationale: >
+      Every security policy must log, including the built-in intrazone and
+      interzone defaults that PAN-OS ships with logging off. Those defaults are
+      where traffic nobody wrote a rule for lands, which makes them the most
+      interesting logs on the device and the ones most often missing. Quantifier
+      `all`: one silent policy is a blind spot regardless of how many others log,
+      and the finding names the offending rule.
+    condition:
+      type: fact_check
+      path: firewall.policy.log
+      operator: eq
+      expected: true
+      quantifier: all
+      on_missing: fail

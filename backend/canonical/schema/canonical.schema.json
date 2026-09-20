@@ -1,0 +1,555 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PRAMAN Canonical Model",
+  "description": "The vendor-neutral Security Baseline Model.",
+  "definitions": {
+    "Device": {
+      "$defs": {
+        "OsFamily": {
+          "description": "os_family enum (SPINE).",
+          "enum": [
+            "ios",
+            "iosxe",
+            "nxos",
+            "iosxr",
+            "asa",
+            "junos",
+            "panos",
+            "fortios",
+            "eos"
+          ],
+          "title": "OsFamily",
+          "type": "string"
+        },
+        "Vendor": {
+          "description": "Canonical vendor enum = netmiko device_type vocabulary (SPINE).\n\nExtend by adding a parser under backend/ingest/ — NEVER by editing a rule.",
+          "enum": [
+            "cisco_ios",
+            "cisco_xe",
+            "cisco_nxos",
+            "cisco_xr",
+            "cisco_asa",
+            "juniper_junos",
+            "paloalto_panos",
+            "fortinet",
+            "arista_eos"
+          ],
+          "title": "Vendor",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "One device record, produced by a vendor parser from config + show-version.\n\nserials and hardware are list[str] because ntc-templates returns lists\n(stacked chassis / virtual chassis expose multiple serial numbers).\nKeep serials=[] / hardware=[] when nothing was parsed — never None, never \"\".",
+      "properties": {
+        "device_id": {
+          "title": "Device Id",
+          "type": "string"
+        },
+        "vendor": {
+          "$ref": "#/$defs/Vendor"
+        },
+        "os_family": {
+          "$ref": "#/$defs/OsFamily"
+        },
+        "hostname": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hostname"
+        },
+        "serials": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Serials",
+          "type": "array"
+        },
+        "hardware": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Hardware",
+          "type": "array"
+        },
+        "os_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Os Version"
+        },
+        "source_file": {
+          "title": "Source File",
+          "type": "string"
+        },
+        "config_hash": {
+          "title": "Config Hash",
+          "type": "string"
+        },
+        "ingested_at": {
+          "title": "Ingested At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "vendor",
+        "os_family",
+        "serials",
+        "hardware",
+        "source_file",
+        "config_hash",
+        "ingested_at"
+      ],
+      "title": "Device",
+      "type": "object"
+    },
+    "CanonicalFact": {
+      "additionalProperties": false,
+      "description": "One per evaluated leaf. Carries provenance ALWAYS (SPINE).\n\nThe mandatory six-field provenance:\n- source_file: which uploaded config the fact came from\n- line_start: first line number of the evidence span (1-indexed)\n- line_end: last line number of the evidence span (>= line_start)\n- raw_text: verbatim offending/relevant config line(s), never paraphrased\n- parser_id: which parser produced it, pinned (e.g. \"netutils.cisco_ios@1.18.0\")\n- confidence: 1.0 for deterministic parse; <1.0 ONLY when AI-classified",
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value"
+        },
+        "present": {
+          "title": "Present",
+          "type": "boolean"
+        },
+        "source_file": {
+          "title": "Source File",
+          "type": "string"
+        },
+        "line_start": {
+          "title": "Line Start",
+          "type": "integer"
+        },
+        "line_end": {
+          "title": "Line End",
+          "type": "integer"
+        },
+        "raw_text": {
+          "title": "Raw Text",
+          "type": "string"
+        },
+        "parser_id": {
+          "title": "Parser Id",
+          "type": "string"
+        },
+        "confidence": {
+          "title": "Confidence",
+          "type": "number"
+        }
+      },
+      "required": [
+        "path",
+        "value",
+        "present",
+        "source_file",
+        "line_start",
+        "line_end",
+        "raw_text",
+        "parser_id",
+        "confidence"
+      ],
+      "title": "CanonicalFact",
+      "type": "object"
+    },
+    "Finding": {
+      "$defs": {
+        "CanonicalFact": {
+          "additionalProperties": false,
+          "description": "One per evaluated leaf. Carries provenance ALWAYS (SPINE).\n\nThe mandatory six-field provenance:\n- source_file: which uploaded config the fact came from\n- line_start: first line number of the evidence span (1-indexed)\n- line_end: last line number of the evidence span (>= line_start)\n- raw_text: verbatim offending/relevant config line(s), never paraphrased\n- parser_id: which parser produced it, pinned (e.g. \"netutils.cisco_ios@1.18.0\")\n- confidence: 1.0 for deterministic parse; <1.0 ONLY when AI-classified",
+          "properties": {
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "value": {
+              "title": "Value"
+            },
+            "present": {
+              "title": "Present",
+              "type": "boolean"
+            },
+            "source_file": {
+              "title": "Source File",
+              "type": "string"
+            },
+            "line_start": {
+              "title": "Line Start",
+              "type": "integer"
+            },
+            "line_end": {
+              "title": "Line End",
+              "type": "integer"
+            },
+            "raw_text": {
+              "title": "Raw Text",
+              "type": "string"
+            },
+            "parser_id": {
+              "title": "Parser Id",
+              "type": "string"
+            },
+            "confidence": {
+              "title": "Confidence",
+              "type": "number"
+            }
+          },
+          "required": [
+            "path",
+            "value",
+            "present",
+            "source_file",
+            "line_start",
+            "line_end",
+            "raw_text",
+            "parser_id",
+            "confidence"
+          ],
+          "title": "CanonicalFact",
+          "type": "object"
+        },
+        "Result": {
+          "description": "XCCDF 9-value result enum — the ONLY allowed Finding.result values (SPINE).\n\npass/fail come only from the deterministic rules engine.\nunknown feeds the training GUI when a line was unparsed.\nNever invent a boolean; never invent a 10th value.",
+          "enum": [
+            "pass",
+            "fail",
+            "error",
+            "unknown",
+            "notapplicable",
+            "notchecked",
+            "notselected",
+            "informational",
+            "fixed"
+          ],
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "One per (control × device).\n\nresult is set ONLY by the deterministic rules engine.\nrationale may be LLM-drafted prose but NEVER changes result.\nremediation_ref is an id into backend/remediation/ — never free-form CLI.",
+      "properties": {
+        "control_id": {
+          "title": "Control Id",
+          "type": "string"
+        },
+        "framework": {
+          "title": "Framework",
+          "type": "string"
+        },
+        "benchmark": {
+          "title": "Benchmark",
+          "type": "string"
+        },
+        "benchmark_version": {
+          "title": "Benchmark Version",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/Result"
+        },
+        "severity": {
+          "title": "Severity",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/CanonicalFact"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "rationale": {
+          "title": "Rationale",
+          "type": "string"
+        },
+        "remediation_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remediation Ref"
+        },
+        "references": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "References",
+          "type": "object"
+        }
+      },
+      "required": [
+        "control_id",
+        "framework",
+        "benchmark",
+        "benchmark_version",
+        "title",
+        "result",
+        "severity",
+        "evidence",
+        "rationale"
+      ],
+      "title": "Finding",
+      "type": "object"
+    },
+    "AuditRecord": {
+      "$defs": {
+        "CanonicalFact": {
+          "additionalProperties": false,
+          "description": "One per evaluated leaf. Carries provenance ALWAYS (SPINE).\n\nThe mandatory six-field provenance:\n- source_file: which uploaded config the fact came from\n- line_start: first line number of the evidence span (1-indexed)\n- line_end: last line number of the evidence span (>= line_start)\n- raw_text: verbatim offending/relevant config line(s), never paraphrased\n- parser_id: which parser produced it, pinned (e.g. \"netutils.cisco_ios@1.18.0\")\n- confidence: 1.0 for deterministic parse; <1.0 ONLY when AI-classified",
+          "properties": {
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "value": {
+              "title": "Value"
+            },
+            "present": {
+              "title": "Present",
+              "type": "boolean"
+            },
+            "source_file": {
+              "title": "Source File",
+              "type": "string"
+            },
+            "line_start": {
+              "title": "Line Start",
+              "type": "integer"
+            },
+            "line_end": {
+              "title": "Line End",
+              "type": "integer"
+            },
+            "raw_text": {
+              "title": "Raw Text",
+              "type": "string"
+            },
+            "parser_id": {
+              "title": "Parser Id",
+              "type": "string"
+            },
+            "confidence": {
+              "title": "Confidence",
+              "type": "number"
+            }
+          },
+          "required": [
+            "path",
+            "value",
+            "present",
+            "source_file",
+            "line_start",
+            "line_end",
+            "raw_text",
+            "parser_id",
+            "confidence"
+          ],
+          "title": "CanonicalFact",
+          "type": "object"
+        },
+        "Finding": {
+          "additionalProperties": false,
+          "description": "One per (control × device).\n\nresult is set ONLY by the deterministic rules engine.\nrationale may be LLM-drafted prose but NEVER changes result.\nremediation_ref is an id into backend/remediation/ — never free-form CLI.",
+          "properties": {
+            "control_id": {
+              "title": "Control Id",
+              "type": "string"
+            },
+            "framework": {
+              "title": "Framework",
+              "type": "string"
+            },
+            "benchmark": {
+              "title": "Benchmark",
+              "type": "string"
+            },
+            "benchmark_version": {
+              "title": "Benchmark Version",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "result": {
+              "$ref": "#/$defs/Result"
+            },
+            "severity": {
+              "title": "Severity",
+              "type": "string"
+            },
+            "evidence": {
+              "items": {
+                "$ref": "#/$defs/CanonicalFact"
+              },
+              "title": "Evidence",
+              "type": "array"
+            },
+            "rationale": {
+              "title": "Rationale",
+              "type": "string"
+            },
+            "remediation_ref": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Remediation Ref"
+            },
+            "references": {
+              "additionalProperties": true,
+              "default": {},
+              "title": "References",
+              "type": "object"
+            }
+          },
+          "required": [
+            "control_id",
+            "framework",
+            "benchmark",
+            "benchmark_version",
+            "title",
+            "result",
+            "severity",
+            "evidence",
+            "rationale"
+          ],
+          "title": "Finding",
+          "type": "object"
+        },
+        "Result": {
+          "description": "XCCDF 9-value result enum — the ONLY allowed Finding.result values (SPINE).\n\npass/fail come only from the deterministic rules engine.\nunknown feeds the training GUI when a line was unparsed.\nNever invent a boolean; never invent a 10th value.",
+          "enum": [
+            "pass",
+            "fail",
+            "error",
+            "unknown",
+            "notapplicable",
+            "notchecked",
+            "notselected",
+            "informational",
+            "fixed"
+          ],
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Immutable, one per committed audit.\n\nThe model is frozen=True — no mutation after construction.\nFields seq, prev_hash, record_hash, merkle_root, signature form the\ntamper-evident hash chain.\n\n``actor`` is inside the record rather than in a side table, and that\nplacement is the entire point. It is listed in\n``backend.ledger.chain.RECORD_HASH_FIELDS``, so it is covered by\n``record_hash`` and therefore by the Ed25519 signature over it: rewriting who\nran an audit breaks the same chain that rewriting a verdict breaks, and the\nstandalone verifier reports it. An ``audit_actors`` table alongside the ledger\nwould have been editable without breaking anything, which is another way of\nsaying it would not have been evidence. ``docs/SECURITY.md`` §1 puts it as a\nledger that proves what was decided but not who decided it being only half an\naudit trail.",
+      "properties": {
+        "audit_id": {
+          "title": "Audit Id",
+          "type": "string"
+        },
+        "device_id": {
+          "title": "Device Id",
+          "type": "string"
+        },
+        "config_hash": {
+          "title": "Config Hash",
+          "type": "string"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "actor": {
+          "title": "Actor",
+          "type": "string"
+        },
+        "findings": {
+          "items": {
+            "$ref": "#/$defs/Finding"
+          },
+          "title": "Findings",
+          "type": "array"
+        },
+        "summary": {
+          "additionalProperties": true,
+          "title": "Summary",
+          "type": "object"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "prev_hash": {
+          "title": "Prev Hash",
+          "type": "string"
+        },
+        "record_hash": {
+          "title": "Record Hash",
+          "type": "string"
+        },
+        "merkle_root": {
+          "title": "Merkle Root",
+          "type": "string"
+        },
+        "signature": {
+          "title": "Signature",
+          "type": "string"
+        }
+      },
+      "required": [
+        "audit_id",
+        "device_id",
+        "config_hash",
+        "created_at",
+        "actor",
+        "findings",
+        "summary",
+        "seq",
+        "prev_hash",
+        "record_hash",
+        "merkle_root",
+        "signature"
+      ],
+      "title": "AuditRecord",
+      "type": "object"
+    },
+    "Result": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail",
+        "error",
+        "unknown",
+        "notapplicable",
+        "notchecked",
+        "notselected",
+        "informational",
+        "fixed"
+      ]
+    }
+  }
+}

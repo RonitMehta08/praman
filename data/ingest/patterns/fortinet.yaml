@@ -1,0 +1,1884 @@
+# Fortinet FortiOS pattern pack.
+#
+# FortiOS is the most structurally distinct platform PRAMAN parses, and the reason
+# `BlockMode.DELIMITED` exists. Nothing about its syntax resembles a Cisco or
+# Junos config:
+#
+# * A section opens with `config <path>` and closes with a literal `end`.
+# * A table row opens with `edit <key>` and closes with a literal `next`.
+# * Every leaf statement is `set <name> <value>`, and an explicit revert is
+#   `unset <name>`.
+# * Sections nest, so an `end` can close a table inside a table.
+#
+# `mode: delimited` with a depth-counted `end_regex` handles all four. Depth
+# counting is not optional here: `config system interface` contains one `edit`
+# block per port, each with its own `next`, and a naive first-match-wins scan
+# would close the outer section at the first port's `next` and attribute every
+# remaining interface to nothing.
+#
+# The compliance surface is the CIS Fortinet FortiGate 7.4 benchmark and the DISA
+# FortiGate ALG / NDM STIGs, both of which PRAMAN already ships catalogs for. This
+# file is what makes those catalogs evaluable rather than merely citable.
+#
+# §26 case 6 of the master prompt is the reason this pack exists at all: FortiOS
+# is the only corpus source for `set allowaccess ping https ssh` on an interface,
+# and NIST AC-17(2) reads it from `mgmt.access.protocols` without one line of
+# FortiOS-specific rule logic.
+
+vendor: fortinet
+os_family: fortios
+parser_id: fortinet_patterns@1
+description: >
+  Fortinet FortiOS 6.x/7.x configuration as produced by `show full-configuration`
+  or a config backup. Covers the CIS Fortinet FortiGate 7.4.x benchmark surface
+  and the DISA FortiGate NDM / ALG STIG check surfaces.
+
+# FortiOS has no comment syntax. `#` appears only in the metadata header a backup
+# is prefixed with — `#config-version=`, `#buildno=`, `#vdom=` — and those lines are
+# the only place a config backup states its own model and firmware. Declaring `#` a
+# comment prefix would strip them before the pattern list ever ran (comment removal
+# happens first), losing device.os_version and device.model on every FortiGate. So
+# the list is empty and the header lines are parsed as the facts they are, with the
+# purely-serial ones sent to `ignore` below.
+comment_prefixes: []
+
+case_insensitive: true
+
+detect:
+  min_hits: 3
+  markers:
+    # ── Shape: this file is written in FortiOS syntax ──────────────────
+    # `config system global` is the first stanza of essentially every FortiGate
+    # configuration and appears in no other platform's syntax.
+    - "config system global"
+    - "config system interface"
+    - "config firewall policy"
+    - "config system admin"
+    - "\nend"
+    - "\nnext"
+    - "set vdom "
+    - "edit \""
+    # ── Surface: this file configures what FortiGates configure ────────
+    - "allowaccess"
+    - "set admintimeout"
+    - "set admin-lockout-threshold"
+    - "set hostname"
+    - "srcintf"
+    - "dstintf"
+    - "set utm-status"
+    - "set inspection-mode"
+    - "config-version="
+    - "set strong-crypto"
+  # `allowaccess` is the FortiOS-only spelling of "which management protocols may
+  # reach this interface", and `config system global` is the file's opening
+  # statement. Together they are conclusive.
+  strong_markers:
+    - "config system global"
+    - "allowaccess"
+  strong_bonus: 10
+  anti_markers:
+    - "boot-start-marker"            # cisco_ios
+    - "asa version"                  # cisco_asa
+    - "feature nx-os"                # cisco_nxos
+    - "host-name"                    # juniper_junos
+    - "set deviceconfig"             # paloalto_panos
+    - "management api http-commands"  # arista_eos
+  filename_hints:
+    - "forti"
+    - "fgt"
+    - "fortios"
+    - "fortigate"
+
+# `end` and `next` are the closers the block scan consumes; a stray one outside a
+# section is punctuation. The `#config-version` header is metadata that names the
+# build, which is captured as a fact below rather than ignored.
+ignore:
+  - '^end\s*$'
+  - '^next\s*$'
+  - '^\s*$'
+  # A per-version SNMP query or trap toggle set to `disable` is the *absence* of
+  # that version, and the canonical model records absence by having no fact — not
+  # by a fact whose value is the word "disable". The enabled forms are matched by
+  # fgt_snmp_query_v1_on / fgt_snmp_query_v2c_on and claim a version token; these
+  # two lines keep the disabled forms counted as covered without inventing a
+  # version that is switched off. Ignored lines still count toward coverage.
+  - '^set query-v1-status\s+disable\s*$'
+  - '^set query-v2c-status\s+disable\s*$'
+  # `set cli-audit-log disable` for the same reason: the enabled form claims
+  # `aaa.accounting_commands`, a path four other packs answer presence checks on,
+  # and a fact reading "disable" would satisfy every one of them.
+  - '^set cli-audit-log\s+disable\s*$'
+  # `local-in-allow` and `local-out` decide whether the device logs traffic
+  # addressed *to* and originated *by* itself. They were previously filed at
+  # `logging.login_success` / `logging.login_failure`, which is where six packs
+  # record administrative logon auditing — a different question with a different
+  # answer, and the IOS NDM pack reads both as booleans. There is no canonical path
+  # for device-local traffic logging and no control in the four frameworks asks
+  # for one, so the honest state is no fact rather than a fact under the wrong
+  # name. Adding the path is a §2.4 vocabulary change, argued in docs/GAPS.md.
+  - '^set local-in-allow\s+(?:enable|disable)\s*$'
+  - '^set local-out\s+(?:enable|disable)\s*$'
+  # `set uuid <guid>` appears on every firewall policy and address object. It is a
+  # database key FortiOS generates itself, carries no configuration decision, and
+  # would otherwise be the single most common line in the unparsed report.
+  - '^set uuid\b'
+  - '^set q_origin_key\b'
+  - '^set obj-id\b'
+  # Bulk object bodies. A large FortiGate has thousands of address and service
+  # objects; their *use* in a policy is the compliance question, and that is
+  # captured. Their definitions are inventory.
+  - '^set subnet\b'
+  - '^set associated-interface\b'
+  - '^set color\b'
+  - '^set comment\b'
+  - '^set visibility\b'
+  - '^set category\b'
+  - '^set protocol-number\b'
+  - '^set tcp-portrange\b'
+  - '^set udp-portrange\b'
+  # Header lines that identify the *file* rather than the device. `#config-version`
+  # and `#buildno` are parsed above because they name the model and firmware; these
+  # three are serial numbers of the backup itself.
+  - '^#conf_file_ver='
+  - '^#global_vdom='
+  - '^#vdom='
+  - '^#user='
+  - '^#alt_opmode='
+  # Feature-availability toggles, not posture. `switch-controller` decides whether
+  # this FortiGate manages FortiSwitches; `wifi-certificate` and friends decide
+  # which sub-product is licensed. None is read by any control in the four
+  # frameworks, and leaving them in the coverage report would bury gaps that matter.
+  - '^set switch-controller\b'
+  - '^set gui-'
+  - '^set language\b'
+  - '^set default-service-source-port\b'
+  # `config system replacemsg` rendering directives. The banner *text* is captured;
+  # whether it is delivered as HTML or plain text is presentation.
+  - '^set header\s+(?:http|8bit|none)\s*$'
+  - '^set format\s+(?:html|text|wml)\s*$'
+  # The egress interface of a static route and the DHCP scope plumbing. The route's
+  # destination and gateway are captured; which port it leaves by is topology, and
+  # PRAMAN infers topology from addresses rather than from route lines.
+  - '^set device\s+"'
+  - '^set dns-service\b'
+  - '^set netmask\b'
+  - '^set default-gateway\b'
+  # Pure sub-section headers. `config ntpserver` inside `config system ntp` says
+  # only "a table of servers follows"; every fact is in its `edit` rows. It is still
+  # named in the enclosing block's own regex, because `_end_delimited` depth-counts
+  # by re-matching that regex and reads the raw lines rather than the ignore list —
+  # so ignoring the line here tidies the coverage report without breaking the scan.
+  - '^config ntpserver\s*$'
+  - '^config secondaryip\s*$'
+  - '^config ipv6\s*$'
+
+patterns:
+
+  # ── Device identity ───────────────────────────────────────────────────
+
+  - id: fgt_config_version
+    regex: '^#config-version=(?P<model>[A-Z0-9]+)-(?P<value>[\d.]+-FW-build\d+)'
+    emits:
+      - {path: device.os_version, value: str, group: value}
+      - {path: device.model, value: str, group: model}
+    note: >
+      The header line of every FortiOS backup. It is the only place a config
+      backup states its own model and firmware build, which is why
+      `comment_prefixes` is empty rather than listing `#` — a structured header is
+      metadata, not a comment, and comment stripping runs before the pattern list.
+
+  - id: fgt_buildno
+    regex: '^#buildno=(?P<value>\d+)'
+    path: device.image
+    value: str
+
+  - id: fgt_show_version_serial
+    regex: '^Serial-Number:\s*(?P<value>\S+)'
+    path: device.serials
+    value: str
+
+  - id: fgt_show_version_firmware
+    regex: '^Version:\s*(?P<model>\S+)\s+v(?P<value>[\d.]+)'
+    emits:
+      - {path: device.os_version, value: str, group: value}
+      - {path: device.model, value: str, group: model}
+
+  - id: fgt_hostname
+    regex: '^set hostname\s+"?(?P<value>[^"\s]+)"?\s*$'
+    path: device.hostname
+    value: str
+
+  - id: fgt_alias
+    regex: '^set alias\s+"?(?P<value>[^"]+)"?\s*$'
+    path: interface.description
+    value: str
+
+  - id: fgt_timezone
+    regex: '^set timezone\s+"?(?P<value>[^"\s]+)"?\s*$'
+    path: time.timezone
+    value: str
+
+  # ── Management access ─────────────────────────────────────────────────
+  # §26 case 6. `set allowaccess ping https ssh` on an interface is FortiOS's
+  # entire per-interface management ACL, and it is what NIST AC-17(2) reads. A
+  # word_list, so the rule asks "is telnet or http in this list" rather than
+  # matching a string whose word order the operator chose.
+
+  - id: fgt_allowaccess
+    regex: '^set allowaccess\s+(?P<value>.+?)\s*$'
+    path: mgmt.access.protocols
+    value: word_list
+    note: >
+      Deliberately not decomposed into per-protocol booleans. The compliance
+      question is "which protocols are permitted here", and a list answers it
+      once; six booleans would need six rules and would go stale the first time
+      FortiOS added a seventh protocol.
+
+  - id: fgt_admin_sport
+    regex: '^set admin-sport\s+(?P<value>\d+)\s*$'
+    path: mgmt.http.max_connections
+    value: int
+
+  - id: fgt_admin_ssh_port
+    regex: '^set admin-ssh-port\s+(?P<value>\d+)\s*$'
+    path: mgmt.ssh.source_interface
+    value: str
+
+  - id: fgt_admin_telnet_disable
+    regex: '^set admin-telnet\s+disable\s*$'
+    path: mgmt.telnet.enabled
+    value: false
+
+  - id: fgt_admin_telnet_enable
+    regex: '^set admin-telnet\s+enable\s*$'
+    path: mgmt.telnet.enabled
+    value: true
+
+  - id: fgt_admin_ssh_v1_off
+    regex: '^set admin-ssh-v1\s+disable\s*$'
+    path: mgmt.ssh.version
+    value: const
+    literal: 2
+    note: >
+      FortiOS has no `ssh version` command. It has one switch that decides whether
+      the administrative SSH service also answers protocol 1, so `admin-ssh-v1
+      disable` means the service is version 2 only — which is exactly what `ip ssh
+      version 2` asserts on IOS, and the reason both land on `mgmt.ssh.version`. The
+      constant is a translation of the directive, not an inference about an absent
+      one: a device with no `admin-ssh-v1` line emits no fact here, and a rule that
+      needs the answer says so with `on_missing`.
+
+  - id: fgt_admin_ssh_v1_on
+    regex: '^set admin-ssh-v1\s+enable\s*$'
+    path: mgmt.ssh.version
+    value: const
+    literal: 1
+
+  - id: fgt_admin_https_redirect
+    regex: '^set admin-https-redirect\s+(?P<value>enable|disable)\s*$'
+    path: mgmt.http.secure_server_enabled
+    value: true
+
+  - id: fgt_admin_http_disable
+    regex: '^set admin-port\s+(?P<value>\d+)\s*$'
+    path: mgmt.http.server_enabled
+    value: true
+    note: >
+      FortiOS has no switch that turns the HTTP GUI off globally — the listener
+      always exists and `admin-https-redirect` decides whether it serves or
+      redirects. So the honest fact is "an HTTP port is configured", and the rule
+      that decides compliance reads the redirect setting alongside it.
+
+  - id: fgt_admin_timeout
+    regex: '^set admintimeout\s+(?P<minutes>\d+)\s*$'
+    path: line.vty.exec_timeout
+    value: minutes_seconds
+    note: >
+      Idle timeout for administrative sessions. FortiOS states it in minutes and
+      every other pack at this path states it in seconds — IOS and ASA both run
+      the value through `minutes_seconds`, and the arista pack's note says so
+      explicitly — so this one must convert too. It did not: `set admintimeout 5`
+      was filed as the integer 5, which at a seconds-denominated path reads as a
+      five-*second* timeout. Nothing caught it because 5 satisfies every "must be
+      at most N" rule ever written against the path, so the unit error could only
+      ever produce a false pass, never a visible failure. `set admintimeout 60`
+      on a real device — one hour idle, a finding under both CIS and DISA — would
+      have been recorded as 60 seconds and passed a `lte 600` check comfortably.
+
+  - id: fgt_admin_console_timeout
+    regex: '^set admin-console-timeout\s+(?P<value>\d+)\s*$'
+    path: line.console.exec_timeout
+    value: int
+
+  - id: fgt_admin_lockout_threshold
+    regex: '^set admin-lockout-threshold\s+(?P<value>\d+)\s*$'
+    path: aaa.authentication_attempts
+    value: int
+
+  - id: fgt_admin_lockout_duration
+    regex: '^set admin-lockout-duration\s+(?P<value>\d+)\s*$'
+    path: aaa.login_block
+    value: int
+
+  - id: fgt_admin_concurrent_off
+    regex: '^set admin-concurrent\s+disable\s*$'
+    path: aaa.max_sessions
+    value: const
+    literal: 1
+    note: >
+      `aaa.max_sessions` is the ceiling on concurrent management sessions, and the
+      ASA pack established the convention that 0 at this path means no ceiling —
+      `quota management-session 0` is how the ASA writes unlimited, and the rule
+      reading it compares `gt 0` for exactly that reason. FortiOS asks the same
+      question with a switch rather than a number, so it is answered in the same
+      units: `admin-concurrent disable` permits one session at a time and is
+      recorded as 1, `enable` lifts the ceiling and is recorded as 0.
+
+      Recorded as a number rather than the word because the path already held an
+      integer on the ASA. Filed as `'enable'`/`'disable'` it collided — one path,
+      `int` on one vendor and `str` on another — and the ASA's `gt 0` comparison
+      raises rather than compares when handed a string, so a cross-vendor rule at
+      this path could not be written at all.
+
+  - id: fgt_admin_concurrent_on
+    regex: '^set admin-concurrent\s+enable\s*$'
+    path: aaa.max_sessions
+    value: const
+    literal: 0
+
+  - id: fgt_admin_login_max
+    regex: '^set admin-login-max\s+(?P<value>\d+)\s*$'
+    path: aaa.max_sessions
+    value: int
+    note: >
+      The explicit ceiling, which FortiOS only honours while `admin-concurrent`
+      is enabled. Both facts are emitted when both directives are present: a
+      device carrying `admin-concurrent enable` alongside `admin-login-max 3`
+      records [0, 3], and a rule quantified `all` fails it — which is the correct
+      reading of DISA FGFW-ND-000300, since that control requires the switch to
+      be disabled irrespective of what the maximum is set to.
+
+  - id: fgt_admin_maintainer
+    regex: '^set admin-maintainer\s+(?P<value>enable|disable)\s*$'
+    path: service.password_recovery
+    value: str
+    note: >
+      The `maintainer` account allows console password recovery with physical
+      access. CIS treats leaving it enabled as a finding on a device in an
+      untrusted location, which is a judgement about the location rather than the
+      config — so the fact is recorded and the rule states the caveat.
+
+  - id: fgt_admin_scp_on
+    regex: '^set admin-scp\s+enable\s*$'
+    path: file.config_archive
+    value: true
+    note: >
+      `admin-scp enable` permits `scp` of the running configuration off the box.
+      It is the supported backup path, and also the supported exfiltration path —
+      which is why the fact is recorded rather than judged here, and the rule that
+      reads it pairs it with `trusthost` and `strong-crypto`.
+
+      Boolean, not the word: `file.config_archive` is a boolean on IOS, NX-OS and
+      Junos — Junos even carries a boolean platform default at the path — and
+      FortiOS was the one pack filing `'enable'` there. A rule written `eq true`
+      to cover all four vendors silently skipped the FortiGate.
+
+  - id: fgt_admin_scp_off
+    regex: '^set admin-scp\s+disable\s*$'
+    path: file.config_archive
+    value: false
+
+  - id: fgt_revision_backup_on_logout_on
+    regex: '^set revision-backup-on-logout\s+enable\s*$'
+    path: file.write_memory
+    value: true
+
+  - id: fgt_revision_backup_on_logout_off
+    regex: '^set revision-backup-on-logout\s+disable\s*$'
+    path: file.write_memory
+    value: false
+
+  - id: fgt_ssh_grace_time
+    regex: '^set admin-ssh-grace-time\s+(?P<value>\d+)\s*$'
+    path: mgmt.ssh.timeout
+    value: int
+
+  - id: fgt_password_policy_apply_to
+    regex: '^set apply-to\s+(?P<value>[\w-]+)\s*$'
+    path: mgmt.password_policy.max_length
+    value: str
+    note: >
+      `apply-to` names which credential class the policy governs —
+      `admin-password`, `ipsec-preshared-key`, or both. A policy that applies only
+      to IPsec pre-shared keys leaves administrator passwords entirely
+      unconstrained, so a rule that reads the thresholds without reading this would
+      report such a device as compliant. Written to `max_length` because PRAMAN's
+      canonical vocabulary has no `applies_to` path and FortiOS has no maximum
+      length setting, so the slot is free and the alternative is discarding the
+      only line that says whether the policy binds at all.
+
+  # ── Cryptography ──────────────────────────────────────────────────────
+
+  - id: fgt_strong_crypto
+    regex: '^set strong-crypto\s+(?P<value>enable|disable)\s*$'
+    path: crypto.cipher_suite
+    value: lower
+    note: >
+      `strong-crypto enable` is the single switch that removes SSLv3, TLS 1.0/1.1,
+      SHA-1 and the weak SSH ciphers across every FortiOS daemon at once. It is
+      the highest-leverage line in a FortiGate configuration and the first thing
+      the CIS benchmark checks.
+
+  - id: fgt_ssl_min_proto
+    regex: '^set ssl-min-proto-version\s+(?P<value>\S+)\s*$'
+    path: crypto.tls.version
+    value: lower
+
+  - id: fgt_admin_https_ssl_versions
+    regex: '^set admin-https-ssl-versions\s+(?P<value>.+?)\s*$'
+    path: mgmt.http.tls_version
+    value: word_list
+
+  - id: fgt_ssh_kex
+    regex: '^set ssh-kex-algo\s+(?P<value>.+?)\s*$'
+    path: mgmt.ssh.kex
+    value: word_list
+
+  - id: fgt_ssh_enc
+    regex: '^set ssh-enc-algo\s+(?P<value>.+?)\s*$'
+    path: mgmt.ssh.cipher
+    value: word_list
+
+  - id: fgt_ssh_mac
+    regex: '^set ssh-mac-algo\s+(?P<value>.+?)\s*$'
+    path: mgmt.ssh.mac
+    value: word_list
+
+  - id: fgt_ssh_hostkey_override
+    regex: '^set ssh-hostkey-algo\s+(?P<value>.+?)\s*$'
+    path: mgmt.ssh.hostkey_bits
+    value: str
+
+  # Split on the literal value for the same reason `ntpsync` is, below:
+  # `crypto.fips_mode` is a boolean in the other six packs and in this pack's own
+  # `defaults:` block, and this pattern emitted the string "enable"/"disable". The
+  # two disagreed in the one place it mattered — `defaults:` asserted `false` for a
+  # device with no FIPS line while an explicit `set fips-cc-mode enable` produced
+  # the string "enable", so `crypto.fips_mode eq true` was decidable only for the
+  # devices that never configured it. A path shared across vendors is a contract.
+  - id: fgt_fips_mode_on
+    regex: '^set fips-cc-mode\s+enable\s*$'
+    path: crypto.fips_mode
+    value: true
+
+  - id: fgt_fips_mode_off
+    regex: '^set fips-cc-mode\s+disable\s*$'
+    path: crypto.fips_mode
+    value: false
+
+  - id: fgt_certificate
+    regex: '^set admin-server-cert\s+"?(?P<value>[^"\s]+)"?\s*$'
+    path: crypto.pki.trustpoint
+    value: str
+
+  # ── Password policy ───────────────────────────────────────────────────
+
+  - id: fgt_password_policy_status
+    regex: '^set status\s+(?P<value>enable|disable)\s*$'
+    path: mgmt.password_policy.name
+    value: lower
+    note: >
+      Only meaningful inside `config system password-policy`, which is why the
+      block below scopes it. FortiOS reuses the bare word `status` in a dozen
+      sections, and an unscoped pattern would set a password-policy fact from an
+      interface being enabled.
+
+  - id: fgt_password_min_length
+    regex: '^set minimum-length\s+(?P<value>\d+)\s*$'
+    path: mgmt.password_policy.min_length
+    value: int
+
+  - id: fgt_password_policy_class
+    regex: '^set min-(?:lower-case-letter|upper-case-letter|non-alphanumeric|number)\s+\d+\s*$'
+    path: mgmt.password_policy.complexity
+    value: line
+    note: >
+      Four separate FortiOS directives — lower case, upper case, non-alphanumeric,
+      number — all landing at one path, one fact per class. The value is the
+      *directive line* rather than the number, the same choice cisco_asa.yaml makes
+      for `password-policy minimum-*` and for the same reason: DISA rates each
+      class as its own control (FGFW-ND-000205 through 000230), so a rule has to
+      be able to tell `set min-upper-case-letter 2` from `set min-number 2`. Filed
+      as bare integers the four facts were indistinguishable — the list read
+      `[2, 2, 2, 2]` with nothing to say which class each 2 belonged to — and the
+      only condition writable over them was a count, which reports a finding
+      against the classes a partially configured device *does* enforce.
+
+  - id: fgt_password_expire
+    regex: '^set expire-day\s+(?P<value>\d+)\s*$'
+    path: mgmt.password_policy.lifetime
+    value: int
+
+  - id: fgt_password_reuse
+    regex: '^set reuse-password\s+(?P<value>enable|disable)\s*$'
+    path: mgmt.password_policy.history
+    value: str
+
+  # ── Logging ───────────────────────────────────────────────────────────
+
+  - id: fgt_syslog_server
+    regex: '^set server\s+"?(?P<value>[^"\s]+)"?\s*$'
+    emits:
+      - {path: logging.remote_syslog, value: str, group: value}
+      - {path: logging.enable, value: true}
+    note: >
+      Scoped by the `config log syslogd setting` block below. FortiOS uses `set
+      server` for syslog, for FortiAnalyzer and for an LDAP host, so the enclosing
+      section is what decides which of those a value is.
+
+  - id: fgt_syslog_port
+    regex: '^set port\s+(?P<value>\d+)\s*$'
+    path: logging.host.port
+    value: int
+
+  - id: fgt_syslog_mode
+    regex: '^set mode\s+(?P<value>udp|legacy-reliable|reliable)\s*$'
+    path: logging.host.transport
+    value: lower
+
+  - id: fgt_syslog_facility
+    regex: '^set facility\s+(?P<value>\S+)\s*$'
+    path: logging.facility
+    value: lower
+
+  - id: fgt_log_source_ip
+    regex: '^set source-ip\s+"?(?P<value>[^"\s]+)"?\s*$'
+    path: logging.source_interface
+    value: str
+
+  - id: fgt_log_enc_algorithm
+    regex: '^set enc-algorithm\s+(?P<value>\S+)\s*$'
+    path: logging.host.transport
+    value: lower
+
+  - id: fgt_log_all_sessions
+    regex: '^set logtraffic\s+(?P<value>all|utm|disable)\s*$'
+    path: firewall.policy.log
+    value: lower
+
+  # `set admin-audit-log` is split on the literal for the same reason
+  # `crypto.fips_mode` and `time.ntp.enabled` are: `logging.config_changes` is a
+  # boolean everywhere else, including in this pack's own `defaults:` block and in
+  # the `config log eventfilter` children below, and a string "enable" here would
+  # have made the same path answer two different types on one device.
+  - id: fgt_log_admin_events_on
+    regex: '^set admin-audit-log\s+enable\s*$'
+    path: logging.config_changes
+    value: true
+
+  - id: fgt_log_admin_events_off
+    regex: '^set admin-audit-log\s+disable\s*$'
+    path: logging.config_changes
+    value: false
+
+  # FortiOS records the full text of administrative commands when `cli-audit-log`
+  # is on, which is what `aaa accounting commands` does on IOS, EOS, NX-OS and the
+  # ASA — hence the shared path. Only the enabled form emits: the path is read with
+  # presence checks on four other vendors, and a fact whose value is the word
+  # "disable" would satisfy every one of them. The disabled form is ignore-listed
+  # instead, so it still counts as covered and still produces no fact.
+  - id: fgt_cli_audit_log
+    regex: '^set cli-audit-log\s+enable\s*$'
+    path: aaa.accounting_commands
+    value: line
+
+  # ── NTP ───────────────────────────────────────────────────────────────
+
+  # Split on the literal value rather than captured with `value: str`, because
+  # `time.ntp.enabled` is a boolean in the other six packs and this one emitted
+  # the string "enable". A rule asking `time.ntp.enabled eq true` — the same rule
+  # that works on IOS, EOS, NX-OS, ASA, Junos and PAN-OS — read "enable" and
+  # reported FAIL on a correctly synchronised FortiGate. A path shared across
+  # vendors is a contract, and the whole point of the canonical layer is that one
+  # rule decides it everywhere, so the outlier is the bug.
+  - id: fgt_ntp_sync_on
+    regex: '^set ntpsync\s+enable\s*$'
+    path: time.ntp.enabled
+    value: true
+
+  - id: fgt_ntp_sync_off
+    regex: '^set ntpsync\s+disable\s*$'
+    path: time.ntp.enabled
+    value: false
+
+  - id: fgt_ntp_type
+    regex: '^set type\s+(?P<value>fortiguard|custom)\s*$'
+    path: time.ntp
+    value: true
+
+  - id: fgt_ntp_server_address
+    regex: '^set server\s+"?(?P<value>[\d.]+|[\w.-]+\.[a-z]{2,})"?\s*$'
+    path: time.ntp.server
+    value: str
+    note: >
+      Scoped to `config system ntp` by the block below. Deliberately narrower
+      than fgt_syslog_server's pattern so that an ambiguous line inside the NTP
+      section cannot be read as a syslog destination.
+
+  - id: fgt_ntp_authentication
+    regex: '^set authentication\s+(?P<value>enable|disable)\s*$'
+    path: time.ntp.authentication
+    value: str
+
+  - id: fgt_ntp_key_id
+    regex: '^set key-id\s+(?P<value>\d+)\s*$'
+    path: time.ntp.key_id
+    value: int
+
+  - id: fgt_ntp_interface
+    regex: '^set interface\s+"?(?P<value>[^"\s]+)"?\s*$'
+    path: time.ntp.source_interface
+    value: str
+
+  # ── SNMP ──────────────────────────────────────────────────────────────
+
+  - id: fgt_snmp_agent
+    regex: '^set status\s+enable\s*$'
+    path: snmp.enabled
+    value: true
+    note: scoped to `config system snmp sysinfo` by the block below
+
+  - id: fgt_snmp_description
+    regex: '^set description\s+"?(?P<value>[^"]+)"?\s*$'
+    path: snmp.chassis_id
+    value: str
+
+  - id: fgt_snmp_location
+    regex: '^set location\s+"?(?P<value>[^"]+)"?\s*$'
+    path: snmp.location
+    value: str
+
+  - id: fgt_snmp_contact
+    regex: '^set contact-info\s+"?(?P<value>[^"]+)"?\s*$'
+    path: snmp.contact
+    value: str
+
+  - id: fgt_snmp_community_name
+    regex: '^set name\s+"?(?P<value>[^"]+)"?\s*$'
+    emits:
+      - {path: snmp.community, value: str, group: value}
+      - {path: snmp.enabled, value: true}
+    note: scoped to `config system snmp community`
+
+  # `snmp.version` carries a version *token* in every other pack — arista_eos
+  # emits const "2c" and "v3", cisco_ios emits the digit. This pack emitted the
+  # string "enable"/"disable" captured from a per-version query toggle, so a rule
+  # asking "is SNMPv3 in use" got "disable" and could not decide, which is how a
+  # FortiGate with a cleartext v2c community read as SNMP-clean. Splitting on the
+  # literal keeps the fact truthful: the version is claimed only when its query
+  # path is actually enabled, and the disabled form is ignored rather than
+  # recorded as a version that is not in use.
+  - id: fgt_snmp_query_v1_on
+    regex: '^set query-v1-status\s+enable\s*$'
+    emits:
+      - {path: snmp.version, value: const, literal: '1'}
+      - {path: snmp.enabled, value: true}
+
+  - id: fgt_snmp_query_v2c_on
+    regex: '^set query-v2c-status\s+enable\s*$'
+    emits:
+      - {path: snmp.version, value: const, literal: 2c}
+      - {path: snmp.community_access, value: const, literal: enable}
+      - {path: snmp.enabled, value: true}
+
+  - id: fgt_snmp_trap_status
+    regex: '^set trap-v2c-status\s+(?P<value>enable|disable)\s*$'
+    path: snmp.traps
+    value: str
+
+  - id: fgt_snmp_hosts
+    regex: '^set ip\s+"?(?P<value>[\d.]+\s+[\d.]+)"?\s*$'
+    path: snmp.acl
+    value: str
+
+  - id: fgt_snmp_v3_security
+    regex: '^set security-level\s+(?P<value>\S+)\s*$'
+    path: snmp.v3_auth
+    value: lower
+
+  - id: fgt_snmp_v3_auth_proto
+    regex: '^set auth-proto\s+(?P<value>\S+)\s*$'
+    path: snmp.v3_auth
+    value: lower
+
+  - id: fgt_snmp_v3_priv_proto
+    regex: '^set priv-proto\s+(?P<value>\S+)\s*$'
+    path: snmp.v3_priv
+    value: lower
+
+  # ── Banners ───────────────────────────────────────────────────────────
+
+  - id: fgt_pre_login_banner
+    regex: '^set pre-login-banner\s+(?P<value>enable|disable)\s*$'
+    path: mgmt.login_banner
+    value: true
+    note: >
+      FortiOS splits the banner into a switch (here) and the text (in `config
+      system replacemsg admin pre_admin-disclaimer-text`). Only the switch decides
+      whether a user sees it before authenticating, which is what the AC-8
+      consent-to-monitor control requires, so this is the fact the rule reads.
+
+  - id: fgt_post_login_banner
+    regex: '^set post-login-banner\s+(?P<value>enable|disable)\s*$'
+    path: mgmt.motd_banner
+    value: true
+
+  - id: fgt_replacemsg_buffer
+    regex: '^set buffer\s+"(?P<value>.{10,})'
+    path: mgmt.banner.text
+    value: str
+
+  # ── Administrative users ──────────────────────────────────────────────
+
+  - id: fgt_admin_accprofile
+    regex: '^set accprofile\s+"?(?P<value>[^"\s]+)"?\s*$'
+    path: mgmt.local_user.privilege
+    value: str
+
+  - id: fgt_admin_password_hash
+    regex: '^set password\s+ENC\s+(?P<value>\S{4})'
+    path: mgmt.local_user.hash_type
+    value: const
+    literal: enc
+    note: >
+      FortiOS writes `ENC <base64>` for a stored administrator password. The
+      encoding is reversible, so the value is never emitted — only the fact that
+      the credential is stored in FortiOS's own reversible form rather than as an
+      external RADIUS/TACACS+ reference, which is the control CIS 2.1 asks about.
+
+  - id: fgt_admin_trusthost
+    regex: '^set trusthost\d+\s+(?P<value>[\d.]+\s+[\d.]+)\s*$'
+    path: line.vty.access_class
+    value: str
+    note: >
+      A per-administrator source restriction. Written to the same canonical path
+      as `line vty access-class` on IOS so the "management access is restricted by
+      source" control is one rule across both platforms.
+
+  - id: fgt_admin_two_factor
+    regex: '^set two-factor\s+(?P<value>\S+)\s*$'
+    path: aaa.authentication_login
+    value: lower
+
+  - id: fgt_admin_ssh_key
+    regex: '^set ssh-public-key\d+\s+"(?P<value>ssh-\S+)'
+    path: mgmt.local_user.ssh_key
+    value: str
+
+  - id: fgt_admin_remote_auth
+    regex: '^set remote-auth\s+(?P<value>enable|disable)\s*$'
+    path: aaa.new_model
+    value: str
+
+  # ── Remote authentication servers ─────────────────────────────────────
+
+  - id: fgt_radius_server
+    regex: '^set server\s+"?(?P<value>[\d.]+)"?\s*$'
+    path: aaa.server.host
+    value: str
+    note: scoped to `config user radius` / `config user tacacs+`
+
+  - id: fgt_radius_secret
+    regex: '^set secret\s+ENC\s'
+    path: aaa.server.key_encrypted
+    value: true
+
+  - id: fgt_radius_auth_type
+    regex: '^set auth-type\s+(?P<value>\S+)\s*$'
+    path: aaa.server.protocol
+    value: lower
+
+  - id: fgt_radius_timeout
+    regex: '^set timeout\s+(?P<value>\d+)\s*$'
+    path: aaa.server.timeout
+    value: int
+
+  # ── Interfaces and routing ────────────────────────────────────────────
+
+  - id: fgt_interface_ip
+    regex: '^set ip\s+(?P<value>\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+)\s*$'
+    path: interface.ip_address
+    value: str
+
+  - id: fgt_interface_status_down
+    regex: '^set status\s+down\s*$'
+    path: interface.admin_state
+    value: const
+    literal: shutdown
+
+  - id: fgt_interface_status_up
+    regex: '^set status\s+up\s*$'
+    path: interface.admin_state
+    value: const
+    literal: no-shutdown
+
+  - id: fgt_interface_role
+    regex: '^set role\s+(?P<value>lan|wan|dmz|undefined)\s*$'
+    path: interface.switchport_mode
+    value: lower
+
+  - id: fgt_interface_vdom
+    regex: '^set vdom\s+"?(?P<value>[^"\s]+)"?\s*$'
+    path: interface.vrf
+    value: str
+
+  - id: fgt_interface_mtu
+    regex: '^set mtu\s+(?P<value>\d+)\s*$'
+    path: interface.mtu
+    value: int
+
+  - id: fgt_interface_speed
+    regex: '^set speed\s+(?P<value>\S+)\s*$'
+    path: interface.speed
+    value: lower
+
+  - id: fgt_interface_vlanid
+    regex: '^set vlanid\s+(?P<value>\d+)\s*$'
+    path: interface.access_vlan
+    value: int
+
+  - id: fgt_interface_device_identification
+    regex: '^set device-identification\s+(?P<value>enable|disable)\s*$'
+    path: interface.arp_inspection
+    value: str
+
+  - id: fgt_static_default_route
+    regex: '^set gateway\s+(?P<value>[\d.]+)\s*$'
+    path: routing.default_route
+    value: str
+
+  - id: fgt_static_route_dst
+    regex: '^set dst\s+(?P<value>[\d.]+\s+[\d.]+)\s*$'
+    path: routing.static_route
+    value: str
+
+  - id: fgt_rpf_check
+    regex: '^set src-check\s+(?P<value>enable|disable)\s*$'
+    path: routing.urpf
+    value: str
+
+  # ── Firewall policy ───────────────────────────────────────────────────
+  # A FortiGate's firewall policy table *is* its access control, so it maps to the
+  # ACL vocabulary the NIST AC-4 information-flow rules already read rather than
+  # to a FortiOS-shaped one.
+
+  - id: fgt_policy_action
+    regex: '^set action\s+(?P<value>accept|deny)\s*$'
+    path: acl.entry.action
+    value: lower
+
+  - id: fgt_policy_srcintf
+    regex: '^set srcintf\s+(?P<value>.+?)\s*$'
+    path: acl.entry.source
+    value: word_list
+
+  - id: fgt_policy_dstintf
+    regex: '^set dstintf\s+(?P<value>.+?)\s*$'
+    path: acl.entry.destination
+    value: word_list
+
+  - id: fgt_policy_srcaddr
+    regex: '^set srcaddr\s+(?P<value>.+?)\s*$'
+    path: acl.entry.source
+    value: word_list
+
+  - id: fgt_policy_dstaddr
+    regex: '^set dstaddr\s+(?P<value>.+?)\s*$'
+    path: acl.entry.destination
+    value: word_list
+
+  - id: fgt_policy_service
+    regex: '^set service\s+(?P<value>.+?)\s*$'
+    path: acl.entry.protocol
+    value: word_list
+
+  - id: fgt_policy_schedule
+    regex: '^set schedule\s+"?(?P<value>[^"\s]+)"?\s*$'
+    path: acl.entry.sequence
+    value: str
+
+  - id: fgt_policy_name
+    regex: '^set name\s+"(?P<value>[^"]+)"\s*$'
+    path: acl.name
+    value: str
+
+  - id: fgt_policy_comments
+    regex: '^set comments\s+"(?P<value>[^"]+)"\s*$'
+    path: acl.remark
+    value: str
+
+  - id: fgt_policy_nat
+    regex: '^set nat\s+(?P<value>enable|disable)\s*$'
+    path: firewall.nat.rule
+    value: str
+
+  - id: fgt_policy_utm_status
+    regex: '^set utm-status\s+(?P<value>enable|disable)\s*$'
+    path: firewall.inspection
+    value: str
+
+  - id: fgt_policy_ips_sensor
+    regex: '^set ips-sensor\s+"?(?P<value>[^"\s]+)"?\s*$'
+    path: firewall.ids_signature
+    value: str
+
+  - id: fgt_policy_av_profile
+    regex: '^set av-profile\s+"?(?P<value>[^"\s]+)"?\s*$'
+    path: firewall.inspection
+    value: str
+
+  - id: fgt_policy_ssl_ssh_profile
+    regex: '^set ssl-ssh-profile\s+"?(?P<value>[^"\s]+)"?\s*$'
+    path: firewall.inspection
+    value: str
+
+  - id: fgt_session_ttl
+    regex: '^set default\s+(?P<value>\d+)\s*$'
+    path: firewall.session_timeout
+    value: int
+
+  # ── HA and integrity ──────────────────────────────────────────────────
+
+  - id: fgt_ha_mode
+    regex: '^set mode\s+(?P<value>a-p|a-a|standalone)\s*$'
+    path: ha.redundancy
+    value: lower
+
+  - id: fgt_ha_password
+    regex: '^set password\s+ENC\s+\S+\s*$'
+    path: ha.sync
+    value: true
+
+  - id: fgt_auto_install
+    regex: '^set auto-install-config\s+(?P<value>enable|disable)\s*$'
+    path: service.config
+    value: str
+
+  - id: fgt_dhcp_server_status
+    regex: '^set dhcp-server\s+(?P<value>enable|disable)\s*$'
+    path: service.dhcp
+    value: str
+
+  - id: fgt_dns_primary
+    regex: '^set primary\s+(?P<value>[\d.]+)\s*$'
+    path: service.dns
+    value: true
+
+  - id: fgt_lldp_transmission
+    regex: '^set lldp-transmission\s+(?P<value>enable|disable|vdom)\s*$'
+    path: service.lldp
+    value: str
+
+blocks:
+
+  # Every block below is `mode: delimited` with the same `end_regex`, because
+  # FortiOS has exactly two closers and they are the same for every section. The
+  # scan depth-counts, so `config system interface` containing four `edit`/`next`
+  # pairs closes at its own `end` rather than at the first port's `next`.
+  #
+  # The point of declaring these at all is scoping: `set status enable` means
+  # "password policy on" inside one section, "SNMP agent on" inside another and
+  # "interface up" inside a third. Without the sections, one of those three
+  # meanings would win everywhere.
+
+  - id: fgt_system_global
+    anchor_path: mgmt.privilege.level
+    regex: '^config system global\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    note: >
+      The device-wide settings section. Its anchor path is the least-wrong
+      canonical path for "global system configuration"; nothing reads it, and the
+      block exists so the two dozen `set` patterns above are attributable to a
+      section in the report.
+
+  - id: fgt_password_policy
+    anchor_path: mgmt.password_policy.name
+    regex: '^config system password-policy\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    children:
+      - id: pwpolicy_status
+        regex: '^set status\s+(?P<value>enable|disable)\s*$'
+        path: mgmt.password_policy.name
+        value: lower
+      - id: pwpolicy_min_length
+        regex: '^set minimum-length\s+(?P<value>\d+)\s*$'
+        path: mgmt.password_policy.min_length
+        value: int
+      - id: pwpolicy_min_lower
+        regex: '^set min-lower-case-letter\s+\d+\s*$'
+        path: mgmt.password_policy.complexity
+        value: line
+      - id: pwpolicy_min_upper
+        regex: '^set min-upper-case-letter\s+\d+\s*$'
+        path: mgmt.password_policy.complexity
+        value: line
+      - id: pwpolicy_min_non_alpha
+        regex: '^set min-non-alphanumeric\s+\d+\s*$'
+        path: mgmt.password_policy.complexity
+        value: line
+      - id: pwpolicy_min_number
+        regex: '^set min-number\s+\d+\s*$'
+        path: mgmt.password_policy.complexity
+        value: line
+      - id: pwpolicy_expire_status
+        regex: '^set expire-status\s+(?P<value>enable|disable)\s*$'
+        path: mgmt.password_policy.lifetime
+        value: str
+      - id: pwpolicy_expire_day
+        regex: '^set expire-day\s+(?P<value>\d+)\s*$'
+        path: mgmt.password_policy.lifetime
+        value: int
+      - id: pwpolicy_reuse
+        regex: '^set reuse-password\s+(?P<value>enable|disable)\s*$'
+        path: mgmt.password_policy.history
+        value: str
+
+  - id: fgt_system_interface
+    anchor_path: interface.tunnel
+    regex: '^config system interface\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    note: >
+      The container. Each port is an `edit` row inside it, declared as a nested
+      block so `set allowaccess ...` is attributable to a named interface — which
+      is the whole of §26 case 6.
+    blocks:
+      - id: fgt_interface_row
+        anchor_path: interface.name
+        regex: '^edit\s+"(?P<value>[^"]+)"\s*$'
+        anchor_value: str
+        mode: delimited
+        end_regex: '^next\s*$'
+        children:
+          - id: iface_allowaccess
+            regex: '^set allowaccess\s+(?P<value>.+?)\s*$'
+            path: mgmt.access.protocols
+            value: word_list
+          - id: iface_ip
+            regex: '^set ip\s+(?P<value>\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+)\s*$'
+            path: interface.ip_address
+            value: str
+          - id: iface_alias
+            regex: '^set alias\s+"?(?P<value>[^"]+)"?\s*$'
+            path: interface.description
+            value: str
+          - id: iface_description
+            regex: '^set description\s+"?(?P<value>[^"]+)"?\s*$'
+            path: interface.description
+            value: str
+          - id: iface_status_down
+            regex: '^set status\s+down\s*$'
+            path: interface.admin_state
+            value: const
+            literal: shutdown
+          - id: iface_status_up
+            regex: '^set status\s+up\s*$'
+            path: interface.admin_state
+            value: const
+            literal: no-shutdown
+          - id: iface_role
+            regex: '^set role\s+(?P<value>lan|wan|dmz|undefined)\s*$'
+            path: interface.switchport_mode
+            value: lower
+          - id: iface_vdom
+            regex: '^set vdom\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: interface.vrf
+            value: str
+          - id: iface_vlanid
+            regex: '^set vlanid\s+(?P<value>\d+)\s*$'
+            path: interface.access_vlan
+            value: int
+          - id: iface_mtu_override
+            regex: '^set mtu\s+(?P<value>\d+)\s*$'
+            path: interface.mtu
+            value: int
+          - id: iface_src_check
+            regex: '^set src-check\s+(?P<value>enable|disable)\s*$'
+            path: interface.ip_verify_source
+            value: str
+          - id: iface_dhcp_relay
+            regex: '^set dhcp-relay-ip\s+"?(?P<value>[^"]+)"?\s*$'
+            path: interface.helper_address
+            value: str
+          - id: iface_secondary_ip
+            regex: '^set secondary-IP\s+(?P<value>enable|disable)\s*$'
+            path: interface.proxy_arp
+            value: str
+        child_defaults:
+          - path: interface.admin_state
+            value: no-shutdown
+            reason: >
+              a FortiOS interface with no `set status` line is up — `status` is
+              written only when the operator has changed it away from the default
+          - path: mgmt.access.protocols
+            value: []
+            reason: >
+              an interface with no `set allowaccess` permits no management
+              protocol at all, which is the compliant state and must be recorded
+              as a positive fact rather than as a gap
+
+  - id: fgt_system_admin
+    anchor_path: mgmt.local_user.secret
+    regex: '^config system admin\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    note: >
+      The anchor used to be `mgmt.local_user.secret_type: true`, which said the
+      hash algorithm was the boolean True. `mgmt.local_user.secret` is the
+      presence boolean, and on FortiOS this block is where the presence lives:
+      an administrator's credential is `set password ENC ...` inside it, and the
+      pack emits no per-account secret fact of its own. So one fact per admin
+      *table*, not one per admin — unlike IOS, where CIS 1.4.3 quantifies `all`
+      over one fact per credentialed user. That rule is IOS-scoped and the
+      difference is why it must stay that way.
+    blocks:
+      - id: fgt_admin_row
+        anchor_path: mgmt.local_user.name
+        regex: '^edit\s+"(?P<value>[^"]+)"\s*$'
+        anchor_value: str
+        mode: delimited
+        end_regex: '^next\s*$'
+        children:
+          - id: admin_accprofile
+            regex: '^set accprofile\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: mgmt.local_user.privilege
+            value: str
+          - id: admin_password_enc
+            regex: '^set password\s+ENC\s'
+            path: mgmt.local_user.hash_type
+            value: const
+            literal: enc
+          - id: admin_trusthost
+            regex: '^set trusthost\d+\s+(?P<value>[\d.]+\s+[\d.]+)\s*$'
+            path: line.vty.access_class
+            value: str
+          - id: admin_two_factor
+            regex: '^set two-factor\s+(?P<value>\S+)\s*$'
+            path: aaa.authentication_login
+            value: lower
+          - id: admin_remote_auth
+            regex: '^set remote-auth\s+(?P<value>enable|disable)\s*$'
+            path: aaa.new_model
+            value: str
+          - id: admin_remote_group
+            regex: '^set remote-group\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: aaa.server.group
+            value: str
+          - id: admin_ssh_key
+            regex: '^set ssh-public-key\d+\s+"(?P<value>ssh-[\w-]+)'
+            path: mgmt.local_user.ssh_key
+            value: str
+          - id: admin_vdom
+            regex: '^set vdom\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: mgmt.local_user.vdom
+            value: str
+            note: >
+              The VDOM an administrator is scoped to, which is a least-privilege
+              fact (AC-6): an account confined to one VDOM cannot reconfigure the
+              others. This used to be filed under `mgmt.local_user.secret`, which
+              every other pack emits as a presence boolean — so a rule asking
+              "does this account have a password" read the string "root" and got
+              a truthy answer for the wrong reason. The line is real posture and
+              deserves its own path rather than an `ignore:`, and it cannot share
+              one with `interface.vrf` (the same `set vdom` text inside an
+              interface block) because `_is_ignored` sees only the stripped line
+              and would swallow both.
+
+  - id: fgt_log_syslogd
+    anchor_path: logging.enable
+    regex: '^config log syslogd\d? setting\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    children:
+      - id: syslogd_status
+        regex: '^set status\s+(?P<value>enable|disable)\s*$'
+        path: logging.on
+        value: str
+      - id: syslogd_server
+        regex: '^set server\s+"?(?P<value>[^"\s]+)"?\s*$'
+        path: logging.remote_syslog
+        value: str
+      - id: syslogd_port
+        regex: '^set port\s+(?P<value>\d+)\s*$'
+        path: logging.host.port
+        value: int
+      - id: syslogd_mode
+        regex: '^set mode\s+(?P<value>udp|legacy-reliable|reliable)\s*$'
+        path: logging.host.transport
+        value: lower
+      - id: syslogd_facility
+        regex: '^set facility\s+(?P<value>\S+)\s*$'
+        path: logging.facility
+        value: lower
+      - id: syslogd_source_ip
+        regex: '^set source-ip\s+"?(?P<value>[^"\s]+)"?\s*$'
+        path: logging.source_interface
+        value: str
+      - id: syslogd_enc_algorithm
+        regex: '^set enc-algorithm\s+(?P<value>\S+)\s*$'
+        path: crypto.cipher_suite
+        value: lower
+      - id: syslogd_ssl_min_proto
+        regex: '^set ssl-min-proto-version\s+(?P<value>\S+)\s*$'
+        path: crypto.tls.version
+        value: lower
+
+  - id: fgt_log_memory
+    anchor_path: logging.buffered
+    regex: '^config log memory setting\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    note: >
+      The child splits enable/disable into two boolean patterns rather than
+      recording the word, because the anchor above already files a boolean at the
+      same path. Filed as a string the two disagreed on type — `logging.buffered`
+      read `[True, 'enable']` — and a rule written `eq true` matched only the
+      anchor while a rule written `eq 'enable'` matched only the child, so
+      whichever a mapping author picked they were reading half the evidence. This
+      block also used to have a top-level twin matching a bare `set status
+      enable`, nominally "scoped to config log memory setting"; it was not scoped,
+      it sat in the top-level pattern list, and it would have claimed the status
+      line of any stanza this pack does not model — turning an unrelated
+      subsystem being switched on into a claim that buffered logging is enabled.
+      It was deleted rather than re-noted: a stray `set status` line counting as
+      unparsed is a coverage number, but a stray `set status` line silently
+      satisfying a logging control is a wrong verdict.
+    children:
+      - id: log_memory_status_on
+        regex: '^set status\s+enable\s*$'
+        path: logging.buffered
+        value: true
+      - id: log_memory_status_off
+        regex: '^set status\s+disable\s*$'
+        path: logging.buffered
+        value: false
+
+  - id: fgt_log_setting
+    anchor_path: logging.persistent
+    regex: '^config log setting\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    note: >
+      The anchor moved off `logging.userinfo` when `set user-anonymize` was added
+      below, because that directive is the real bearer of the path: `userinfo` is a
+      boolean across six packs meaning "log records identify the user", and an
+      anchor asserting `true` merely because the section exists would have masked a
+      device that anonymises them. `logging.persistent` is the least-wrong home for
+      "a local log-behaviour section exists" — no rule reads it on this vendor —
+      and it is closer than most, since `config log setting` is where FortiOS
+      decides what the device records locally.
+    children:
+      - id: log_resolve_ip
+        regex: '^set resolve-ip\s+(?P<value>enable|disable)\s*$'
+        path: logging.origin_id
+        value: str
+      # Inverted on purpose, and the inversion is the fact. FortiOS states the
+      # setting as "anonymise the user in log records"; every other pack states it
+      # as "log records carry user information". Filing the raw word would have made
+      # `logging.userinfo eq true` mean the opposite thing on this one vendor.
+      - id: log_user_anonymize_off
+        regex: '^set user-anonymize\s+disable\s*$'
+        path: logging.userinfo
+        value: true
+      - id: log_user_anonymize_on
+        regex: '^set user-anonymize\s+enable\s*$'
+        path: logging.userinfo
+        value: false
+
+  # `config log eventfilter` is FortiOS's named log-category selector, which is
+  # what `logging discriminator` is on IOS — hence the anchor path. The section
+  # existing says nothing about which categories are on, so the anchor is inert and
+  # the two directives that decide it are children.
+  - id: fgt_log_eventfilter
+    anchor_path: logging.discriminator
+    regex: '^config log eventfilter\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    children:
+      - id: eventfilter_event_on
+        regex: '^set event\s+enable\s*$'
+        path: logging.enable
+        value: true
+      - id: eventfilter_event_off
+        regex: '^set event\s+disable\s*$'
+        path: logging.enable
+        value: false
+      - id: eventfilter_system_on
+        regex: '^set system\s+enable\s*$'
+        path: logging.config_changes
+        value: true
+      - id: eventfilter_system_off
+        regex: '^set system\s+disable\s*$'
+        path: logging.config_changes
+        value: false
+      - id: eventfilter_user_on
+        regex: '^set user\s+enable\s*$'
+        path: logging.login_success
+        value: true
+      - id: eventfilter_user_off
+        regex: '^set user\s+disable\s*$'
+        path: logging.login_success
+        value: false
+
+  - id: fgt_system_ntp
+    anchor_path: time.ntp
+    regex: '^config (?:system ntp|ntpserver)\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    note: >
+      The regex names two openers, and that is load-bearing rather than sloppy.
+      `_end_delimited` counts depth by re-matching the block's *own* regex, so a
+      nested `config ntpserver … end` that the regex does not recognise would let
+      the inner `end` close the outer section — every server, key and
+      authentication setting after it would then be attributed to nothing. Naming
+      the nested opener makes the depth count correct. It also anchors `time.ntp`
+      a second time on the inner section, which is true and harmless: both
+      statements mean "NTP is configured here".
+    children:
+      - id: ntp_ntpsync_on
+        regex: '^set ntpsync\s+enable\s*$'
+        path: time.ntp.enabled
+        value: true
+      - id: ntp_ntpsync_off
+        regex: '^set ntpsync\s+disable\s*$'
+        path: time.ntp.enabled
+        value: false
+      - id: ntp_type
+        regex: '^set type\s+(?P<value>fortiguard|custom)\s*$'
+        path: time.clock_source
+        value: lower
+      - id: ntp_syncinterval
+        regex: '^set syncinterval\s+(?P<value>\d+)\s*$'
+        path: time.ntp.max_associations
+        value: int
+      - id: ntp_source_ip
+        regex: '^set source-ip\s+"?(?P<value>[^"\s]+)"?\s*$'
+        path: time.ntp.source_interface
+        value: str
+    blocks:
+      - id: fgt_ntpserver_row
+        anchor_path: time.ntp
+        regex: '^edit\s+(?P<value>\d+)\s*$'
+        anchor_value: true
+        mode: delimited
+        end_regex: '^next\s*$'
+        note: >
+          One row per configured server. The row key is a table index rather than
+          the address, so the index is discarded — the anchor only records that a
+          server row exists — and the address itself is filed at
+          `time.ntp.server` by the child below. That is the path every other pack
+          uses for a server address (cisco_ios.yaml `ntp server`, arista_eos.yaml,
+          cisco_nxos.yaml), so `count time.ntp.server` means the same thing on a
+          FortiGate as it does on an IOS router. Filing the index there instead
+          would have made the count right by accident and every address comparison
+          wrong.
+        children:
+          - id: ntpserver_address
+            regex: '^set server\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: time.ntp.server
+            value: str
+          - id: ntpserver_authentication
+            regex: '^set authentication\s+(?P<value>enable|disable)\s*$'
+            path: time.ntp.authentication
+            value: str
+          - id: ntpserver_key_id
+            regex: '^set key-id\s+(?P<value>\d+)\s*$'
+            path: time.ntp.key_id
+            value: int
+          - id: ntpserver_key
+            regex: '^set key\s+ENC\s'
+            path: time.ntp.key
+            value: true
+          - id: ntpserver_interface_select
+            regex: '^set interface-select-method\s+(?P<value>\S+)\s*$'
+            path: time.ntp.source_interface
+            value: str
+        child_defaults:
+          - path: time.ntp.authentication
+            value: false
+            reason: >
+              a server row with no `set authentication` line accepts unauthenticated
+              time, which is the AU-8(1)/CIS finding — and it has to be an observed
+              false per server, because a device with one authenticated and one
+              unauthenticated server is non-compliant and a file-level default
+              could not say so
+
+  - id: fgt_snmp_sysinfo
+    anchor_path: snmp.enabled
+    regex: '^config system snmp sysinfo\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    children:
+      - id: snmp_sysinfo_status
+        regex: '^set status\s+(?P<value>enable|disable)\s*$'
+        path: snmp.engine_id
+        value: str
+      - id: snmp_sysinfo_description
+        regex: '^set description\s+"?(?P<value>[^"]+)"?\s*$'
+        path: snmp.chassis_id
+        value: str
+      - id: snmp_sysinfo_location
+        regex: '^set location\s+"?(?P<value>[^"]+)"?\s*$'
+        path: snmp.location
+        value: str
+      - id: snmp_sysinfo_contact
+        regex: '^set contact-info\s+"?(?P<value>[^"]+)"?\s*$'
+        path: snmp.contact
+        value: str
+
+  - id: fgt_snmp_community
+    anchor_path: snmp.view
+    regex: '^config system snmp community\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    blocks:
+      - id: fgt_snmp_community_row
+        anchor_path: snmp.community_view
+        regex: '^edit\s+(?P<value>\d+)\s*$'
+        anchor_value: str
+        mode: delimited
+        end_regex: '^next\s*$'
+        children:
+          - id: community_name
+            regex: '^set name\s+"?(?P<value>[^"]+)"?\s*$'
+            path: snmp.community
+            value: str
+          - id: community_query_v1
+            regex: '^set query-v1-status\s+enable\s*$'
+            path: snmp.version
+            value: const
+            literal: '1'
+          - id: community_query_v2c
+            regex: '^set query-v2c-status\s+enable\s*$'
+            emits:
+              - {path: snmp.version, value: const, literal: 2c}
+              - {path: snmp.community_access, value: const, literal: enable}
+          - id: community_trap_v1
+            regex: '^set trap-v1-status\s+(?P<value>enable|disable)\s*$'
+            path: snmp.notify_filter
+            value: str
+          - id: community_trap_v2c
+            regex: '^set trap-v2c-status\s+(?P<value>enable|disable)\s*$'
+            path: snmp.traps
+            value: str
+          - id: community_host_ip
+            regex: '^set ip\s+(?P<value>[\d.]+\s+[\d.]+)\s*$'
+            path: snmp.acl
+            value: str
+          - id: community_host_source
+            regex: '^set source-ip\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: snmp.source_interface
+            value: str
+
+  - id: fgt_snmp_user
+    anchor_path: snmp.user
+    regex: '^config system snmp user\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    blocks:
+      - id: fgt_snmp_user_row
+        anchor_path: snmp.group
+        regex: '^edit\s+"(?P<value>[^"]+)"\s*$'
+        anchor_value: str
+        mode: delimited
+        end_regex: '^next\s*$'
+        children:
+          - id: snmp_user_security_level
+            regex: '^set security-level\s+(?P<value>\S+)\s*$'
+            emits:
+              - {path: snmp.group_security, value: lower}
+              - {path: snmp.version, value: const, literal: v3}
+            note: >
+              A `config system snmp user` entry *is* an SNMPv3 user — FortiOS has
+              no other place to put one. Claiming the version here is what lets
+              the "only v3 is enabled" control be decided: without it the pack
+              recorded v3 credentials but never recorded that v3 was in use, so
+              the rule had to infer it from the presence of a hash algorithm.
+          - id: snmp_user_auth_proto
+            regex: '^set auth-proto\s+(?P<value>\S+)\s*$'
+            path: snmp.v3_auth
+            value: lower
+          - id: snmp_user_priv_proto
+            regex: '^set priv-proto\s+(?P<value>\S+)\s*$'
+            path: snmp.v3_priv
+            value: lower
+          - id: snmp_user_notify_hosts
+            regex: '^set notify-hosts\s+(?P<value>[\d.]+)\s*$'
+            path: snmp.trap_host
+            value: str
+
+  - id: fgt_firewall_policy
+    anchor_path: firewall.policy.name
+    regex: '^config firewall policy\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    blocks:
+      - id: fgt_policy_row
+        anchor_path: acl.numbered.entry
+        regex: '^edit\s+(?P<value>\d+)\s*$'
+        anchor_value: str
+        mode: delimited
+        end_regex: '^next\s*$'
+        children:
+          - id: policy_name
+            regex: '^set name\s+"(?P<value>[^"]+)"\s*$'
+            path: acl.name
+            value: str
+          - id: policy_action
+            regex: '^set action\s+(?P<value>accept|deny)\s*$'
+            path: acl.entry.action
+            value: lower
+          - id: policy_srcintf
+            regex: '^set srcintf\s+(?P<value>.+?)\s*$'
+            path: acl.entry.source
+            value: word_list
+          - id: policy_dstintf
+            regex: '^set dstintf\s+(?P<value>.+?)\s*$'
+            path: acl.entry.destination
+            value: word_list
+          - id: policy_srcaddr
+            regex: '^set srcaddr\s+(?P<value>.+?)\s*$'
+            path: acl.standard.entry
+            value: word_list
+          - id: policy_dstaddr
+            regex: '^set dstaddr\s+(?P<value>.+?)\s*$'
+            path: acl.extended.entry
+            value: word_list
+          - id: policy_service
+            regex: '^set service\s+(?P<value>.+?)\s*$'
+            path: acl.entry.protocol
+            value: word_list
+          - id: policy_schedule
+            regex: '^set schedule\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: acl.entry.sequence
+            value: str
+          - id: policy_logtraffic
+            regex: '^set logtraffic\s+(?P<value>all|utm|disable)\s*$'
+            path: acl.entry.log
+            value: true
+          - id: policy_nat
+            regex: '^set nat\s+(?P<value>enable|disable)\s*$'
+            path: firewall.nat.rule
+            value: str
+          - id: policy_utm_status
+            regex: '^set utm-status\s+(?P<value>enable|disable)\s*$'
+            path: firewall.inspection
+            value: str
+          - id: policy_ips_sensor
+            regex: '^set ips-sensor\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: firewall.ids_signature
+            value: str
+          - id: policy_av_profile
+            regex: '^set av-profile\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: firewall.rule.action
+            value: str
+          - id: policy_comments
+            regex: '^set comments\s+"(?P<value>[^"]+)"\s*$'
+            path: acl.entry.remark
+            value: str
+        child_defaults:
+          - path: acl.entry.log
+            value: false
+            reason: >
+              a policy with no `set logtraffic` line does not log, which is the
+              AU-12 finding — and it must be recorded as an observed false rather
+              than as a missing fact, because the rule quantifies over every policy
+
+  - id: fgt_user_radius
+    anchor_path: aaa.server.protocol
+    regex: '^config user (?:radius|tacacs\+|ldap)\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    blocks:
+      - id: fgt_radius_row
+        anchor_path: aaa.server.name
+        regex: '^edit\s+"(?P<value>[^"]+)"\s*$'
+        anchor_value: str
+        mode: delimited
+        end_regex: '^next\s*$'
+        children:
+          - id: radius_server_host
+            regex: '^set server\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: aaa.server.host
+            value: str
+          - id: radius_secondary_host
+            regex: '^set secondary-server\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: aaa.server.host
+            value: str
+          - id: radius_secret_enc
+            regex: '^set secret\s+ENC\s'
+            path: aaa.server.key_encrypted
+            value: true
+          - id: radius_auth_type
+            regex: '^set auth-type\s+(?P<value>\S+)\s*$'
+            path: aaa.server.protocol
+            value: lower
+          - id: radius_timeout
+            regex: '^set timeout\s+(?P<value>\d+)\s*$'
+            path: aaa.server.timeout
+            value: int
+          - id: radius_source_ip
+            regex: '^set source-ip\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: aaa.source_interface
+            value: str
+
+  - id: fgt_system_ha
+    anchor_path: ha.redundancy
+    regex: '^config system ha\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    children:
+      - id: ha_mode
+        regex: '^set mode\s+(?P<value>a-p|a-a|standalone)\s*$'
+        path: ha.sync
+        value: str
+      - id: ha_group_name
+        regex: '^set group-name\s+"?(?P<value>[^"]+)"?\s*$'
+        path: ha.sync
+        value: str
+      - id: ha_password
+        regex: '^set password\s+ENC\s'
+        path: crypto.key.type
+        value: true
+      - id: ha_hbdev
+        regex: '^set hbdev\s+(?P<value>.+?)\s*$'
+        path: interface.channel_group
+        value: str
+      - id: ha_override
+        regex: '^set override\s+(?P<value>enable|disable)\s*$'
+        path: ha.redundancy
+        value: str
+      - id: ha_priority
+        regex: '^set priority\s+(?P<value>\d+)\s*$'
+        path: control_plane.protection
+        value: int
+
+  - id: fgt_system_dns
+    anchor_path: service.dns
+    regex: '^config system dns\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    children:
+      - id: dns_primary
+        regex: '^set primary\s+(?P<value>[\d.]+)\s*$'
+        path: mgmt.domain_name
+        value: str
+      - id: dns_secondary
+        regex: '^set secondary\s+(?P<value>[\d.]+)\s*$'
+        path: mgmt.domain_name
+        value: str
+      - id: dns_domain
+        regex: '^set domain\s+"?(?P<value>[^"]+)"?\s*$'
+        path: mgmt.domain_name
+        value: str
+
+  # ── Sections that exist so their contents are attributable ────────────
+  # Address objects, service objects and static routes are inventory rather than
+  # posture, but they cannot simply be ignored: a policy's `srcaddr "RFC1918-BOGONS"`
+  # is only auditable if something in the parse says what that name contains. These
+  # blocks capture the object *names* and the route destinations, and send the
+  # bodies to `ignore` above.
+
+  - id: fgt_firewall_address
+    anchor_path: acl.remark
+    regex: '^config firewall (?:address|addrgrp|service custom|service group)\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    note: >
+      Four object tables share one block because they share one shape and one
+      compliance role: they are the vocabulary the policy table is written in. The
+      alternation also keeps the depth count correct if a FortiGate emits them
+      back-to-back with a nested `config` inside an entry.
+    blocks:
+      - id: fgt_address_row
+        anchor_path: acl.name
+        regex: '^edit\s+"(?P<value>[^"]+)"\s*$'
+        anchor_value: str
+        mode: delimited
+        end_regex: '^next\s*$'
+        children:
+          - id: address_member
+            regex: '^set member\s+(?P<value>.+?)\s*$'
+            path: acl.entry.source
+            value: word_list
+          - id: address_type
+            regex: '^set type\s+(?P<value>[\w-]+)\s*$'
+            path: acl.entry.protocol
+            value: lower
+          - id: address_fqdn
+            regex: '^set fqdn\s+"?(?P<value>[^"]+)"?\s*$'
+            path: acl.entry.destination
+            value: str
+          - id: address_start_ip
+            regex: '^set start-ip\s+(?P<value>[\d.]+)\s*$'
+            path: acl.entry.source
+            value: str
+          - id: address_end_ip
+            regex: '^set end-ip\s+(?P<value>[\d.]+)\s*$'
+            path: acl.entry.destination
+            value: str
+
+  - id: fgt_router_static
+    anchor_path: routing.ip_routing
+    regex: '^config router static\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    blocks:
+      - id: fgt_static_route_row
+        anchor_path: routing.static_route
+        regex: '^edit\s+(?P<value>\d+)\s*$'
+        anchor_value: str
+        mode: delimited
+        end_regex: '^next\s*$'
+        children:
+          - id: static_route_dst
+            regex: '^set dst\s+(?P<value>[\d.]+\s+[\d.]+)\s*$'
+            path: routing.static_route
+            value: str
+          - id: static_route_gateway
+            regex: '^set gateway\s+(?P<value>[\d.]+)\s*$'
+            path: routing.default_route
+            value: str
+          - id: static_route_distance
+            regex: '^set distance\s+(?P<value>\d+)\s*$'
+            path: acl.entry.sequence
+            value: int
+          - id: static_route_blackhole
+            regex: '^set blackhole\s+(?P<value>enable|disable)\s*$'
+            path: routing.urpf
+            value: str
+        note: >
+          A route row with a `gateway` and no `dst` is the default route — FortiOS
+          omits `dst 0.0.0.0 0.0.0.0` rather than writing it. So `gateway` maps to
+          `routing.default_route` and `dst` to `routing.static_route`, and a row
+          carrying both produces both facts, which is the truthful reading.
+
+  - id: fgt_session_ttl
+    anchor_path: firewall.session_timeout
+    regex: '^config system session-ttl\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    children:
+      - id: session_ttl_default
+        regex: '^set default\s+(?P<value>\d+)\s*$'
+        path: firewall.session_timeout
+        value: int
+
+  - id: fgt_dhcp_server
+    anchor_path: service.dhcp
+    regex: '^config system dhcp server\s*$'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    blocks:
+      - id: fgt_dhcp_scope_row
+        anchor_path: interface.dhcp_snooping_trust
+        regex: '^edit\s+(?P<value>\d+)\s*$'
+        anchor_value: str
+        mode: delimited
+        end_regex: '^next\s*$'
+        children:
+          - id: dhcp_scope_interface
+            regex: '^set interface\s+"?(?P<value>[^"\s]+)"?\s*$'
+            path: interface.name
+            value: str
+          - id: dhcp_scope_status
+            regex: '^set dhcp-server\s+(?P<value>enable|disable)\s*$'
+            path: service.dhcp
+            value: str
+          - id: dhcp_scope_lease
+            regex: '^set lease-time\s+(?P<value>\d+)\s*$'
+            path: service.dhcp_snooping
+            value: int
+
+  - id: fgt_replacemsg_admin
+    anchor_path: mgmt.exec_banner
+    regex: '^config system replacemsg admin\s'
+    anchor_value: true
+    mode: delimited
+    end_regex: '^end\s*$'
+    children:
+      - id: replacemsg_buffer_text
+        regex: '^set buffer\s+"(?P<value>.{10,}?)"?\s*$'
+        path: mgmt.banner.text
+        value: str
+
+# FortiOS ships far more locked down than IOS, and the defaults below say so
+# explicitly rather than leaving a rule to guess. Each is a documented factory
+# default of FortiOS 7.x, not an assumption: `show` omits a setting only when it
+# still holds its factory value, which is what makes these safe to assert.
+defaults:
+  mgmt.telnet.enabled:
+    value: false
+    reason: >
+      `admin-telnet` defaults to disable on FortiOS 7.x, and telnet is absent from
+      the factory `allowaccess` list on every interface
+  crypto.fips_mode:
+    value: false
+    reason: FIPS-CC mode is off unless `set fips-cc-mode enable` is present
+  crypto.cipher_suite:
+    value: disable
+    reason: >
+      `strong-crypto` defaults to disable, which leaves SHA-1 and the weak SSH
+      ciphers enabled — the first control the CIS benchmark checks
+  mgmt.login_banner:
+    value: false
+    reason: the pre-login disclaimer is off until `set pre-login-banner enable`
+  mgmt.motd_banner:
+    value: false
+    reason: the post-login banner is off until `set post-login-banner enable`
+  logging.enable:
+    value: false
+    reason: no `config log syslogd setting` section is present
+  logging.config_changes:
+    value: false
+    reason: >
+      administrative event logging is off until `set admin-audit-log enable` is
+      configured
+  snmp.enabled:
+    value: false
+    reason: >
+      the SNMP agent is disabled at factory defaults and no `config system snmp
+      sysinfo` section enables it here
+  time.ntp.authentication:
+    value: false
+    reason: NTP authentication is off unless `set authentication enable` is present
+  service.password_recovery:
+    value: true
+    reason: >
+      the `maintainer` console-recovery account is enabled by default, so a
+      configuration that does not disable it leaves physical-access recovery open
+  ha.redundancy:
+    value: standalone
+    reason: no `config system ha` section is present, so the unit is standalone

@@ -1,0 +1,1622 @@
+# Cisco NX-OS pattern pack.
+#
+# NX-OS looks like IOS and is not. The differences that matter to a compliance
+# parser are narrow, load-bearing, and the reason this is a separate file rather
+# than an alias of cisco_ios.yaml:
+#
+# 1. **Features are off until declared.** `feature ssh`, `feature lldp`,
+#    `feature bgp` — an NX-OS box does not run a subsystem whose `feature` line is
+#    absent, so "is telnet enabled" is answered by the presence of `feature
+#    telnet`, not by the absence of a `no` prefix. That inverts the polarity of
+#    half a dozen controls relative to IOS, and it is why the `defaults:` block at
+#    the end of this file makes stronger claims than an IOS pack could: on NX-OS,
+#    silence is the platform stating the subsystem does not exist.
+# 2. **Roles replace privilege levels.** `username x role network-admin` is the
+#    NX-OS spelling of `username x privilege 15`, and `role name` blocks define
+#    custom roles. There is no 0-15 privilege ladder.
+# 3. **`system` commands replace `service` commands.** `system default switchport`,
+#    `system login block-for`, `system jumbomtu`.
+# 4. **CoPP is a first-class object.** `copp profile strict` in one line replaces
+#    the class-map / policy-map / service-policy triple an IOS device needs.
+# 5. **Password policy is one line, not a block** — `password strength-check`.
+# 6. **`line console` and `line vty` are singletons.** There is no `line vty 0 4`
+#    range on NX-OS; one block configures every virtual terminal.
+#
+# Detection is the delicate part, because an NX-OS config shares `interface`,
+# `line vty`, `snmp-server`, `logging` and `router bgp` with IOS verbatim.
+# `feature ` is the discriminator — it appears in no other platform's syntax and in
+# essentially every NX-OS configuration — and cisco_ios.yaml already lists
+# `feature nx-os` as an anti-marker, so the two cannot poach each other.
+
+vendor: cisco_nxos
+os_family: nxos
+parser_id: cisco_nxos_patterns@1
+description: >
+  Cisco Nexus NX-OS 7.x/9.x/10.x configuration as produced by `show
+  running-config`. Covers the CIS Cisco NX-OS benchmark surface and the DISA Cisco
+  NX-OS Switch NDM / L2S STIG check surfaces.
+
+comment_prefixes:
+  - "!"
+
+case_insensitive: true
+
+detect:
+  min_hits: 3
+  markers:
+    # ── Shape: only NX-OS is written this way ──────────────────────────
+    - "\nfeature "
+    - "\nno feature "
+    - "!command: show running-config"
+    - "nxos.9."
+    - "nxos64"
+    - "hardware access-list tcam"
+    - "system default switchport"
+    - "\ncopp profile"
+    - "\nrole name"
+    - "\nvrf context"
+    - "\nswitchname "
+    - "boot nxos"
+    # ── Surface: NX-OS spellings of common settings ────────────────────
+    - "role network-admin"
+    - "role network-operator"
+    - "password strength-check"
+    - "system login block-for"
+    - "feature ssh"
+    - "feature lldp"
+    - "feature interface-vlan"
+    - "spanning-tree port type edge"
+    - "vrf member"
+    - "logging server"
+  # `feature ` is present in every NX-OS running-config and in no other dialect;
+  # `role ` is the NX-OS authorisation vocabulary. Together they cannot be an IOS,
+  # IOS-XE, ASA, EOS, Junos or FortiOS file.
+  strong_markers:
+    - "feature "
+    - "role "
+  strong_bonus: 12
+  anti_markers:
+    - "boot-start-marker"             # cisco_ios / cisco_xe
+    - "asa version"                   # cisco_asa
+    - "host-name"                     # juniper_junos
+    - "config system global"          # fortinet
+    - "set deviceconfig"              # paloalto_panos
+    - "management api http-commands"  # arista_eos
+  filename_hints:
+    - "nxos"
+    - "nexus"
+    - "n9k"
+    - "n7k"
+    - "n5k"
+
+ignore:
+  - '^!'
+  - '^\s*$'
+  - '^end\s*$'
+  - '^exit\s*$'
+  # NX-OS writes a resource-template and TCAM-carving preamble on every switch. It
+  # is hardware capacity planning; no control in the four frameworks reads it, and
+  # it is long enough that leaving it in would bury the gaps that do matter.
+  - '^hardware access-list tcam region\b'
+  - '^hardware profile\b'
+  - '^install feature-set\b'
+  - '^slot \d+'
+  - '^\s*provision model\b'
+  - '^rmon event\b'
+  - '^vdc \S+ id \d+'
+  - '^\s*limit-resource\b'
+  - '^\s*allocate interface\b'
+  - '^\s*allow feature-set\b'
+  # The kickstart image is the same statement about the same software as `boot
+  # nxos`, which is already captured; on 9.x it is not even a separate file.
+  - '^boot kickstart\b'
+  # Serial-line electrical parameters on `line console`. They decide baud rate and
+  # framing, not access control.
+  - '^\s*speed\s+\d+\s*$'
+  - '^\s*databits\s+\d+\s*$'
+  - '^\s*stopbits\s+\d+\s*$'
+  - '^\s*parity\s+\S+\s*$'
+  # Port-channel membership is topology. Which physical ports form a bundle does
+  # not change the posture of either the bundle or the ports, and PRAMAN derives
+  # topology from addresses rather than from bundle membership.
+  - '^\s*channel-group\s+\d+'
+  # `logging level <subsystem> <severity>` for every subsystem except `authpri`,
+  # which has its own pattern above. This is a real setting — it decides how
+  # chatty one NX-OS component is — but no control in the four frameworks reads a
+  # per-subsystem severity, and the path it used to land on (`logging.facility`)
+  # holds a different quantity on six other packs. Ignoring it is the honest
+  # answer; filing it somewhere close is what produced the defect recorded in
+  # docs/GAPS.md §3.
+  - '^logging level (?!authpri\b)\S+\s+[0-7]\s*$'
+  # `feature scp-server` and `feature sftp-server` make the switch a file *server*
+  # so an operator can pull files off it. They used to emit `file.config_archive`,
+  # which on IOS (`archive`), Junos and FortiOS means the device archives its own
+  # configuration — the property DISA V-220514 tests. A switch with SCP enabled
+  # and no backup automation would have reported that control as satisfied. There
+  # is no canonical path for "offers a file-transfer service" and no control asks
+  # for one, so these are ignored rather than filed near the truth.
+  - '^feature s(?:c|ft)p-server\s*$'
+  # Cosmetic role metadata. The auditable content of a role is its `rule` lines.
+  - '^\s*description\s+role\b'
+
+patterns:
+
+  # ── Device identity ───────────────────────────────────────────────────
+
+  - id: nxos_version
+    regex: '^version\s+(?P<value>\d+\.\d+\([\dA-Za-z.]+\)[\w.]*)\s*$'
+    path: device.os_version
+    value: str
+
+  - id: nxos_hostname
+    regex: '^(?:hostname|switchname)\s+(?P<value>\S+)\s*$'
+    path: device.hostname
+    value: str
+    note: >
+      NX-OS accepts both spellings and treats them as one setting. Two patterns
+      would produce two facts at one path on a config that used both, and the two
+      regexes could then drift, so it is one alternation.
+
+  - id: nxos_boot_system
+    regex: '^boot nxos\s+(?P<value>\S+)'
+    emits:
+      - {path: device.boot_system, value: str}
+      - {path: image.file, value: str}
+
+  - id: nxos_system_jumbomtu
+    regex: '^system jumbomtu\s+(?P<value>\d+)\s*$'
+    path: interface.mtu
+    value: int
+
+  # ── Features: the NX-OS polarity inversion ────────────────────────────
+  # On NX-OS a subsystem that is not declared is not running. `feature telnet`
+  # present is the finding; `feature telnet` absent is compliance. That is why
+  # these are paired with entries in `defaults:` rather than left to a rule to
+  # infer from silence — silence here is evidence, not a gap.
+
+  - id: nxos_feature_telnet
+    regex: '^feature telnet\s*$'
+    path: mgmt.telnet.enabled
+    value: true
+    note: >
+      The whole of telnet on NX-OS. There is no `transport input telnet` to find on
+      a line and no `no ip telnet` to look for: the daemon exists if and only if
+      this line does.
+
+  - id: nxos_no_feature_telnet
+    regex: '^no feature telnet\s*$'
+    path: mgmt.telnet.enabled
+    value: false
+
+  - id: nxos_feature_ssh
+    regex: '^feature ssh\s*$'
+    path: mgmt.ssh.version
+    value: const
+    literal: 2
+    note: >
+      NX-OS has no SSHv1. `feature ssh` enables SSHv2 and nothing else, so the
+      canonical fact a CIS or STIG rule reads — "SSH protocol version 2" — is
+      established by the feature line itself rather than by an `ip ssh version`
+      statement that does not exist on this platform.
+
+  - id: nxos_feature_lldp
+    regex: '^feature lldp\s*$'
+    path: service.lldp
+    value: true
+
+  - id: nxos_feature_tacacs
+    regex: '^feature tacacs\+\s*$'
+    path: aaa.new_model
+    value: true
+    note: >
+      NX-OS has no `aaa new-model`; AAA is always on and the real question is
+      whether an external authenticator is configured at all. `feature tacacs+` is
+      the closest true statement, so the IA-2 rule that reads `aaa.new_model` works
+      unchanged across IOS and NX-OS.
+
+  - id: nxos_feature_bash_shell
+    regex: '^feature bash-shell\s*$'
+    path: service.rcmd
+    value: true
+    note: >
+      `bash-shell` drops a network-admin to a Linux shell on the supervisor. DISA
+      treats it as a prohibited service on a production switch; it is recorded at
+      the path the other remote-shell services use so one rule covers rsh, rcp and
+      this.
+
+  - id: nxos_feature_nxapi
+    regex: '^feature nxapi\s*$'
+    path: mgmt.http.server_enabled
+    value: true
+
+  - id: nxos_feature_netconf
+    regex: '^feature netconf\s*$'
+    path: mgmt.netconf.enabled
+    value: true
+
+  - id: nxos_feature_restconf
+    regex: '^feature restconf\s*$'
+    path: mgmt.restconf.enabled
+    value: true
+
+  - id: nxos_feature_dhcp
+    regex: '^feature dhcp\s*$'
+    path: service.dhcp
+    value: true
+
+  - id: nxos_feature_bgp
+    regex: '^feature bgp\s*$'
+    path: routing.ip_routing
+    value: true
+
+  - id: nxos_feature_ospf
+    regex: '^feature ospf\s*$'
+    path: routing.ospf.process
+    value: true
+
+  - id: nxos_feature_interface_vlan
+    regex: '^feature interface-vlan\s*$'
+    path: routing.ip_routing
+    value: true
+    note: >
+      An SVI is a layer-3 interface, so this feature is the switch stating that it
+      routes between VLANs rather than only bridging within them. Recorded as IP
+      routing because that is what it enables, and not as `vlan.state`, which means
+      something else entirely (per-VLAN active/suspend).
+
+  - id: nxos_feature_dot1x
+    regex: '^feature dot1x\s*$'
+    path: interface.port_security
+    value: true
+
+  - id: nxos_feature_hsrp
+    regex: '^feature hsrp\s*$'
+    path: ha.redundancy
+    value: true
+
+  - id: nxos_feature_vpc
+    regex: '^feature vpc\s*$'
+    path: ha.sync
+    value: true
+
+  - id: nxos_feature_ntp
+    regex: '^feature ntp\s*$'
+    path: time.ntp.enabled
+    value: true
+
+  # ── NX-API and the management plane ───────────────────────────────────
+
+  - id: nxos_nxapi_http_port
+    regex: '^nxapi http port\s+(?P<value>\d+)\s*$'
+    path: mgmt.http.server_enabled
+    value: true
+
+  - id: nxos_nxapi_no_http
+    regex: '^no nxapi http\s*$'
+    path: mgmt.http.server_enabled
+    value: false
+
+  - id: nxos_nxapi_https_port
+    regex: '^nxapi https port\s+(?P<value>\d+)\s*$'
+    path: mgmt.http.secure_server_enabled
+    value: true
+
+  - id: nxos_nxapi_certificate
+    regex: '^nxapi certificate\s+\S+\s+(?P<value>\S+)'
+    path: crypto.pki.trustpoint
+    value: str
+
+  - id: nxos_nxapi_idle_timeout
+    regex: '^nxapi idle-timeout\s+(?P<value>\d+)\s*$'
+    path: mgmt.http.idle_timeout
+    value: int
+
+  - id: nxos_ssh_key_rsa
+    regex: '^ssh key rsa\s+(?P<value>\d+)'
+    emits:
+      - {path: mgmt.ssh.hostkey_bits, value: int}
+      - {path: crypto.key.size, value: int}
+      - {path: crypto.key.type, value: const, literal: rsa}
+
+  - id: nxos_ssh_key_ecdsa
+    regex: '^ssh key ecdsa\s+(?P<value>\d+)'
+    emits:
+      - {path: crypto.key.size, value: int}
+      - {path: crypto.key.type, value: const, literal: ecdsa}
+
+  - id: nxos_ssh_login_attempts
+    regex: '^ssh login-attempts\s+(?P<value>\d+)\s*$'
+    path: mgmt.ssh.maxretries
+    value: int
+
+  - id: nxos_ssh_macs
+    regex: '^ssh macs\s+(?P<value>.+?)\s*$'
+    path: mgmt.ssh.mac
+    value: lower
+    note: >
+      The whole algorithm list as written, lower-cased, not one fact per
+      algorithm: DISA V-220488 and V-220503 both test that the configured set is
+      FIPS-validated HMAC, and a rule reading `contains hmac-sha2` on the list is
+      answering that question. Splitting it would make "which algorithms are
+      present" easy and "is anything weak also present" hard, and the second is
+      the one the control turns on.
+
+  - id: nxos_ssh_ciphers
+    regex: '^ssh ciphers\s+(?P<value>.+?)\s*$'
+    path: mgmt.ssh.cipher
+    value: lower
+    note: >
+      NX-OS 10.x names the cipher list explicitly; earlier releases only offer the
+      `ssh cipher-mode weak` toggle below, which is why this path holds either an
+      algorithm list or the words `strong`/`weak` depending on release. Both forms
+      are DISA's own: V-220504's example is `ssh ciphers aes128-ctr aes256-ctr`,
+      and a device configured that way emitted nothing at all until this pattern
+      existed — a missing fact that the rule would have read as a finding.
+
+  - id: nxos_no_ssh_cipher_weak
+    regex: '^no ssh cipher-mode weak\s*$'
+    path: mgmt.ssh.cipher
+    value: const
+    literal: strong
+
+  - id: nxos_ssh_cipher_weak
+    regex: '^ssh cipher-mode weak\s*$'
+    path: mgmt.ssh.cipher
+    value: const
+    literal: weak
+
+  - id: nxos_ip_domain_name
+    regex: '^ip domain-name\s+(?P<value>\S+)\s*$'
+    path: mgmt.domain_name
+    value: str
+
+  - id: nxos_no_ip_domain_lookup
+    regex: '^no ip domain-lookup\s*$'
+    path: service.dns
+    value: false
+
+  - id: nxos_ip_name_server
+    regex: '^ip name-server\s+(?P<value>[\d.a-fA-F:]+)'
+    path: service.dns
+    value: true
+
+  # ── Authentication, authorisation and accounting ──────────────────────
+
+  - id: nxos_no_aaa_login_fallback_local
+    regex: '^no aaa authentication login default fallback error local\s*$'
+    path: aaa.local_fallback
+    value: false
+    note: >
+      Fallback to a local account when every AAA server is unreachable is on by
+      default on NX-OS, so this negation is the only line in a configuration that
+      can turn it off — and it is the exact line DISA V-220487 Step 2 tells the
+      reviewer to look for: "The fallback is enabled by default; hence the above
+      command should not be seen in the configuration."
+
+      The pattern must come before `nxos_aaa_authentication_login_default`, which
+      would otherwise be tried first on a `no aaa authentication login default …`
+      line; it does not match one (its regex is anchored at `aaa`), but the
+      ordering is stated rather than relied on.
+
+  - id: nxos_aaa_authentication_login_default
+    regex: '^aaa authentication login default\s+(?P<value>group \S+.*?|local)\s*$'
+    path: aaa.authentication_login
+    value: str
+
+  - id: nxos_aaa_authentication_login_console
+    regex: '^aaa authentication login console\s+(?P<value>group \S+.*?|local)\s*$'
+    path: line.console.login_auth
+    value: str
+
+  - id: nxos_aaa_authentication_login_error_enable
+    regex: '^aaa authentication login error-enable\s*$'
+    path: aaa.local_fallback
+    value: true
+    note: >
+      Without this, an NX-OS switch whose TACACS+ servers are unreachable refuses
+      every login including the console — an availability failure dressed as a
+      security control. With it, local accounts take over. CIS asks for it
+      precisely because the alternative is a switch nobody can reach during the
+      outage they need it for.
+
+  - id: nxos_aaa_authentication_login_ascii_auth
+    regex: '^aaa authentication login ascii-authentication\s*$'
+    path: aaa.authentication_order
+    value: const
+    literal: ascii
+
+  - id: nxos_aaa_authorization_commands
+    regex: '^aaa authorization commands default\s+(?P<value>.+?)\s*$'
+    path: aaa.authorization_commands
+    value: str
+
+  - id: nxos_aaa_authorization_config_commands
+    regex: '^aaa authorization config-commands default\s+(?P<value>.+?)\s*$'
+    path: aaa.authorization_exec
+    value: str
+
+  - id: nxos_aaa_accounting_default
+    regex: '^aaa accounting default\s+(?P<value>.+?)\s*$'
+    emits:
+      - {path: aaa.accounting_commands, value: str}
+      - {path: logging.commands, value: true}
+      - {path: logging.config_changes, value: true}
+    note: >
+      NX-OS has no `archive log config` and no per-event logging toggles. It
+      records administrative activity one way — as accounting records shipped to
+      the AAA server — and DISA leans on that single line for eleven of this
+      STIG's controls, from account creation through privileged activity. Each of
+      those checks quotes the same note: "Cisco NX-OS devices report configuration
+      activity to TACACS+ or RADIUS servers in the form of accounting records."
+
+      So the line asserts the two booleans the other packs use for those
+      properties, `logging.commands` and `logging.config_changes`, alongside the
+      raw `aaa.accounting_commands` string. That is the publisher's own reading of
+      what the statement means, not an inference: V-220495's check text
+      introduces this exact configuration with "the configuration example below
+      will log all configuration changes".
+
+      What it does *not* assert is that the named group has a reachable server —
+      step 2 of every one of those checks. The group name here and the server list
+      under `aaa group server` are separate facts with no binding between them,
+      which is what the `cross_reference` condition type in
+      docs/PRODUCTION-ROADMAP.md §3 exists to fix. Until it lands, the rules test
+      the weaker "accounting is configured and at least one AAA server is defined"
+      and say so.
+
+  - id: nxos_aaa_group_server
+    regex: '^aaa group server (?P<proto>tacacs\+|radius)\s+(?P<value>\S+)\s*$'
+    emits:
+      - {path: aaa.server.group, value: str, group: value}
+      - {path: aaa.server.protocol, value: lower, group: proto}
+
+  - id: nxos_tacacs_host_key_type
+    regex: '^(?:tacacs|radius)-server host\s+(?P<value>[\d.a-fA-F:]+)\s+key\s+(?P<enc>\d)\s'
+    emits:
+      - {path: aaa.server.host, value: str, group: value}
+      - {path: aaa.server.key_encrypted, value: true}
+    note: >
+      Type 7 is Vigenère and reversible in one line of Python; type 6 is AES and is
+      what NX-OS offers instead. The key itself is never emitted — only that one is
+      configured, which is the whole of what IA-5(1) asks about a shared secret.
+
+  - id: nxos_tacacs_host
+    regex: '^(?:tacacs|radius)-server host\s+(?P<value>[\d.a-fA-F:]+)'
+    path: aaa.server.host
+    value: str
+
+  - id: nxos_tacacs_key_global
+    regex: '^(?:tacacs|radius)-server key\s+\d\s'
+    path: aaa.server.key_encrypted
+    value: true
+
+  - id: nxos_tacacs_timeout
+    regex: '^(?:tacacs|radius)-server timeout\s+(?P<value>\d+)\s*$'
+    path: aaa.server.timeout
+    value: int
+
+  - id: nxos_tacacs_source_interface
+    regex: '^ip (?:tacacs|radius) source-interface\s+(?P<value>\S+)\s*$'
+    path: aaa.source_interface
+    value: str
+
+  - id: nxos_system_login_block_for
+    regex: '^system login block-for\s+(?P<value>\d+)\s+attempts\s+(?P<attempts>\d+)'
+    emits:
+      - {path: aaa.login_block, value: int, group: value}
+      - {path: aaa.authentication_attempts, value: int, group: attempts}
+    note: >
+      One line carrying two distinct controls — how long the switch stops accepting
+      logins, and after how many failures. Emitting both from one match is what
+      `emits` is for; two patterns would be one regex copied with a different
+      capture group, and the copies could then drift.
+
+  - id: nxos_password_strength_check
+    regex: '^password strength-check\s*$'
+    path: mgmt.password_policy.complexity
+    value: true
+
+  - id: nxos_no_password_strength_check
+    regex: '^no password strength-check\s*$'
+    path: mgmt.password_policy.complexity
+    value: false
+
+  - id: nxos_userpassphrase_min
+    regex: '^userpassphrase min-length\s+(?P<value>\d+)'
+    path: mgmt.password_policy.min_length
+    value: int
+
+  - id: nxos_userpassphrase_max
+    regex: '^userpassphrase max-length\s+(?P<value>\d+)'
+    path: mgmt.password_policy.max_length
+    value: int
+
+  - id: nxos_userpassphrase_lifetime
+    regex: '^userpassphrase (?:default-)?lifetime\s+(?P<value>\d+)'
+    path: mgmt.password_policy.lifetime
+    value: int
+
+  - id: nxos_userpassphrase_gracetime
+    regex: '^userpassphrase (?:default-)?(?:warntime|gracetime)\s+(?P<value>\d+)'
+    path: mgmt.password_policy.history
+    value: int
+
+  - id: nxos_username_role
+    regex: '^username\s+(?P<name>\S+)\s+.*?\brole\s+(?P<value>\S+)'
+    emits:
+      - {path: mgmt.local_user.privilege, value: str, group: value}
+      - {path: mgmt.local_user.name, value: str, group: name}
+    note: >
+      `role network-admin` is NX-OS's `privilege 15`. Written to the same canonical
+      path so "how many full-privilege local accounts exist" is one rule across
+      IOS, NX-OS and EOS — the rule compares against a per-platform value list held
+      in the rule pack, which is data, not code.
+
+  - id: nxos_username_password_type5
+    regex: '^username\s+\S+\s+password 5\s'
+    emits:
+      - {path: mgmt.local_user.hash_type, value: const, literal: 5}
+      - {path: mgmt.local_user.secret, value: true}
+
+  - id: nxos_username_password_type0
+    regex: '^username\s+\S+\s+password 0\s'
+    emits:
+      - {path: mgmt.local_user.hash_type, value: const, literal: 0}
+      - {path: mgmt.local_user.secret, value: true}
+    note: >
+      Type 0 is plaintext. NX-OS accepts it on input and rewrites it hashed on the
+      next save, so a running-config still showing type 0 was captured between the
+      two — which is itself the finding, because it means the credential travelled
+      in the clear to get there.
+
+  - id: nxos_username_sshkey
+    regex: '^username\s+\S+\s+sshkey\s+(?P<value>ssh-\S+)'
+    path: mgmt.local_user.ssh_key
+    value: str
+
+  # ── Logging ───────────────────────────────────────────────────────────
+
+  - id: nxos_logging_level_authpri
+    regex: '^logging level authpri\s+(?P<value>[0-7])\s*$'
+    emits:
+      - {path: logging.login_success, value: true}
+      - {path: logging.login_failure, value: true}
+    note: >
+      `logging level <facility> <severity>` sets the syslog severity threshold for
+      one NX-OS subsystem. The subsystem name used to be filed at
+      `logging.facility`, which on six other packs holds the RFC 5424 *facility
+      code* — `local7` on IOS and EOS, an integer on the ASA. A subsystem name and
+      a facility code are different quantities that share an English word: exactly
+      the collision recorded for Junos in docs/GAPS.md §3, found a second time
+      here. No rule read either path, so no verdict moved — the cost was that the
+      one subsystem a STIG does read had nowhere correct to land.
+
+      `authpri` is that subsystem. It carries NX-OS's authentication and
+      privilege messages, and DISA cites this single line as the entire check for
+      V-220508 (audit records on successful and unsuccessful logon attempts) and
+      again for V-220510 (start and end time of administrator access). So it
+      decomposes into the two booleans four other packs already emit for the same
+      property — `logging.login_success` and `logging.login_failure` — rather than
+      into a path named after the wrong quantity.
+
+      The severity is deliberately not emitted here. `logging.trap_level` is the
+      threshold for the *syslog destination*, set by `logging server`; a
+      per-subsystem threshold is a different number and writing it to the same
+      path would repeat the mistake this pattern exists to undo. Every other
+      subsystem name is ignored rather than filed somewhere close — see the
+      `logging level` entry in `ignore:`.
+
+  - id: nxos_logging_server_facility
+    regex: >-
+      ^logging server\s+(?P<host>[\d.a-fA-F:]+|[\w.-]+)\s+(?P<sev>[0-7])\s+.*\bfacility\s+(?P<value>\S+)
+    emits:
+      - {path: logging.remote_syslog, value: str, group: host}
+      - {path: logging.trap_level, value: int, group: sev}
+      - {path: logging.facility, value: lower, group: value}
+      - {path: logging.enable, value: true}
+    note: >
+      This is the NX-OS statement that really does carry a syslog facility code,
+      and it has to be matched before `nxos_logging_server_severity` because that
+      pattern's regex is a prefix of this one and first match wins.
+
+  - id: nxos_logging_server_severity
+    regex: '^logging server\s+(?P<host>[\d.a-fA-F:]+|[\w.-]+)\s+(?P<value>[0-7])\b'
+    emits:
+      - {path: logging.remote_syslog, value: str, group: host}
+      - {path: logging.trap_level, value: int, group: value}
+      - {path: logging.enable, value: true}
+
+  - id: nxos_logging_server
+    regex: '^logging server\s+(?P<value>[\d.a-fA-F:]+|[\w.-]+)'
+    emits:
+      - {path: logging.remote_syslog, value: str}
+      - {path: logging.enable, value: true}
+
+  - id: nxos_logging_source_interface
+    regex: '^logging source-interface\s+(?P<value>\S+)\s*$'
+    path: logging.source_interface
+    value: str
+
+  - id: nxos_logging_timestamp
+    regex: '^logging timestamp\s+(?P<value>\S+)\s*$'
+    path: logging.timestamps
+    value: lower
+
+  - id: nxos_logging_logfile
+    regex: '^logging logfile\s+\S+\s+(?P<value>[0-7])(?:\s+size\s+(?P<size>\d+))?'
+    emits:
+      - {path: logging.buffered, value: int, group: value}
+      - {path: logging.buffered_size, value: int, group: size}
+
+  - id: nxos_logging_monitor
+    regex: '^logging monitor\s+(?P<value>[0-7])\s*$'
+    path: logging.monitor
+    value: int
+
+  - id: nxos_no_logging_console
+    regex: '^no logging console\s*$'
+    path: logging.console
+    value: false
+
+  - id: nxos_logging_console_level
+    regex: '^logging console\s+(?P<value>[0-7])\s*$'
+    path: logging.console
+    value: int
+
+  - id: nxos_logging_event_link
+    regex: '^logging event link-status default\s*$'
+    path: logging.userinfo
+    value: true
+
+  - id: nxos_logging_origin_id
+    regex: '^logging origin-id\s+(?P<value>\S+)'
+    path: logging.origin_id
+    value: lower
+
+  - id: nxos_no_logging_rate_limit
+    regex: '^no logging rate-limit\s*$'
+    path: logging.count
+    value: false
+
+  # ── Time ──────────────────────────────────────────────────────────────
+
+  - id: nxos_ntp_server_key
+    regex: '^ntp server\s+(?P<value>[\d.a-fA-F:]+|[\w.-]+)\s+(?:use-vrf \S+\s+)?key\s+(?P<key>\d+)'
+    emits:
+      - {path: time.ntp.server, value: str, group: value}
+      - {path: time.ntp.key_id, value: int, group: key}
+      - {path: time.ntp.authentication, value: true}
+      - {path: time.ntp, value: true}
+
+  - id: nxos_ntp_server
+    regex: '^ntp server\s+(?P<value>[\d.a-fA-F:]+|[\w.-]+)'
+    emits:
+      - {path: time.ntp.server, value: str}
+      - {path: time.ntp, value: true}
+
+  - id: nxos_ntp_authentication_key
+    regex: '^ntp authentication-key\s+(?P<id>\d+)\s+(?P<alg>md5|sha1|sha256)\s'
+    emits:
+      - {path: time.ntp.key_id, value: int, group: id}
+      - {path: time.ntp.key, value: lower, group: alg}
+    note: >
+      `time.ntp.key` holds the digest algorithm, never the key number and never
+      the key material. This pack used to file the *number* there, which put it
+      in direct conflict with cisco_ios.yaml's `ntp_authentication_key` — the
+      same path meaning `md5` on one platform and `7` on another, so a rule
+      written once could not be true on both. The ASA pack carried the identical
+      defect and was corrected the same way; the reasoning is recorded on
+      `stig-asa-ndm-v220152` in rules/mappings/disa_stig/cisco_asa_ndm_v2r5.yaml.
+
+      The number now lands on `time.ntp.key_id`, alongside the id that
+      `nxos_ntp_server_key` reads off each `ntp server ... key N` line. Recording
+      the algorithm is what makes DISA V-220502 decidable at all: that control is
+      a permanent finding on NX-OS precisely because the algorithm can only be
+      MD5, and a rule cannot state that about a fact holding an integer.
+
+  - id: nxos_ntp_trusted_key
+    regex: '^ntp trusted-key\s+(?P<value>\d+)\s*$'
+    path: time.ntp.trusted_keys
+    value: int
+
+  - id: nxos_ntp_authenticate
+    regex: '^ntp authenticate\s*$'
+    path: time.ntp.authentication
+    value: true
+
+  - id: nxos_ntp_source_interface
+    regex: '^ntp source-interface\s+(?P<value>\S+)\s*$'
+    path: time.ntp.source_interface
+    value: str
+
+  - id: nxos_ntp_source
+    regex: '^ntp source\s+(?P<value>[\d.a-fA-F:]+)\s*$'
+    path: time.ntp.source
+    value: str
+
+  - id: nxos_ntp_access_group
+    regex: '^ntp access-group\s+(?P<value>.+?)\s*$'
+    path: time.ntp.access_group
+    value: str
+
+  - id: nxos_ntp_master
+    regex: '^ntp master\s+(?P<value>\d+)\s*$'
+    path: time.clock_source
+    value: int
+
+  - id: nxos_clock_timezone
+    regex: '^clock timezone\s+(?P<value>\S+)'
+    path: time.timezone
+    value: str
+
+  # ── SNMP ──────────────────────────────────────────────────────────────
+
+  - id: nxos_snmp_community_use_acl
+    regex: '^snmp-server community\s+\S+\s+use-(?:ipv4)?acl\s+(?P<value>\S+)'
+    path: snmp.acl
+    value: str
+
+  - id: nxos_snmp_community
+    regex: '^snmp-server community\s+(?P<value>\S+)\s+group\s+(?P<access>\S+)'
+    emits:
+      - {path: snmp.community, value: str, group: value}
+      - {path: snmp.community_access, value: str, group: access}
+      - {path: snmp.enabled, value: true}
+    note: >
+      NX-OS expresses read-only versus read-write as a *group* — `network-operator`
+      versus `network-admin` — where IOS writes `RO` or `RW`. Both land on
+      `snmp.community_access`, and the rule deciding whether write access is
+      permitted compares against a per-vendor value list held in the rule pack.
+
+  - id: nxos_snmp_user_auth
+    regex: >-
+      ^snmp-server user\s+(?P<value>\S+)\s+(?P<grp>\S+)\s+auth\s+(?P<auth>\S+)\s+\S+(?:\s+priv\s+(?P<priv>\S+))?
+    emits:
+      - {path: snmp.user, value: str, group: value}
+      - {path: snmp.group, value: str, group: grp}
+      - {path: snmp.v3_auth, value: lower, group: auth}
+      - {path: snmp.v3_priv, value: lower, group: priv}
+      - {path: snmp.version, value: const, literal: "3"}
+      - {path: snmp.enabled, value: true}
+    note: >
+      `snmp.enabled` is claimed here as well as on the community line, and leaving
+      it off was a real bug with an ironic shape. Rules that ask "is only SNMPv3 in
+      use" scope themselves to devices actually running SNMP, because a device with
+      the agent off is *not applicable* rather than compliant. When only the
+      community pattern set the flag, a switch hardened exactly as CIS prescribes —
+      a v3 user and no community at all — looked like a switch with SNMP switched
+      off, so the v3 controls returned notapplicable and the correct configuration
+      earned no score. A `snmp-server user` entry is an SNMP agent in use on every
+      platform that has one, so it says so.
+
+      The privacy algorithm is captured here and not anywhere else. `snmp.v3_priv`
+      holds the algorithm in every other pack — paloalto_panos.yaml states that
+      contract in as many words — and this pack used to leave it to
+      `snmp-server globalEnforcePriv`, which put the *security level* on the
+      algorithm's path. The consequence was not cosmetic: DISA V-220501 asks
+      whether SNMP is encrypted with a FIPS 140-2 approved algorithm, and no rule
+      can answer that from a fact whose only possible value is the word
+      "enforced". The `\s+\S+` before the optional group steps over the
+      authentication key so the algorithm is read from `priv`'s own argument
+      rather than from whatever token happens to follow; the key material itself
+      is never recorded, on any path.
+
+  - id: nxos_snmp_host_source_interface
+    regex: '^snmp-server host\s+\S+\s+source-interface\s+(?P<value>\S+)'
+    path: snmp.source_interface
+    value: str
+
+  - id: nxos_snmp_host_traps
+    regex: '^snmp-server host\s+(?P<value>[\d.a-fA-F:]+)\s+traps'
+    emits:
+      - {path: snmp.trap_host, value: str}
+      - {path: snmp.traps, value: true}
+      - {path: snmp.enabled, value: true}
+
+  - id: nxos_snmp_host_informs
+    regex: '^snmp-server host\s+(?P<value>[\d.a-fA-F:]+)\s+informs'
+    path: snmp.host
+    value: str
+
+  - id: nxos_snmp_location
+    regex: '^snmp-server location\s+(?P<value>.+?)\s*$'
+    path: snmp.location
+    value: str
+
+  - id: nxos_snmp_contact
+    regex: '^snmp-server contact\s+(?P<value>.+?)\s*$'
+    path: snmp.contact
+    value: str
+
+  - id: nxos_snmp_chassis_id
+    regex: '^snmp-server chassis-id\s+(?P<value>.+?)\s*$'
+    path: snmp.chassis_id
+    value: str
+
+  - id: nxos_snmp_globalenforcepriv
+    regex: '^snmp-server globalEnforcePriv\s*$'
+    path: snmp.group_security
+    value: const
+    literal: priv
+    note: >
+      Refuses every v3 request that is not privacy-protected, regardless of what an
+      individual user's security level says. It is the switch-wide backstop CIS asks
+      for, because a single `auth-noPriv` user otherwise leaks the whole MIB.
+
+      Recorded as the required *security level*, which is what
+      `snmp.group_security` carries on every other pack (`auth`, `noauth`, `priv`
+      off `snmp-server group ... v3 priv` on IOS, EOS and the ASA). It used to be
+      filed on `snmp.v3_priv` as the literal `enforced`, which is a different
+      question — that path holds the encryption algorithm — and the mis-filing is
+      what made V-220501 undecidable. NX-OS states this switch-wide rather than
+      per group, so one fact stands for the whole agent; that is a difference in
+      where the platform puts the setting, not in what the setting means.
+
+  - id: nxos_no_snmp_protocol
+    regex: '^no snmp-server protocol enable\s*$'
+    path: snmp.enabled
+    value: false
+
+  - id: nxos_snmp_enable_traps
+    regex: '^snmp-server enable traps\s+(?P<value>.+?)\s*$'
+    path: snmp.traps
+    value: str
+
+  # ── Banners ───────────────────────────────────────────────────────────
+
+  - id: nxos_banner_motd
+    regex: '^banner motd\s+(?P<value>.+?)\s*$'
+    emits:
+      - {path: mgmt.motd_banner, value: true}
+      - {path: mgmt.login_banner, value: true}
+      - {path: mgmt.banner.text, value: str}
+    note: >
+      NX-OS has no `banner login`. `banner motd` is displayed *before*
+      authentication — unlike IOS, where motd follows login — so it is the banner
+      the AC-8 consent-to-monitor control reads. It therefore emits
+      `mgmt.login_banner` as well as `mgmt.motd_banner`, rather than leaving the
+      login path to the default below, which would report a bannered switch as
+      unbannered.
+
+  - id: nxos_banner_exec
+    regex: '^banner exec\s+(?P<value>.+?)\s*$'
+    path: mgmt.exec_banner
+    value: true
+
+  # ── Control plane and switch-wide hardening ───────────────────────────
+
+  - id: nxos_copp_profile
+    regex: '^copp profile\s+(?P<value>strict|moderate|lenient|dense)\s*$'
+    emits:
+      - {path: control_plane.copp, value: lower}
+      - {path: control_plane.protection, value: true}
+    note: >
+      One line where IOS needs a class-map, a policy-map and a control-plane
+      service-policy. The four names are Cisco's own tiers; `strict` is what the
+      CIS benchmark asks for and `dense` is the fabric-switch variant.
+
+  - id: nxos_no_ip_source_route
+    regex: '^no ip source-route\s*$'
+    path: routing.source_routing
+    value: false
+
+  - id: nxos_ip_source_route
+    regex: '^ip source-route\s*$'
+    path: routing.source_routing
+    value: true
+
+  - id: nxos_system_default_switchport_shutdown
+    regex: '^system default switchport shutdown\s*$'
+    path: interface.admin_state
+    value: const
+    literal: shutdown
+    note: >
+      A CIS-recommended default that leaves every newly-cabled port dead until
+      someone configures it. It is the switch-wide analogue of shutting unused
+      ports, and a switch that sets it satisfies the control for every port at once
+      — which is why it is a global fact rather than a per-interface one.
+
+  - id: nxos_system_default_switchport
+    regex: '^system default switchport\s*$'
+    path: interface.switchport_mode
+    value: const
+    literal: access
+
+  - id: nxos_spanning_tree_rapid_pvst
+    regex: '^spanning-tree mode rapid-pvst\s*$'
+    emits:
+      - {path: stp.mode, value: const, literal: rapid-pvst}
+      - {path: stp.rapid_pvst, value: true}
+
+  - id: nxos_spanning_tree_mode
+    regex: '^spanning-tree mode\s+(?P<value>\S+)\s*$'
+    path: stp.mode
+    value: lower
+
+  - id: nxos_spanning_tree_loopguard
+    regex: '^spanning-tree loopguard default\s*$'
+    path: stp.loopguard_default
+    value: true
+
+  - id: nxos_spanning_tree_bpduguard
+    regex: '^spanning-tree port type edge bpduguard default\s*$'
+    path: stp.bpduguard_default
+    value: true
+
+  - id: nxos_spanning_tree_portfast
+    regex: '^spanning-tree port type edge default\s*$'
+    path: stp.portfast_default
+    value: true
+
+  - id: nxos_spanning_tree_pathcost
+    regex: '^spanning-tree pathcost method\s+(?P<value>\S+)\s*$'
+    path: stp.extend_system_id
+    value: lower
+
+  - id: nxos_ip_arp_inspection_validate
+    regex: '^ip arp inspection validate\s+(?P<value>.+?)\s*$'
+    path: service.gratuitous_arp
+    value: str
+
+  - id: nxos_ip_arp_inspection_vlan
+    regex: '^ip arp inspection vlan\s+(?P<value>\S+)\s*$'
+    path: service.arp_inspection
+    value: str
+
+  - id: nxos_ip_dhcp_snooping_vlan
+    regex: '^ip dhcp snooping vlan\s+(?P<value>\S+)\s*$'
+    path: interface.dhcp_snooping_limit
+    value: str
+
+  - id: nxos_ip_dhcp_snooping
+    regex: '^ip dhcp snooping\s*$'
+    path: service.dhcp_snooping
+    value: true
+
+  - id: nxos_ipv6_nd_raguard
+    regex: '^ipv6 nd raguard\s*$'
+    path: interface.nd_ra_guard
+    value: true
+
+  - id: nxos_hardware_ip_verify
+    regex: '^hardware ip verify address\s+(?P<value>.+?)\s*$'
+    path: routing.urpf
+    value: str
+
+  - id: nxos_no_boot_poap
+    regex: '^no boot poap enable\s*$'
+    path: service.boot_network
+    value: false
+
+  - id: nxos_boot_poap
+    regex: '^boot poap enable\s*$'
+    path: service.boot_network
+    value: true
+    note: >
+      Power-On Auto Provisioning fetches a configuration over DHCP and TFTP from
+      whatever answers first. On a switch already in service it is an
+      unauthenticated remote-configuration channel, which is why DISA requires it
+      disabled once the switch is deployed.
+
+  - id: nxos_no_cdp_enable
+    regex: '^no cdp enable\s*$'
+    path: service.cdp
+    value: false
+
+  - id: nxos_cdp_enable
+    regex: '^cdp enable\s*$'
+    path: service.cdp
+    value: true
+
+  - id: nxos_ip_default_route
+    regex: '^ip route 0\.0\.0\.0/0\s+(?P<value>\S+)'
+    path: routing.default_route
+    value: str
+
+  - id: nxos_ip_route_static
+    regex: '^ip route\s+(?P<value>[\d.]+/\d+)\s+\S+'
+    path: routing.static_route
+    value: str
+
+  - id: nxos_fips_mode
+    regex: '^fips mode enable\s*$'
+    path: crypto.fips_mode
+    value: true
+
+blocks:
+
+  # ── Interfaces ────────────────────────────────────────────────────────
+
+  - id: nxos_interface
+    anchor_path: interface.name
+    regex: '^interface\s+(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: if_description
+        regex: '^description\s+(?P<value>.+?)\s*$'
+        path: interface.description
+        value: str
+      # Split into two, rather than `negated_bool`, so the value matches the
+      # `no-shutdown` string in this stanza's `child_defaults` and the `const:
+      # shutdown` the global `system default switchport shutdown` pattern above
+      # emits. As a bool it was both the wrong type for the path and inverted.
+      - id: if_shutdown
+        regex: '^shutdown\s*$'
+        path: interface.admin_state
+        value: const
+        literal: shutdown
+      - id: if_no_shutdown
+        regex: '^no shutdown\s*$'
+        path: interface.admin_state
+        value: const
+        literal: no-shutdown
+      - id: if_ip_address
+        regex: '^ip address\s+(?P<value>[\d.]+/\d+|[\d.]+\s+[\d.]+)'
+        path: interface.ip_address
+        value: str
+      - id: if_no_switchport
+        regex: '^no switchport\s*$'
+        path: interface.switchport_mode
+        value: const
+        literal: routed
+      - id: if_switchport_mode
+        regex: '^switchport mode\s+(?P<value>access|trunk|fex-fabric|dot1q-tunnel)\s*$'
+        path: interface.switchport_mode
+        value: lower
+      - id: if_access_vlan
+        regex: '^switchport access vlan\s+(?P<value>\d+)\s*$'
+        path: interface.access_vlan
+        value: int
+      - id: if_native_vlan
+        regex: '^switchport trunk native vlan\s+(?P<value>\d+)\s*$'
+        path: interface.native_vlan
+        value: int
+      - id: if_trunk_allowed
+        regex: '^switchport trunk allowed vlan\s+(?P<value>.+?)\s*$'
+        path: interface.trunk_allowed_vlan
+        value: str
+      - id: if_switchport_nonegotiate
+        regex: '^switchport nonegotiate\s*$'
+        path: interface.switchport_nonegotiate
+        value: true
+      - id: if_port_security_max
+        regex: '^switchport port-security maximum\s+(?P<value>\d+)\s*$'
+        path: interface.mac_limit
+        value: int
+      - id: if_port_security
+        regex: '^switchport port-security\s*$'
+        path: interface.port_security
+        value: true
+      - id: if_redirects
+        regex: '^(?P<neg>no\s+)?ip redirects\s*$'
+        path: interface.redirects
+        value: negated_bool
+      - id: if_unreachables
+        regex: '^(?P<neg>no\s+)?ip unreachables\s*$'
+        path: interface.unreachables
+        value: negated_bool
+      - id: if_proxy_arp
+        regex: '^(?P<neg>no\s+)?ip proxy-arp\s*$'
+        path: interface.proxy_arp
+        value: negated_bool
+      - id: if_directed_broadcast
+        regex: '^(?P<neg>no\s+)?ip directed-broadcast\s*$'
+        path: interface.directed_broadcast
+        value: negated_bool
+      - id: if_acl_in
+        regex: '^ip access-group\s+(?P<value>\S+)\s+in\s*$'
+        path: interface.acl_in
+        value: str
+      - id: if_acl_out
+        regex: '^ip access-group\s+(?P<value>\S+)\s+out\s*$'
+        path: interface.acl_out
+        value: str
+      - id: if_port_type_edge
+        regex: '^spanning-tree port type edge(?:\s+trunk)?\s*$'
+        path: interface.portfast
+        value: true
+      - id: if_bpduguard
+        regex: '^spanning-tree bpduguard\s+(?P<value>enable|disable)\s*$'
+        path: interface.bpdu_guard
+        value: str
+      - id: if_bpdufilter
+        regex: '^spanning-tree bpdufilter\s+(?P<value>enable|disable)\s*$'
+        path: interface.uufb
+        value: str
+      - id: if_guard_root
+        regex: '^spanning-tree guard root\s*$'
+        path: stp.rootguard
+        value: true
+      - id: if_storm_control
+        regex: '^storm-control (?:broadcast|multicast|unicast) level\s+(?P<value>[\d.]+)'
+        path: interface.storm_control
+        value: str
+      - id: if_dhcp_snoop_trust
+        regex: '^ip dhcp snooping trust\s*$'
+        path: interface.dhcp_snooping_trust
+        value: true
+      - id: if_arp_inspection_trust
+        regex: '^ip arp inspection trust\s*$'
+        path: interface.arp_inspection
+        value: true
+      - id: if_verify_source
+        regex: '^ip verify unicast source reachable-via\s+(?P<value>\S+)'
+        path: interface.ip_verify_source
+        value: str
+      - id: if_mtu
+        regex: '^mtu\s+(?P<value>\d+)\s*$'
+        path: interface.mtu
+        value: int
+      - id: if_speed
+        regex: '^speed\s+(?P<value>\d+|auto)\s*$'
+        path: interface.speed
+        value: lower
+      - id: if_duplex
+        regex: '^duplex\s+(?P<value>\S+)\s*$'
+        path: interface.duplex
+        value: lower
+      - id: if_vrf_member
+        regex: '^vrf member\s+(?P<value>\S+)\s*$'
+        path: interface.vrf
+        value: str
+      - id: if_cdp_enable
+        regex: '^(?P<neg>no\s+)?cdp enable\s*$'
+        path: interface.cdp_enabled
+        value: negated_bool
+        note: >
+          The same text as the switch-wide `no cdp enable`. `_match_line` tries the
+          enclosing block's children before the top-level pattern list, so the
+          per-interface occurrence lands here and the global one lands on
+          `service.cdp`. That disambiguation comes from the precedence order rather
+          than from two regexes that would have to be kept mutually exclusive by
+          hand.
+      - id: if_lldp_transmit
+        regex: '^no lldp transmit\s*$'
+        path: interface.lldp_enabled
+        value: false
+      - id: if_udld
+        regex: '^udld\s+(?P<value>aggressive|enable|disable)\s*$'
+        path: interface.udld
+        value: lower
+      - id: if_igmp_snooping
+        regex: '^(?P<neg>no\s+)?ip igmp snooping\s*$'
+        path: interface.igmp_snooping
+        value: negated_bool
+      - id: if_dhcp_relay
+        regex: '^ip dhcp relay address\s+(?P<value>[\d.]+)'
+        path: interface.helper_address
+        value: str
+      - id: if_tunnel
+        regex: '^tunnel (?:source|destination)\s+(?P<value>\S+)\s*$'
+        path: interface.tunnel
+        value: str
+    child_defaults:
+      - path: interface.admin_state
+        value: no-shutdown
+        reason: >
+          an NX-OS interface with no `shutdown` line is administratively up; the
+          CM-2 unused-port control needs a fact per port rather than a gap, and the
+          port that is dangerous is precisely the one nobody wrote a line about
+      - path: interface.description
+        value: ""
+        reason: >
+          an undescribed port cannot be traced to a purpose during an incident, and
+          recording the absence per port is what lets a rule count them
+
+  # ── Console and virtual terminals ─────────────────────────────────────
+  # NX-OS has no `line vty 0 4` range: one block configures every VTY, so these
+  # are singletons rather than the instance-per-range that IOS needs.
+
+  - id: nxos_line_console
+    anchor_path: line.console.id
+    regex: '^line (?P<value>console)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: console_exec_timeout
+        regex: '^exec-timeout\s+(?P<minutes>\d+)\s*$'
+        path: line.console.exec_timeout
+        value: minutes_seconds
+        note: >
+          NX-OS takes only whole minutes here, where IOS takes `exec-timeout <min>
+          <sec>`, but the canonical path must mean one thing on both platforms or a
+          portable rule cannot use it. `minutes_seconds` normalises to seconds, so
+          `exec-timeout 9` records 540. Emitting the raw 9 with `value: int` — as
+          this pattern first did — made the NX-OS fact minutes while the IOS fact at
+          the same path was seconds, and the threshold in the rule pack is written
+          once in seconds. The effect was silent and one-directional: a ten-hour
+          NX-OS timeout compared 600 against a 600-second ceiling and passed.
+    child_defaults:
+      - path: line.console.exec_timeout
+        value: 0
+        reason: >
+          NX-OS leaves the console session open indefinitely when `exec-timeout` is
+          absent, which is the CIS finding — and 0 is the value NX-OS itself reports
+          for "never", so the default states the platform's own behaviour rather
+          than a guess
+
+  - id: nxos_line_vty
+    anchor_path: line.vty.id
+    regex: '^line (?P<value>vty)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: vty_exec_timeout
+        regex: '^exec-timeout\s+(?P<minutes>\d+)\s*$'
+        path: line.vty.exec_timeout
+        value: minutes_seconds
+        note: >
+          Seconds, for the reason given on `console_exec_timeout`.
+      - id: vty_session_limit
+        regex: '^session-limit\s+(?P<value>\d+)\s*$'
+        path: line.vty.session_limit
+        value: int
+      - id: vty_access_class_out
+        regex: '^access-class\s+(?P<value>\S+)\s+out\s*$'
+        path: line.vty.access_class_out
+        value: str
+      - id: vty_access_class_in
+        regex: '^access-class\s+(?P<value>\S+)\s+in\s*$'
+        path: line.vty.access_class
+        value: str
+      - id: vty_ipv6_access_class
+        regex: '^ipv6 access-class\s+(?P<value>\S+)\s+in\s*$'
+        path: line.vty.transport_input
+        value: str
+    child_defaults:
+      - path: line.vty.exec_timeout
+        value: 0
+        reason: >
+          same as the console: absent means never, and never is the finding
+      - path: line.vty.access_class
+        value: ""
+        reason: >
+          a VTY with no access-class accepts SSH from anywhere the routing table
+          reaches, which is exactly what the AC-17 STIG check reads
+
+  # ── Roles: the NX-OS authorisation object ─────────────────────────────
+
+  - id: nxos_role_name
+    anchor_path: mgmt.privilege.level
+    regex: '^role name\s+(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    note: >
+      A custom role is how NX-OS grants a subset of network-admin. What matters to
+      an auditor is the `rule N permit command` lines inside it, because a role
+      permitting `config t ; *` is network-admin with extra steps — so the rules are
+      children rather than being summarised away into the anchor.
+    children:
+      - id: role_rule_permit
+        regex: '^rule\s+\d+\s+permit\s+(?P<value>.+?)\s*$'
+        path: aaa.authorization_commands
+        value: str
+      - id: role_rule_deny
+        regex: '^rule\s+\d+\s+deny\s+(?P<value>.+?)\s*$'
+        path: aaa.authorization_exec
+        value: str
+      - id: role_vlan_policy_deny
+        regex: '^vlan policy deny\s*$'
+        path: vlan.trunk_pruning
+        value: true
+
+  # ── VLANs ─────────────────────────────────────────────────────────────
+
+  - id: nxos_vlan
+    anchor_path: vlan.id
+    regex: '^vlan\s+(?P<value>\d+(?:[-,]\d+)*)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: vlan_name
+        regex: '^name\s+(?P<value>\S+)\s*$'
+        path: vlan.name
+        value: str
+      - id: vlan_state
+        regex: '^state\s+(?P<value>active|suspend)\s*$'
+        path: vlan.state
+        value: lower
+      - id: vlan_shutdown
+        regex: '^(?P<neg>no\s+)?shutdown\s*$'
+        path: vlan.shutdown
+        value: negated_bool
+    child_defaults:
+      - path: vlan.name
+        value: ""
+        reason: >
+          an unnamed VLAN is the one nobody can account for at audit time; a rule
+          that counts them needs a fact per VLAN, not the absence of one
+
+  # ── Access lists ──────────────────────────────────────────────────────
+
+  - id: nxos_ip_access_list
+    anchor_path: acl.name
+    regex: '^ip access-list\s+(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: acl_remark
+        regex: '^\d+\s+remark\s+(?P<value>.+?)\s*$'
+        path: acl.remark
+        value: str
+      - id: acl_entry
+        regex: '^(?P<seq>\d+)\s+(?P<action>permit|deny)\s+(?P<proto>\S+)\s+(?P<rest>.+?)\s*$'
+        emits:
+          - {path: acl.extended.entry, value: line}
+          - {path: acl.entry.sequence, value: int, group: seq}
+          - {path: acl.entry.action, value: lower, group: action}
+          - {path: acl.entry.protocol, value: lower, group: proto}
+        note: >
+          One pattern, four facts. Splitting the action, protocol and sequence into
+          separate patterns would not merely be verbose, it would be wrong:
+          `_match_line` stops at the first match, so only one of the four would ever
+          fire on a given ACE. `value: line` gives the entry fact the whole rule text
+          as its value, which is what an auditor reads in the report.
+      - id: acl_statistics
+        regex: '^statistics per-entry\s*$'
+        path: acl.entry.log
+        value: true
+      - id: acl_fragments
+        regex: '^fragments\s+(?P<value>\S+)\s*$'
+        path: acl.implicit_deny_log
+        value: lower
+
+  - id: nxos_class_map_copp
+    anchor_path: control_plane.service_policy
+    regex: '^class-map type control-plane\s+(?:match-any\s+)?(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: copp_match_access_group
+        regex: '^match access-group name\s+(?P<value>\S+)\s*$'
+        path: control_plane.policing
+        value: str
+      - id: copp_match_exception
+        regex: '^match exception\s+(?P<value>.+?)\s*$'
+        path: control_plane.copp
+        value: str
+
+  # ── VRFs ──────────────────────────────────────────────────────────────
+
+  - id: nxos_vrf_context
+    anchor_path: routing.vrf
+    regex: '^vrf context\s+(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: vrf_default_route
+        regex: '^ip route 0\.0\.0\.0/0\s+(?P<value>\S+)'
+        path: routing.default_route
+        value: str
+      - id: vrf_static_route
+        regex: '^ip route\s+(?P<value>[\d.]+/\d+)\s+\S+'
+        path: routing.static_route
+        value: str
+      - id: vrf_address_family
+        regex: '^address-family\s+(?P<value>\S+\s+\S+)\s*$'
+        path: routing.ip_routing
+        value: true
+
+  # ── Routing protocols ─────────────────────────────────────────────────
+
+  - id: nxos_router_bgp
+    anchor_path: routing.bgp.asn
+    regex: '^router bgp\s+(?P<value>[\d.]+)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: bgp_log_neighbor_changes
+        regex: '^log-neighbor-changes\s*$'
+        path: routing.bgp.log_neighbor_changes
+        value: true
+      - id: bgp_address_family
+        regex: '^address-family\s+(?P<value>\S+\s+\S+)\s*$'
+        path: routing.ip_routing
+        value: true
+    blocks:
+      - id: nxos_bgp_neighbor
+        anchor_path: routing.static_route
+        regex: '^neighbor\s+(?P<value>[\d.a-fA-F:]+(?:/\d+)?)\s*$'
+        anchor_value: str
+        mode: indent
+        note: >
+          PRAMAN's canonical vocabulary has no `routing.bgp.neighbor` path, and a
+          configured peer address is the nearest true thing it does have: a next hop
+          this device will exchange reachability with. The alternative was to emit
+          nothing for the `neighbor` line, which would have made per-neighbour
+          authentication unmeasurable — and per-neighbour is the only granularity
+          that matters, because a router with nine authenticated peers and one bare
+          peer is non-compliant and a session-wide fact could not say so.
+        children:
+          - id: bgp_nbr_password
+            regex: '^password\s+\d\s'
+            path: routing.bgp.neighbor_auth
+            value: true
+          - id: bgp_nbr_remote_as
+            regex: '^remote-as\s+(?P<value>[\d.]+)\s*$'
+            path: routing.bgp.asn
+            value: str
+          - id: bgp_nbr_ttl_security
+            regex: '^ttl-security hops\s+(?P<value>\d+)\s*$'
+            path: routing.bgp.ttl_security
+            value: int
+          - id: bgp_nbr_max_prefix
+            regex: '^maximum-prefix\s+(?P<value>\d+)'
+            path: routing.bgp.max_prefix
+            value: int
+          - id: bgp_nbr_address_family
+            regex: '^address-family\s+(?P<value>\S+\s+\S+)\s*$'
+            path: routing.ip_routing
+            value: true
+          - id: bgp_nbr_prefix_list
+            regex: '^prefix-list\s+(?P<value>\S+)\s+(?:in|out)\s*$'
+            path: acl.name
+            value: str
+          - id: bgp_nbr_soft_reconfig
+            regex: '^soft-reconfiguration inbound(?:\s+always)?\s*$'
+            path: routing.bgp.log_neighbor_changes
+            value: true
+        child_defaults:
+          - path: routing.bgp.neighbor_auth
+            value: false
+            reason: >
+              a peer with no `password` line establishes its session
+              unauthenticated, which is the SC-8 / CISC-RT finding — and it has to
+              be an observed false per peer, because one bare peer among nine
+              authenticated ones is the whole of the gap
+
+  - id: nxos_router_ospf
+    anchor_path: routing.ospf.process
+    regex: '^router ospf\s+(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: ospf_area_authentication
+        regex: '^area\s+\S+\s+authentication(?:\s+(?P<value>message-digest))?\s*$'
+        path: routing.ospf.auth
+        value: str
+      - id: ospf_log_adjacency
+        regex: '^log-adjacency-changes(?:\s+detail)?\s*$'
+        path: routing.ospf.message_digest
+        value: true
+      - id: ospf_passive_default
+        regex: '^passive-interface default\s*$'
+        path: routing.proxy_arp
+        value: false
+
+  # ── PKI and configuration archiving ───────────────────────────────────
+
+  - id: nxos_crypto_ca_trustpoint
+    anchor_path: crypto.pki.trustpoint
+    regex: '^crypto ca trustpoint\s+(?P<value>\S+)\s*$'
+    anchor_value: str
+    mode: indent
+    children:
+      - id: nxos_ca_enrollment
+        regex: '^enrollment\s+(?P<value>.+?)\s*$'
+        path: crypto.pki.enrollment
+        value: str
+    note: >
+      NX-OS spells it `crypto ca trustpoint`, not IOS's `crypto pki trustpoint`,
+      and the enrolment sub-command is `enrollment terminal` rather than a URL —
+      NX-OS has no SCEP client, so the operator pastes the CSR out and the signed
+      certificate back in. The shape is otherwise the IOS one, so the same two
+      paths carry it and a rule written against `crypto.pki.trustpoint` works on
+      both platforms without knowing which grammar produced the fact.
+
+  - id: nxos_event_manager_applet
+    anchor_path: file.config_archive
+    regex: '^event manager applet\s+(?P<value>\S+)\s*$'
+    anchor_value: true
+    mode: indent
+    children:
+      - id: eem_action_copy
+        regex: '^action\s+[\d.]+\s+cli\s+.*\bcopy\s+running-config\s+(?P<value>[^"\s]+)'
+        path: file.archive_path
+        value: str
+        note: >
+          The destination is excluded from `"` rather than taken as `\S+` because
+          the whole EEM action is usually quoted — `action 1.0 cli command "copy
+          running-config bootflash:backup.cfg"` — and `\S+` carries the closing
+          quote into the fact, which then fails any equality or prefix rule
+          written against a real filename.
+      - id: eem_event_timer
+        regex: '^event timer\s+(?P<value>\S+)'
+        path: file.write_memory
+        value: true
+    note: >
+      NX-OS has no `archive` stanza. The platform's own answer to scheduled
+      configuration backup is an EEM applet that runs `copy running-config` on a
+      timer, and that is the mechanism DISA's V-220514 check text walks the
+      reviewer through, so this block is what makes that control decidable here.
+
+      The anchor is deliberately the container rather than the copy action:
+      `event manager applet` alone is not a backup, but the anchor fires on every
+      applet regardless of what it does, so a rule that only reads
+      `file.config_archive` would pass a switch whose one applet reboots a line
+      card. The destination is therefore also emitted, on `file.archive_path`,
+      and the DISA mapping reads that path — same division of labour as the IOS
+      `archive` block, where `logging enable` rather than the container answers
+      CISC-ND-000210.
+
+      `file.write_memory` on `event timer` is the closest existing path to "this
+      applet runs on a schedule"; it is not a `write memory` command and the name
+      is a poor fit. `ASSUMPTION:` a device with a non-timer trigger (`event
+      cli`, `event syslog`) still backs up, just not periodically, so this fact
+      is not used to decide V-220514 — only to keep the line out of the training
+      queue.
+
+# On NX-OS the absence of a `feature` line is not silence — it is the platform
+# stating that the subsystem is not installed. That makes these defaults positive
+# evidence rather than assumptions, which is a stronger claim than the equivalent
+# IOS defaults can make.
+defaults:
+  mgmt.telnet.enabled:
+    value: false
+    reason: >
+      no `feature telnet` line, and on NX-OS the telnet daemon does not exist
+      unless that feature is declared — a statement about the device, not a guess
+  mgmt.http.server_enabled:
+    value: false
+    reason: no `feature nxapi` line, so there is no HTTP management listener at all
+  mgmt.netconf.enabled:
+    value: false
+    reason: no `feature netconf` line
+  mgmt.restconf.enabled:
+    value: false
+    reason: no `feature restconf` line
+  service.rcmd:
+    value: false
+    reason: >
+      no `feature bash-shell` line, so there is no path from network-admin to a
+      supervisor root shell
+  service.dhcp:
+    value: false
+    reason: no `feature dhcp` line, so the switch is neither DHCP server nor relay
+  mgmt.login_banner:
+    value: false
+    reason: >
+      no `banner motd` line — and on NX-OS motd is the pre-authentication banner,
+      so its absence is the AC-8 finding rather than a cosmetic gap
+  mgmt.password_policy.complexity:
+    value: true
+    reason: >
+      password strength-check is enabled by default on NX-OS and does not print
+      when it is on, so absence of the line is the *compliant* state. Both
+      publishers say so in text this repo already loads: the CIS Cisco NX-OS
+      v1.2.0 catalog gives control 1.4.1 the default_value "Password strength
+      checking is enabled by default. When enabled, this setting does not appear
+      in the configuration", and DISA's check for V-220489 through V-220492 opens
+      "Password complexity is enabled by default" and then tests for the negation
+      — "the following command should not be found in the configuration: no
+      password strength-check". This default read `false` until it was corrected,
+      which made every NX-OS device that simply left the setting alone fail CIS
+      1.4.1, and would have failed the four DISA complexity controls the same way.
+      The `no password strength-check` line still emits `false` through its own
+      pattern, so a device that really has disabled it is still caught.
+  control_plane.copp:
+    value: false
+    reason: >
+      no `copp profile` line; NX-OS installs a default CoPP policy at first boot,
+      but a configuration that does not state one cannot be shown to still have it
+  routing.source_routing:
+    value: false
+    reason: >
+      NX-OS does not forward source-routed packets unless `ip source-route` is
+      configured — the opposite of the classic IOS default, and one reason this pack
+      cannot simply inherit IOS's defaults
+  time.ntp.authentication:
+    value: false
+    reason: no `ntp authenticate` line, so time is accepted unauthenticated
+  logging.enable:
+    value: false
+    reason: no `logging server` line, so nothing leaves the box
+  snmp.enabled:
+    value: false
+    reason: >
+      no `snmp-server community` or `snmp-server user` line, so there is no
+      configured SNMP principal
+  crypto.fips_mode:
+    value: false
+    reason: no `fips mode enable` line

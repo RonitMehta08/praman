@@ -1,0 +1,121 @@
+{
+  "model": "SetFit few-shot over sentence-transformers/all-MiniLM-L6-v2",
+  "tier": 2,
+  "base_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "split_strategy": "held-out devices (single split)",
+  "split_group_by": "device",
+  "holdout_devices": [
+    "CHIC-re0",
+    "LOSA-re0",
+    "WASH-re0"
+  ],
+  "n_samples": 1936,
+  "n_train": 1443,
+  "n_holdout": 493,
+  "n_classes": 14,
+  "classes": [
+    "aaa.authentication_order",
+    "acl.extended.entry",
+    "control_plane.copp",
+    "device.hostname",
+    "interface.admin_state",
+    "line.aux.exec_timeout",
+    "line.console.exec_timeout",
+    "logging.remote_syslog",
+    "mgmt.http.secure_server_enabled",
+    "mgmt.http.server_enabled",
+    "mgmt.ssh.version",
+    "service.timestamps",
+    "time.ntp",
+    "time.ntp.server"
+  ],
+  "n_classes_measured": 7,
+  "classes_measured": [
+    "aaa.authentication_order",
+    "device.hostname",
+    "interface.admin_state",
+    "logging.remote_syslog",
+    "mgmt.ssh.version",
+    "time.ntp",
+    "time.ntp.server"
+  ],
+  "min_support": 8,
+  "classes_below_min_support": {
+    "mgmt.enable_secret.hash_type": 7,
+    "mgmt.login_banner": 1
+  },
+  "accuracy": 1.0,
+  "f1_macro": 1.0,
+  "f1_weighted": 1.0,
+  "holdout_distribution": {
+    "interface.admin_state": 464,
+    "time.ntp.server": 8,
+    "mgmt.ssh.version": 6,
+    "logging.remote_syslog": 6,
+    "device.hostname": 3,
+    "aaa.authentication_order": 3,
+    "time.ntp": 3
+  },
+  "majority_class": "interface.admin_state",
+  "majority_class_share_pct": 94.1,
+  "caveat": "94.1% of the 493 holdout lines are 'interface.admin_state', and 7 of 14 trained classes appear in the holdout at all. Accuracy on this split is therefore dominated by one easy class and should not be read as a per-class capability figure — read 'per_class' supports instead. Tier 2's real job is the long tail, which this split barely samples.",
+  "per_class": {
+    "aaa.authentication_order": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 3.0
+    },
+    "device.hostname": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 3.0
+    },
+    "interface.admin_state": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 464.0
+    },
+    "logging.remote_syslog": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 6.0
+    },
+    "mgmt.ssh.version": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 6.0
+    },
+    "time.ntp": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 3.0
+    },
+    "time.ntp.server": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 8.0
+    },
+    "macro avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 493.0
+    },
+    "weighted avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 493.0
+    }
+  },
+  "train_seconds": 2013.8,
+  "model_artifact": "C:\\Users\\ronit\\Desktop\\TEST1\\praman\\data\\models\\classifier\\setfit_model",
+  "timestamp": "2026-09-01T20:53:24+0530"
+}

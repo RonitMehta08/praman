@@ -1,0 +1,83 @@
+[project]
+name = "praman"
+version = "0.1.0"
+description = "AI-Driven Multi-Vendor Network Security Compliance Auditor — SIH 2026 PS 26155"
+requires-python = ">=3.10,<3.12"
+readme = "README.md"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E501",   # line length handled by formatter
+    "UP007",  # use X | Y — we need 3.10 compat with __future__.annotations
+]
+# `×` is the multiplication sign, used deliberately in prose about matrix
+# dimensions ("devices × control families"). RUF002 reads it as a homoglyph
+# typo for the letter x; here it is the correct character.
+allowed-confusables = ["×", "·", "—", "–"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]
+
+[tool.ruff.lint.flake8-bugbear]
+# B008 flags a function call in an argument default. For FastAPI that call *is*
+# the declaration — `file: UploadFile = File(...)` is how a multipart field is
+# declared, and moving it into the body removes the dependency the framework
+# reads off the signature. These are markers, not mutable defaults.
+extend-immutable-calls = [
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Header",
+    "fastapi.Body",
+    "fastapi.Depends",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Scientific naming: `X` for a design matrix and `X_train`/`X_test` for its splits
+# is the scikit-learn convention every reader of this file already knows. Renaming
+# them to satisfy pep8-naming would make the code harder to check against the docs.
+"scripts/train_classifier.py" = ["N806"]
+# A standalone script has to put the project root on sys.path before it can import
+# from `backend`, so those imports cannot come first. E402 is describing the
+# requirement, not a mistake.
+"scripts/emit_canonical_schema.py" = ["E402"]
+# `RUF012` wants ClassVar on mutable class attributes. These are pytest test-class
+# constants — plain lists read as data tables, which is what they are.
+"tests/test_rules_eval.py" = ["RUF012"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q --tb=short"
+# Registered so an unknown-marker warning cannot hide a typo'd decorator, which
+# would silently include a 30-second test in every tight edit loop.
+markers = [
+    "slow: re-measures every published metric in a subprocess (~30 s). Deselect with -m 'not slow' while iterating; never deselect it before a submission, because it is what keeps reports/metrics/*.json honest.",
+]
+filterwarnings = [
+    "ignore::UserWarning:openpyxl",
+]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+ignore_missing_imports = true
