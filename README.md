@@ -67,18 +67,20 @@ Roles are ordered: `viewer` reads, `auditor` uploads and simulates, `approver`
 commits audits to the ledger and teaches parser mappings. The name goes inside
 the signed audit record, so choose the one an auditor should see.
 
-### The AI tier is optional
+### AI classifiers ship with the repository
 
-PRAMAN runs with **no models installed**. The compliance engine is
-deterministic and never depends on a model; the AI tier only helps *classify
-configuration lines the pattern packs do not recognise*, and when a tier is
-absent it reports its own absence rather than guessing. `tests/test_cold_start.py`
-asserts this, so a fresh clone is a supported configuration rather than a
-degraded one.
+The compliance engine is deterministic and never depends on a model. The AI
+tier only helps *classify configuration lines the pattern packs do not
+recognise*, and when a tier is absent it reports its own absence rather than
+guessing. `tests/test_cold_start.py` asserts this.
 
-To enable the tiers, the download and quantisation commands are in
-`MANUAL_COMMANDS.md` (available in the project workspace) — they are not run
-automatically because they pull ~2.4 GB and want a GPU.
+**Tier 1 (TF-IDF, 1.5 MB) and Tier 2 (SetFit, ~89 MB) are included in this
+repository** — they work out of the box after install, no downloads needed.
+
+Tier 3 (Qwen 4B QLoRA, 2.4 GB GGUF) is **not included** because GitHub
+enforces a 100 MB per-file limit and the quantised model is 2.4 GB. It
+requires a separate download and a GPU — see
+[What is not in this repository](#what-is-not-in-this-repository) for details.
 
 ## Try it in 60 seconds
 
@@ -403,7 +405,7 @@ rules/mappings/  control → condition packs (CIS, DISA STIG)
 data/
   frameworks/  catalogs and crosswalks (CIS, STIG, NIST, ISO, ATT&CK)
   ingest/patterns/  vendor pattern packs
-  models/      optional AI tiers (absent by default)
+  models/      Tier 1 (TF-IDF) + Tier 2 (SetFit) shipped; Tier 3 excluded (2.4 GB)
 test_configs/  16 shipped device configurations, documented per category
 docs/          architecture, gaps, security, ADRs
 scripts/       every published number is produced by one of these
@@ -425,6 +427,26 @@ tests/         1,649 tests
 | [`docs/adr/`](docs/adr/) | The decisions that were close calls, with the losing options |
 | [`test_configs/README.md`](test_configs/README.md) | What each fixture proves, and its measured numbers |
 | `MANUAL_COMMANDS.md` | Every heavy step (model download, training) with cost and rollback |
+
+## What is not in this repository
+
+The following files are used by the project but are excluded from this
+repository. Every exclusion is deliberate and documented here so nothing
+looks missing by accident.
+
+| Excluded item | Size | Reason | Impact if absent |
+|---|---|---|---|
+| **Tier 3 model** — `Qwen3-4B-Instruct Q4_K_M.gguf` | 2.4 GB | GitHub rejects files over 100 MB; this is 2,381 MB | Tier 3 (LLM) classifier unavailable. Tier 1 + 2 still work. Compliance engine is unaffected — it never depends on any model. |
+| **LoRA adapter + checkpoints** | ~290 MB | Useless without the 2.4 GB base model above | Same as above — only relevant when Tier 3 is present |
+| **MITRE ATT&CK bundle** — `ent.json` | 51 MB | Downloaded from MITRE, not redistributable at this size | Threat enrichment returns empty; findings and compliance verdicts are unaffected |
+| **STIG library bundles** — `U_SRG-STIG_Library_*.zip` | 350 MB × 3 | DISA's full library; too large for GitHub | Not needed — individual STIG packages for supported vendors are included and pre-extracted |
+| **Database** — `praman.db` | ~17 MB | Generated at runtime; contains operator audit data | Auto-created on first run, or seed with `python scripts/reset_ledger.py --yes` |
+| **Signing keys** — `data/private/` | <1 KB | Private cryptographic material must never be in source control | Generated fresh per deployment |
+| **Vendor binaries** — llama.cpp DLLs, CUDA runtime | 1.6 GB | Pre-built binaries; not source code | Only needed for Tier 3 LLM inference |
+
+> **Everything the compliance engine needs is in this repository.** The
+> excluded items are either too large for GitHub, generated at runtime, or
+> only needed for the optional Tier 3 LLM — which requires a GPU anyway.
 
 ## Licence and provenance
 

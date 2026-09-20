@@ -1,0 +1,19 @@
+{
+  "normalize_embeddings": false,
+  "labels": [
+    "aaa.authentication_order",
+    "acl.extended.entry",
+    "control_plane.copp",
+    "device.hostname",
+    "interface.admin_state",
+    "line.aux.exec_timeout",
+    "line.console.exec_timeout",
+    "logging.remote_syslog",
+    "mgmt.http.secure_server_enabled",
+    "mgmt.http.server_enabled",
+    "mgmt.ssh.version",
+    "service.timestamps",
+    "time.ntp",
+    "time.ntp.server"
+  ]
+}
