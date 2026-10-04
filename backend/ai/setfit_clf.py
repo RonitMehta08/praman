@@ -109,11 +109,14 @@ class SetFitClassifier:
             )
         try:
             from setfit import SetFitModel
-            self._model = SetFitModel.from_pretrained(str(SETFIT_MODEL_PATH))
+            self._model = SetFitModel.from_pretrained(
+                str(SETFIT_MODEL_PATH), local_files_only=True,
+            )
         except ImportError as err:
             raise ArtifactMissingError(
                 "setfit and sentence-transformers are required and are not in "
-                "requirements.lock.txt — Step 1 does not install them. Run Step "
+                "requirements.lock.txt — Step 1 does not install them. Hosted "
+                "builds should run deploy/build-online.sh. Locally, run Step "
                 "8c in MANUAL_COMMANDS.md, which pins the exact versions that "
                 "produced the shipped artefact."
             ) from err

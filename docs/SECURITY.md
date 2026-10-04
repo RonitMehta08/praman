@@ -25,18 +25,22 @@ configurations already sorted by exploitability.
 
 ## Hardened, with the test that says so
 
-**Operator identity and authorisation.** Every route except four is behind a role
-gate: `/health`, `POST /auth/login`, `/` and `/{asset:path}` (the static
-frontend). Three ordered roles — `viewer` reads, `auditor` hands the system a
+**Operator identity and authorisation.** Data routes are behind role gates.
+`/health`, `POST /auth/login`, `POST /auth/signup`, `GET /auth/options`, `/` and
+`/{asset:path}` (the static frontend) are public. Three ordered roles — `viewer` reads, `auditor` hands the system a
 configuration, `approver` commits to the ledger and teaches parser mappings — and
 the operator's name is written into `AuditRecord.actor`, which is inside
 `RECORD_HASH_FIELDS` and therefore under the Ed25519 signature. Passwords are
 PBKDF2-HMAC-SHA256 at 600,000 iterations with a per-user salt; sessions are
 `secrets.token_urlsafe(32)` bearer tokens of which only the SHA-256 is stored,
-with a 12-hour TTL and server-side revocation. There is no default account and no
-bootstrap endpoint — the first operator is created out of band with
-`scripts/manage_users.py`, and until one exists every protected route answers 401
-naming that script. `tests/test_auth.py` asserts the gate by walking `app.routes`
+with a 12-hour TTL and server-side revocation. There is no default account.
+Self-service signup is enabled by default, accepts a chosen role and creates a
+real authenticated session. The hosted sample workspace lets evaluators select
+Approver and try the complete workflow. Accounts share that deployment's data.
+Managed appliances can set `PRAMAN_SIGNUP_ENABLED=false` and provision operators
+with `scripts/manage_users.py`. `tests/test_auth_signup.py` covers registration,
+duplicate/concurrent names, reserved service names, role gates and session
+revocation. `tests/test_auth.py` asserts the gate by walking `app.routes`
 rather than a hand-maintained inventory, so a new endpoint that forgets
 authorisation fails the suite.
 
@@ -118,10 +122,9 @@ record. What is **not** built:
   an administrator running `scripts/manage_users.py passwd`. For a tool whose own
   rule packs fail devices for single-factor administrative access, that is worth
   stating plainly rather than leaving to be noticed.
-- **No self-service anything.** No registration, no password reset, no admin UI.
-  Every account operation needs filesystem access to the deployment. That is a
-  deliberate trade — it makes taking privilege require more than an HTTP path —
-  but it means a locked-out operator waits for somebody with a shell.
+- **No self-service password reset or account-management UI.** Registration is
+  available when enabled, but password resets, role changes and disabling an
+  account still require `scripts/manage_users.py` on the deployment.
 - **Session storage is a table in the same SQLite file as the findings.** An
   attacker with read access to `data/praman.db` gets the estate's findings, which
   is worse than the sessions; the token digests specifically are not replayable.

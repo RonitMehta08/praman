@@ -1654,6 +1654,53 @@ python scripts\bench\bench_rule_latency.py
 
 ---
 
+## Step 17 — Hosted CPU classifiers and self-service signup
+
+**Purpose.** Enable the shipped CPU classifiers and visitor-owned demo accounts.
+The GitHub repository includes both classifier weights. The earlier hosted
+Blueprint disabled all AI with `SENTINEL_AI_BACKEND=none` and installed only the
+base requirements, which contain no SetFit runtime. No retraining is needed.
+
+**Command** — run on the hosting service, or manually in an activated Linux Python 3.10
+environment. This installs a large CPU PyTorch wheel and is not an agent-run
+command. The pins match the shipped SetFit model metadata.
+
+```bash
+sh deploy/build-online.sh
+```
+
+The build runs these commands in order:
+
+```bash
+python -m pip install -r requirements.lock.txt
+python -m pip install torch==2.13.0+cpu --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r requirements-ai.txt
+SENTINEL_AI_BACKEND=classifiers HF_HUB_OFFLINE=1 python scripts/check_ai_runtime.py
+```
+
+**Est. time** — allow several minutes for dependency installation.
+**Est. disk** — allow roughly 1–2 GB of installed dependency space as a planning
+estimate, plus temporary pip cache space. This uses CPU only, no VRAM, and no model
+download. Runtime memory must
+accommodate CPU PyTorch, the encoder and the app. These are capacity estimates,
+not new project benchmarks.
+
+**Render settings:** Build Command `sh deploy/build-online.sh`, Start Command
+`sh deploy/start-online.sh`, `SENTINEL_AI_BACKEND=classifiers`,
+`PRAMAN_SIGNUP_ENABLED=true`, `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`,
+`OMP_NUM_THREADS=1`, `TOKENIZERS_PARALLELISM=false`. A service configured manually
+in Render must have its existing `none` value changed in the dashboard.
+
+**Verify.** The build log reports successful load and inference for TF-IDF and
+SetFit. `/health` reports both classifier tiers ready. Open the URL, create an
+account with a username, chosen role and a password of at least 12 characters,
+then try the workflow. Choose Approver to commit audits and teach mappings.
+
+**Undo.** Set `SENTINEL_AI_BACKEND=none` and restore the base-only build command
+to run deterministic auditing. Set `PRAMAN_SIGNUP_ENABLED=false` to stop new
+registrations. Existing accounts remain usable and can be managed with
+`scripts/manage_users.py`. Do not delete a database to reverse these settings.
+
 ## Artifact → step → failure mode
 
 The contract in one table. If an artifact is absent, the named code path raises `ArtifactMissingError` pointing at its step — it never crashes, never guesses, and never degrades silently.

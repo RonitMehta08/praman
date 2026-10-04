@@ -332,6 +332,7 @@ class TestTreeSignature:
         # And the implementation we actually use does notice.
         assert escalation._tree_signature(model_dir) != tree_before
 
+    @pytest.mark.skipif(os.name != "nt", reason="Zero directory st_size is an NTFS/Windows assumption.")
     def test_a_directory_has_no_size_to_stat(self, tmp_path) -> None:
         """The other half of why one stat cannot work: ``st_size`` is 0 regardless.
 

@@ -235,6 +235,13 @@ export async function simulateSarif(configText, sourceFile = 'inline.conf') {
  * query string would have written a live credential into the access log. */
 export const login = (username, password) => postJson('/auth/login', { username, password });
 
+/** Public registration policy, including the server's password minimum. */
+export const authOptions = () => getJson('/auth/options');
+
+/** Create an operator and receive the same session envelope as login. */
+export const signup = (username, role, password) =>
+  postJson('/auth/signup', { username, role, password });
+
 /** Revoke this token on the server. Not the same as forgetting it locally — a
  * token the client drops is still valid to anyone who captured it. */
 export const logout = () => postJson('/auth/logout', {});

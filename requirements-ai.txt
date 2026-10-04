@@ -1,0 +1,6 @@
+# Versions that produced the shipped Tier 2 model. CPU torch is installed first
+# by deploy/build-online.sh so pip does not pull NVIDIA/CUDA packages on Render.
+torch==2.13.0+cpu
+setfit==1.1.3
+sentence-transformers==5.7.0
+transformers==4.57.6

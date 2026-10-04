@@ -46,7 +46,7 @@ Then start it:
 Open <http://127.0.0.1:8012>. The UI is served by the same process as the API.
 
 `PORT` and `HOST` are read from the environment; the default binds loopback
-only. Every route except `/health`, `POST /auth/login` and the static frontend
+only. Every route except `/health`, the public login/signup/options routes and the static frontend
 requires an authenticated operator, but the app speaks plain HTTP — so on any
 other interface the bearer token crosses the network in clear text. Put
 [`deploy/nginx/praman.conf`](deploy/nginx/praman.conf) in front of it and read
@@ -62,17 +62,23 @@ provider-agnostic build/start settings, bootstrap account variables, and SQLite
 persistence guidance.
 
 For this standalone GitHub repository, leave Render's **Root Directory blank**.
-The root-level `render.yaml` also supports **New → Blueprint** in Render; enter
-the demo password when prompted. Python is pinned by `.python-version`.
+The root-level `render.yaml` also supports **New → Blueprint** in Render.
+Evaluators create their own accounts from the login screen, so no shared demo
+password is needed. The build installs and load-checks both shipped CPU
+classifiers. Python is pinned by `.python-version`.
 
 On Windows, start locally with `powershell -File deploy/start-windows.ps1`.
 The `sh deploy/start-online.sh` command is for the Linux hosting service.
 
 ### Create the first operator
 
-There is no default account and no bootstrap endpoint, so a fresh clone has
-nobody who can log in — `POST /auth/login` answers 503 and says so. Create the
-first one on the machine itself:
+Open the app and select **New here? Create an account**. Enter a username,
+choose a role, and set a password of at least 12 characters. Signup signs you in
+immediately. Choose **Approver** to try the full audit/report and training flow.
+
+Self-service signup is enabled by default and creates accounts in the deployment's
+shared workspace. Set `PRAMAN_SIGNUP_ENABLED=false` on a managed appliance to
+provision accounts locally instead:
 
 ```bash
 .venv/Scripts/python.exe scripts/manage_users.py add --username you --role approver
@@ -89,8 +95,17 @@ tier only helps *classify configuration lines the pattern packs do not
 recognise*, and when a tier is absent it reports its own absence rather than
 guessing. `tests/test_cold_start.py` asserts this.
 
-**Tier 1 (TF-IDF, 1.5 MB) and Tier 2 (SetFit, ~89 MB) are included in this
-repository** — they work out of the box after install, no downloads needed.
+**Tier 1 (TF-IDF, 1.5 MB) and Tier 2 (SetFit, ~89 MB) weights are included in this
+repository.** Tier 1 uses the base requirements. Tier 2 additionally needs the
+dependencies in `requirements-ai.txt`, including CPU PyTorch. The Render build
+installs these automatically with `sh deploy/build-online.sh`; local optional
+installation is documented in `MANUAL_COMMANDS.md` Steps 8c and 17. No model
+download or retraining is required to use the included weights.
+
+`SENTINEL_AI_BACKEND=classifiers` enables TF-IDF and SetFit without probing a local
+Qwen server. The hosted demo uses this profile. `/health` reports missing model
+files and dependencies separately in `ai.classifier_readiness`, so a directory
+alone is no longer displayed as a working model.
 
 Tier 3 (Qwen 4B QLoRA, 2.4 GB GGUF) is **not included** because GitHub
 enforces a 100 MB per-file limit and the quantised model is 2.4 GB. It

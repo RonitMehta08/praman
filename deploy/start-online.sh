@@ -8,5 +8,9 @@
 set -eu
 
 export HOST="${HOST:-0.0.0.0}"
+export SENTINEL_AI_BACKEND="${SENTINEL_AI_BACKEND:-classifiers}"
+export PRAMAN_SIGNUP_ENABLED="${PRAMAN_SIGNUP_ENABLED:-true}"
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
+export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 python scripts/bootstrap_user.py
 exec python scripts/serve.py

@@ -116,7 +116,10 @@ ROUTES_COVERED_BY_PATTERN = {
     "/docs",
     "/redoc",
     "/docs/oauth2-redirect",
-} | EXPORT_ROUTES | JOB_ROUTES | TRAINING_ROUTES
+} | EXPORT_ROUTES | JOB_ROUTES | TRAINING_ROUTES | {
+    # Real credential, role and first-account flows: tests/test_auth_signup.py.
+    "/auth/signup", "/auth/options",
+}
 
 
 @pytest.fixture(scope="module")

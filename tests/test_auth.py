@@ -82,7 +82,9 @@ _PASSWORD = "praman-test-passphrase"
 #:   one, so the operator would see a blank page instead of a password prompt.
 #:
 #: There is no unauthenticated route that reads a device, a finding or the ledger.
-_OPEN_ROUTES = {"/health", "/auth/login", "/", "/{asset:path}"}
+# Signup/options must be reachable before authentication. They disclose no
+# device data and registration can be disabled by deployment configuration.
+_OPEN_ROUTES = {"/health", "/auth/login", "/auth/signup", "/auth/options", "/", "/{asset:path}"}
 
 
 def _operator(username: str, role: str, password: str = _PASSWORD) -> None:
@@ -521,7 +523,7 @@ def test_with_no_operators_every_route_says_how_to_create_the_first(
                 "/auth/login", json={"username": "anybody", "password": "any password"}
             )
             assert login.status_code == 503, login.text
-            assert "no bootstrap route" in login.json()["detail"]
+            assert "/auth/signup" in login.json()["detail"]
 
             assert fresh.get("/health").status_code == 200, (
                 "an empty deployment must still report its own liveness"

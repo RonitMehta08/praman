@@ -59,7 +59,14 @@ FEATURE_LIVE_NAPALM = False  # napalm is optional/live-only (SPINE §14.2)
 # Set SENTINEL_AI_BACKEND=none to disable all AI tiers.
 # In that mode, only Tier 0 (deterministic parse) runs.
 
+# "classifiers" enables the shipped CPU models without probing a local LLM.
 SENTINEL_AI_BACKEND = os.environ.get("SENTINEL_AI_BACKEND", "full")
+
+# Self-service registration lets evaluators use their own identity. Managed
+# appliances can disable it and provision operators with manage_users.py.
+SIGNUP_ENABLED = os.environ.get("PRAMAN_SIGNUP_ENABLED", "true").lower() in {
+    "1", "true", "yes",
+}
 
 # ─── Report signing ───────────────────────────────────────────────────
 # Where the organisation's PDF signing identity lives. Left unset, reports are

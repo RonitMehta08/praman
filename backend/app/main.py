@@ -31,7 +31,7 @@ different implementation of the audit.
 
 Who may do what
 ---------------
-Every route below except ``/health``, ``POST /auth/login`` and the static assets
+Every route below except ``/health``, the public login/signup/options routes and static assets
 sits behind a role gate — see ``backend/app/auth.py``. Three roles, ordered:
 
 * ``viewer`` reads the estate: devices, findings, reports, the ledger.
@@ -102,6 +102,7 @@ from backend.app.config import (
 )
 from backend.app.routes_export import router as export_router
 from backend.app.routes_jobs import router as jobs_router
+from backend.app.routes_signup import router as signup_router
 from backend.app.services import evaluate_facts, parse_config, require_device
 from backend.app.state import STATE
 from backend.canonical.findings import build_summary
@@ -335,8 +336,7 @@ def _ai_status() -> dict[str, Any]:
     in the UI rather than as a green badge that means nothing.
     """
     from backend.ai.escalation import llm_availability
-    from backend.ai.setfit_clf import SETFIT_MODEL_PATH
-    from backend.ai.tfidf_clf import TFIDF_MODEL_PATH
+    from backend.ai.readiness import classifier_readiness
     from backend.app.config import LLM_HOST, LLM_PORT, MODELS_DIR, SENTINEL_AI_BACKEND
 
     if SENTINEL_AI_BACKEND == "none":
@@ -351,17 +351,16 @@ def _ai_status() -> dict[str, Any]:
             "note": "SENTINEL_AI_BACKEND=none — deterministic parsing only.",
         }
 
-    llm_up, llm_checked_age_s = llm_availability()
+    readiness = classifier_readiness()
+    llm_up, llm_checked_age_s = (
+        (False, 0.0) if SENTINEL_AI_BACKEND == "classifiers" else llm_availability()
+    )
     tiers = {
         "tier0_deterministic": True,
-        # Both paths are imported from the modules that load them rather than
-        # rebuilt from string literals here. Three copies of a path is how Tier 2
-        # stayed unavailable for so long: the loader read one path, no trainer
-        # wrote it, and this route agreed with the loader about a file that
-        # nothing produced. Importing the constant at least guarantees this route
-        # and the loader can never disagree.
-        "tier1_tfidf": TFIDF_MODEL_PATH.exists(),
-        "tier2_setfit": SETFIT_MODEL_PATH.exists(),
+        # Readiness checks both packaged artefacts and inference dependencies.
+        # A model directory without SetFit installed cannot be a green badge.
+        "tier1_tfidf": readiness["tier1_tfidf"]["ready"],
+        "tier2_setfit": readiness["tier2_setfit"]["ready"],
         "tier3_llm": llm_up,
     }
     # "Not installed" and "installed but not running" are different sentences
@@ -377,7 +376,9 @@ def _ai_status() -> dict[str, Any]:
     steps = {"tier1_tfidf": "Step 8a", "tier2_setfit": "Step 8c"}
     absent = [f"{name} ({steps[name]})" if name in steps else name for name in absent]
     weights_present = any(MODELS_DIR.glob("*.gguf"))
-    if tiers["tier3_llm"]:
+    if SENTINEL_AI_BACKEND == "classifiers":
+        tier3_note = " Tier 3 is disabled in the CPU classifier profile."
+    elif tiers["tier3_llm"]:
         tier3_note = ""
     elif weights_present:
         tier3_note = (
@@ -390,8 +391,8 @@ def _ai_status() -> dict[str, Any]:
     return {
         "ai_backend": SENTINEL_AI_BACKEND,
         "tiers": tiers,
-        # Only Tier 3's answer can be stale — the other three are a file that
-        # either exists or does not. Reported so the UI can distinguish "llama-server
+        "classifier_readiness": readiness,
+        # Only Tier 3's answer can be stale. Reported so the UI can distinguish "llama-server
         # is down" from "we last looked 28 seconds ago", which are the same badge
         # and different actions.
         "tier3_checked_age_s": round(llm_checked_age_s, 1),
@@ -399,7 +400,7 @@ def _ai_status() -> dict[str, Any]:
         "note": (
             "Verdicts never depend on these tiers; they only suggest canonical "
             "paths for lines no pattern claimed."
-            + (f" Not installed: {', '.join(absent)} — see MANUAL_COMMANDS.md." if absent else "")
+            + (f" Not ready: {', '.join(absent)} — check classifier_readiness for missing files/dependencies." if absent else "")
             + tier3_note
         ),
     }
@@ -1566,8 +1567,7 @@ class LoginResponse(BaseModel):
 async def auth_login(req: LoginRequest, response: Response) -> LoginResponse:
     """Exchange a password for a bearer token.
 
-    The only unauthenticated route that touches the database, and the only one
-    that can be brute-forced, so it is the only one with a lockout. The lockout is
+    Login attempts have a per-username lockout. The lockout is
     per-username and in-process — see ``backend/app/auth.py``; on top of a
     0.2 s key derivation it makes online guessing pointless, and it is not the
     request-rate limiter ``docs/SECURITY.md`` still lists as missing.
@@ -1601,7 +1601,8 @@ async def auth_login(req: LoginRequest, response: Response) -> LoginResponse:
                     "no operator accounts exist yet. Create the first one on the "
                     "server with 'python scripts/manage_users.py add --username "
                     "<name> --role approver' (MANUAL_COMMANDS.md Step 13). There "
-                    "is deliberately no default password and no bootstrap route."
+                    "is no default password. If signup is enabled, use Create an "
+                    "account on the login screen or POST /auth/signup."
                 ),
             )
         principal = authenticate(conn, req.username, req.password)
@@ -1842,6 +1843,7 @@ async def training_export(vendor: str | None = Query(None)) -> Response:
 
 app.include_router(export_router)
 app.include_router(jobs_router)
+app.include_router(signup_router)
 
 
 # ─── Static frontend ───────────────────────────────────────────────────

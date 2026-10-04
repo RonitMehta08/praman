@@ -27,7 +27,7 @@ dashboard fields are:
 3. **Build command:**
 
    ```bash
-   python -m pip install -r requirements.lock.txt
+    sh deploy/build-online.sh
    ```
 
 4. **Start command:**
@@ -41,10 +41,12 @@ dashboard fields are:
 
    | Variable | Value |
    |---|---|
-   | `SENTINEL_AI_BACKEND` | `none` |
-   | `PRAMAN_BOOTSTRAP_USERNAME` | a short lowercase demo username, for example `demo` |
-   | `PRAMAN_BOOTSTRAP_PASSWORD` | a provider secret, at least 12 characters |
-   | `PRAMAN_BOOTSTRAP_ROLE` | `approver` for the complete demo flow |
+    | `SENTINEL_AI_BACKEND` | `classifiers` |
+    | `PRAMAN_SIGNUP_ENABLED` | `true` |
+    | `HF_HUB_OFFLINE` | `1` |
+    | `TRANSFORMERS_OFFLINE` | `1` |
+    | `OMP_NUM_THREADS` | `1` |
+    | `TOKENIZERS_PARALLELISM` | `false` |
 
    The start script sets `HOST=0.0.0.0` for the provider. Do not change the
    default local behaviour of `scripts/serve.py`; loopback is the safe offline
@@ -52,20 +54,20 @@ dashboard fields are:
 
 On Render you can instead choose **New → Blueprint**, connect the repository,
 and use the root-level `render.yaml`. It defines the same free, disposable demo
-and prompts for `PRAMAN_BOOTSTRAP_PASSWORD`. The `.python-version` file pins the
+with self-service signup. The `.python-version` file pins the
 Python runtime even when you create a Web Service manually.
 
 ### Windows local startup
 
 The shell start command above runs on Render's Linux host. In Windows PowerShell,
-from the project folder, create a local operator once and then start the app:
+from the project folder, start the app:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\manage_users.py add --username demo --role approver
 powershell -File deploy/start-windows.ps1
 ```
 
-Open `http://127.0.0.1:8012`. Local startup does not create a public URL.
+Open `http://127.0.0.1:8012` and use **Create an account**. Local startup does not
+create a public URL.
 
 Keep the hosted service at **one application instance and one Uvicorn worker**.
 PRAMAN intentionally uses one SQLite file and an in-process background-job
@@ -102,18 +104,43 @@ live session. The offline package remains the durable product profile.
 
 After the service is live:
 
-1. Open the public HTTPS URL and sign in with the bootstrap credentials.
+1. Open the public HTTPS URL, select **Create an account**, and enter your own
+   username, role and password. Choose **Approver** for the complete demo.
 2. Upload only files from `test_configs/`, or use the Simulate view with a sample
    configuration.
 3. Demonstrate **Simulate** first; it does not write to the ledger.
 4. Ingest a sample, commit it as the approver, open the findings, and download
    the signed report.
-5. Verify `/health` shows `SENTINEL_AI_BACKEND=none` and explain that compliance
-   verdicts are deterministic and do not require an online model.
+5. Verify `/health` shows `ai.ai_backend=classifiers`, `tier1_tfidf=true` and
+   `tier2_setfit=true`. Explain that these models suggest parser mappings while
+   compliance verdicts remain deterministic.
 
-The hosted demo does not need Tier 3 Qwen/llama.cpp. Disabling it makes the
-deployment smaller, cheaper and easier to reproduce while leaving the compliance
-verdict path unchanged.
+The hosted demo uses the committed TF-IDF and SetFit weights on CPU. The build
+installs CPU-only PyTorch first, installs pinned SetFit dependencies, and runs
+`scripts/check_ai_runtime.py` with Hugging Face networking disabled. A missing
+file or model-load failure stops the build instead of producing a misleading
+green model badge. The service loads models lazily and caches them on first use.
+Qwen/llama.cpp is not required for this profile.
+
+### Updating an existing Render service
+
+Changing files in your checkout does not update Render until the changes reach
+the GitHub branch that the service deploys. In the existing service's settings,
+change the **Build Command** to `sh deploy/build-online.sh` and the **Start Command**
+to `sh deploy/start-online.sh`. In **Environment**, change the old
+`SENTINEL_AI_BACKEND=none` to `classifiers` and add the variables in the table
+above, then deploy the updated branch. Dashboard-configured services do not
+automatically inherit every change in `render.yaml`.
+
+Bootstrap credentials are now optional, for a deployment owner who wants a
+pre-provisioned account. Visitors do not need them. `PRAMAN_SIGNUP_ENABLED=false`
+disables self-service registration. Account passwords, roles and sessions persist
+in SQLite, subject to the persistence rules above.
+
+The CPU PyTorch/SetFit runtime needs more memory than the deterministic engine.
+If the provider kills the process during the first SetFit load, check the service
+memory graph and allocate enough RAM for the model runtime. A free disposable
+service may need a larger plan for the full classifier demonstration.
 
 ## Describing the deployment's security boundaries
 

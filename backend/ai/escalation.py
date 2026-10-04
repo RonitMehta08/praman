@@ -367,6 +367,11 @@ def escalate_line(
         logger.warning("Tier 2 failed: %s", e)
 
     # ── Tier 3: Local LLM ─────────────────────────────────────────
+    if SENTINEL_AI_BACKEND == "classifiers":
+        return EscalationResult(
+            path=None, confidence=0.0, tier=-1,
+            parser_id="ai.abstain", abstained=True,
+        )
     try:
         clf3 = _tier("tier3").get()
         if _llm_is_available(clf3) and valid_paths:

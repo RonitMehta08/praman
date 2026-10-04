@@ -33,8 +33,10 @@ import { el } from './dom.js';
 import { evidenceCore, icon } from './experience.js';
 import {
   ApiError,
+  authOptions,
   login as apiLogin,
   logout as apiLogout,
+  signup as apiSignup,
   onUnauthorized,
   setAuthToken,
   whoami,
@@ -256,18 +258,58 @@ function showOverlay(message) {
   const pass = fieldRow('auth-password', 'Password', 'password', 'current-password');
   const status = el('p', { class: 'auth-status', role: 'status', 'aria-live': 'polite' });
   const submit = el('button', { class: 'btn auth-submit', type: 'submit', text: 'Sign in' });
+  const role = el('select', { class: 'field-input', id: 'auth-role', name: 'role' });
+  const roleField = el('label', { class: 'field', for: 'auth-role', hidden: true },
+    el('span', { class: 'field-label', text: 'Role' }), role,
+    el('span', { class: 'field-hint', text: 'Choose Approver to try the complete audit and training workflow.' }));
+  const toggle = el('button', { class: 'btn btn-quiet auth-toggle', type: 'button',
+    text: 'New here? Create an account', hidden: true });
+  const subtitle = el('p', { class: 'auth-sub', text:
+    'Sign in. Every audit committed to the ledger is signed with the name you use here.' });
+  const foot = el('p', { class: 'auth-foot', text: 'Checking account signup availability…' });
+  let signingUp = false;
+  let passwordMinimum = 12;
+
+  function switchMode() {
+    signingUp = !signingUp;
+    roleField.hidden = !signingUp;
+    role.required = signingUp;
+    pass.input.autocomplete = signingUp ? 'new-password' : 'current-password';
+    pass.input.minLength = signingUp ? passwordMinimum : 1;
+    pass.input.value = '';
+    submit.textContent = signingUp ? 'Create account' : 'Sign in';
+    toggle.textContent = signingUp ? 'Already have an account? Sign in' : 'New here? Create an account';
+    subtitle.textContent = signingUp
+      ? `Choose your operator name and role, then a password of at least ${passwordMinimum} characters. You will be signed in automatically.`
+      : 'Sign in. Every audit committed to the ledger is signed with the name you use here.';
+    status.replaceChildren();
+    user.input.focus();
+  }
+  toggle.addEventListener('click', switchMode);
+  user.input.maxLength = 56;
+  pass.input.maxLength = 512;
 
   const form = el(
     'form',
     { class: 'auth-form', novalidate: true },
     user.node,
     pass.node,
-    submit
+    roleField,
+    submit,
+    toggle
   );
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
-    attempt(user.input, pass.input, submit, status);
+    if (submit.disabled) return;
+    toggle.disabled = true;
+    role.disabled = true;
+    attempt(user.input, pass.input, submit, status, {
+      signingUp, role: role.value, passwordMinimum,
+    }).finally(() => {
+      toggle.disabled = false;
+      role.disabled = false;
+    });
   });
 
   overlay = el(
@@ -287,25 +329,18 @@ function showOverlay(message) {
       el('span', { class: 'auth-mark' }, icon('shield', 28)),
       el('p', { class: 'eyebrow', text: 'YOUR SECURE WORKSPACE' }),
       el('h1', { class: 'auth-title', id: 'auth-title', text: 'Welcome to PRAMAN' }),
-      el('p', {
-        class: 'auth-sub',
-        text: 'Sign in. Every audit committed to the ledger is signed with the name you use here.',
-      }),
+      subtitle,
       form,
       status,
-      el('p', {
-        class: 'auth-foot',
-        text:
-          'There is no default account. The first one is created on the server ' +
-          'with scripts/manage_users.py, which is Step 13 of MANUAL_COMMANDS.md.',
-      })
+      foot
     ))
   );
 
   // The role=dialog overlay must behave as a modal for keyboard users too.
   overlay.addEventListener('keydown', (event) => {
     if (event.key !== 'Tab') return;
-    const focusable = [...overlay.querySelectorAll('input:not(:disabled), button:not(:disabled)')];
+    const focusable = [...overlay.querySelectorAll('input:not(:disabled), select:not(:disabled), button:not(:disabled)')]
+      .filter((node) => !node.closest('[hidden]'));
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
@@ -317,6 +352,28 @@ function showOverlay(message) {
   if (message) setStatus(status, message, 'note');
   // After the append, or the node is not focusable yet.
   user.input.focus();
+  const currentOverlay = overlay;
+  authOptions().then((options) => {
+    if (overlay !== currentOverlay) return;
+    passwordMinimum = options.min_password_length;
+    if (!options.signup_enabled) {
+      foot.textContent = 'Signup is disabled here. Ask the deployment operator for an account.';
+      return;
+    }
+    const labels = {
+      viewer: 'Viewer · Read findings and reports',
+      auditor: 'Auditor · Upload and simulate',
+      approver: 'Approver · Full demo, commits and training',
+    };
+    role.replaceChildren(...options.roles.map((value) =>
+      el('option', { value, text: labels[value] || value })));
+    role.value = options.roles.includes('approver') ? 'approver' : options.roles[0];
+    toggle.hidden = false;
+    foot.textContent = 'No shared credentials needed. Create your own account to explore this workspace.';
+  }).catch((error) => {
+    if (overlay !== currentOverlay) return;
+    foot.textContent = `Could not check signup availability. ${error.detail || error.message}`;
+  });
 }
 
 function setStatus(status, text, kind) {
@@ -335,7 +392,7 @@ function setStatus(status, text, kind) {
  * Paraphrasing any of them here would put a second, staler copy of that reasoning
  * in the client.
  */
-async function attempt(userInput, passInput, submit, status) {
+async function attempt(userInput, passInput, submit, status, options = {}) {
   const username = userInput.value.trim();
   const password = passInput.value;
   if (!username || !password) {
@@ -344,12 +401,27 @@ async function attempt(userInput, passInput, submit, status) {
     return;
   }
 
+  if (options.signingUp) {
+    if (!/^[a-z0-9][a-z0-9._-]{2,55}$/.test(username)) {
+      setStatus(status, 'Use 3–56 lowercase letters, digits, dots, underscores or hyphens for your operator name.', 'bad');
+      userInput.focus();
+      return;
+    }
+    if (password.length < options.passwordMinimum) {
+      setStatus(status, `Your password must be at least ${options.passwordMinimum} characters.`, 'bad');
+      passInput.focus();
+      return;
+    }
+  }
+
   submit.disabled = true;
-  submit.textContent = 'Signing in…';
+  submit.textContent = options.signingUp ? 'Creating account…' : 'Signing in…';
   setStatus(status, 'Checking. Key derivation takes about a fifth of a second.', 'note');
 
   try {
-    const session = await apiLogin(username, password);
+    const session = options.signingUp
+      ? await apiSignup(username, options.role, password)
+      : await apiLogin(username, password);
     setAuthToken(session.token);
     writeStoredToken(session.token);
     // Ask the server what this identity may do rather than deciding from the role
@@ -361,7 +433,7 @@ async function attempt(userInput, passInput, submit, status) {
     setAuthToken('');
     writeStoredToken('');
     submit.disabled = false;
-    submit.textContent = 'Sign in';
+    submit.textContent = options.signingUp ? 'Create account' : 'Sign in';
     setStatus(status, error.detail || error.message, 'bad');
     passInput.value = '';
     passInput.focus();

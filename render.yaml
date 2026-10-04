@@ -1,10 +1,10 @@
-# Disposable hosted demo. Configure the password in Render, never in Git.
+# Hosted sample workspace with self-service operator signup and CPU classifiers.
 services:
   - type: web
     name: praman-demo
     runtime: python
     plan: free
-    buildCommand: python -m pip install -r requirements.lock.txt
+    buildCommand: sh deploy/build-online.sh
     startCommand: sh deploy/start-online.sh
     healthCheckPath: /health
     envVars:
@@ -13,10 +13,14 @@ services:
       - key: PYTHONUTF8
         value: "1"
       - key: SENTINEL_AI_BACKEND
-        value: none
-      - key: PRAMAN_BOOTSTRAP_USERNAME
-        value: demo
-      - key: PRAMAN_BOOTSTRAP_ROLE
-        value: approver
-      - key: PRAMAN_BOOTSTRAP_PASSWORD
-        sync: false
+        value: classifiers
+      - key: PRAMAN_SIGNUP_ENABLED
+        value: "true"
+      - key: HF_HUB_OFFLINE
+        value: "1"
+      - key: TRANSFORMERS_OFFLINE
+        value: "1"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: TOKENIZERS_PARALLELISM
+        value: "false"

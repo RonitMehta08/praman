@@ -1,20 +1,11 @@
-"""Create and manage operator accounts. The only way an account comes into being.
+"""Create and manage operator accounts from the deployment's command line.
 
 Why this is a script and not an endpoint
 ----------------------------------------
-There is no default account, no ``admin/admin``, and no HTTP route that creates
-the first operator. Until one exists, every protected route answers 401 and says
-to run this file. That is deliberate, and the reasoning is worth stating because
-the alternative looks more convenient:
-
-* A **hardcoded credential** is worse than visible absence — ``docs/SECURITY.md``
-  §1 argues it, and this tool's own rule packs fail devices for exactly that.
-* An **open bootstrap route** is the same mistake wearing a different hat. Whoever
-  reaches the appliance first becomes an approver, and on an air-gapped assessment
-  laptop "first" often means "somebody else on the hotel wifi".
-* Running this script requires **filesystem access to the deployment**, which is
-  strictly stronger authentication of the act of taking privilege than any
-  password an HTTP endpoint could check.
+There is no default account or ``admin/admin`` credential. The public demo offers
+self-service signup. Set PRAMAN_SIGNUP_ENABLED=false on a managed appliance to
+provision operators through this script instead. Password resets, role changes
+and disabling accounts remain deployment-local operations.
 
 Passwords are never taken as an argument. ``--password`` on a command line lands
 in shell history, in ``ps`` output and in PowerShell's transcript; this reads from

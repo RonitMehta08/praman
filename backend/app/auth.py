@@ -14,14 +14,10 @@ rewriting a verdict breaks, and the standalone verifier reports it.
 Three design decisions worth stating, because each one is a place a reviewer
 would otherwise assume the easy thing was done:
 
-**No password is compiled into anything.** There is no default account, no
-``admin/admin``, no bootstrap endpoint. The first operator is created out of band
-with ``python scripts/manage_users.py add`` — which requires filesystem access to
-the deployment, a far stronger authentication of the act of taking privilege than
-any open HTTP path could be. Until an operator exists, every protected route
-answers 401 and says so. SECURITY.md §1 argues a hardcoded credential is worse
-than visible absence; an open bootstrap route is the same mistake wearing a
-different hat.
+**No password is compiled into anything.** There is no default account or
+``admin/admin`` credential. Self-service signup creates an operator with their
+chosen role and password when PRAMAN_SIGNUP_ENABLED is true. Managed appliances
+can disable signup and provision operators with ``scripts/manage_users.py``.
 
 **Passwords are PBKDF2-HMAC-SHA256, 600,000 iterations, per-user salt.** stdlib
 ``hashlib``, no new dependency on an air-gapped machine, and the KDF is
@@ -540,7 +536,8 @@ async def current_principal(request: Request) -> Principal:
             raise _unauthenticated(
                 "no operator accounts exist, so nothing can be authorised. "
                 "Create the first one with 'python scripts/manage_users.py add "
-                "--username <name> --role approver' (MANUAL_COMMANDS.md Step 13)."
+                "--username <name> --role approver' (MANUAL_COMMANDS.md Step 13), "
+                "or use /auth/signup when registration is enabled."
             )
         if not token:
             raise _unauthenticated(
