@@ -1,29 +1,24 @@
 # Technical presentation — slide content
 
-Paste into `SIT_SIH2026-IDEA-Presentation-Format.pptx`, keep the template's
-images and footers, delete slide 7, **export as PDF**. Six slides including the
-title, per the template's own instruction slide.
+Build a slide deck from the content below and **export as PDF**.
+Keep it to six slides including the title.
 
 Every figure below is read from `reports/metrics/*.json` and is re-verified
 against the code by `tests/test_metrics_are_current.py`. If a number here differs
 from that directory, the directory is right — run
-`scripts/bench/run_all.py --check` before submitting.
+`scripts/bench/run_all.py --check` before presenting.
 
-Design notes for whoever builds the deck: the template wants **points and
-diagrams, not paragraphs**. Bold the numbers, because a grader skims. Slide 3 is
+Design notes for whoever builds the deck: use **points and
+diagrams, not paragraphs**. Bold the numbers for easy scanning. Slide 3 is
 one diagram and eight words of caption — resist filling it with prose.
 
 ---
 
 ## Slide 1 — Title
 
-- **Problem Statement ID —** 26155
-- **Problem Statement Title —** AI-Driven Multi-Vendor Network Security
+- **Project Title —** AI-Driven Multi-Vendor Network Security
   Compliance Auditor
-- **Theme —** Blockchain & Cybersecurity
-- **PS Category —** Software
-- **Team ID —** _fill in_
-- **Team Name —** _fill in_
+- **Domain —** Network Security & Compliance
 
 **Solution name:** **PRAMAN** — Sanskrit *pramāṇa*, "proof". The name is the
 argument: the output is evidence, not an opinion.
@@ -138,7 +133,7 @@ hand-labelled ground truth in the repo, so the number would not be defensible.
 ## Slide 5 — Impact and Benefits
 
 **Who it is for**
-- NTRO and defence network operators auditing estates **offline, air-gapped**
+- Security-sensitive network operators auditing estates **offline, air-gapped**
 - Enterprise NOC/SOC teams under CIS / STIG / ISO 27001 obligations
 - Auditors who must **re-verify a report months later** without trusting the tool
 

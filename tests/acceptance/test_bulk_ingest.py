@@ -1,4 +1,4 @@
-"""Acceptance test: Bulk ingest — PS 26155 Capability C1.
+"""Acceptance test: Bulk ingest — capability C1.
 
 An archive of N mixed-vendor configs yields N Device records, each with
 device_id, vendor, os_family, config_hash populated.

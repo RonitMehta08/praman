@@ -8,7 +8,7 @@ a reader of the source would not notice, because both were silent:
 * It carried its own two-entry list of hardcoded adapter classes instead of the
   shared ``PatternAdapterRegistry``. Dropping a new pattern pack into
   ``data/ingest/patterns/`` onboarded the vendor for the API and left the CLI
-  unable to read that vendor's configs at all — so PS 26155 C5, "add a vendor
+  unable to read that vendor's configs at all — so capability C5, "add a vendor
   without touching code", was false through this door while being true through
   the other one.
 * ``--framework`` was ``required=True``, validated against a list containing

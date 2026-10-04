@@ -1,7 +1,7 @@
 [project]
 name = "praman"
 version = "0.1.0"
-description = "AI-Driven Multi-Vendor Network Security Compliance Auditor — SIH 2026 PS 26155"
+description = "AI-Driven Multi-Vendor Network Security Compliance Auditor"
 requires-python = ">=3.10,<3.12"
 readme = "README.md"
 
@@ -68,7 +68,7 @@ addopts = "-q --tb=short"
 # Registered so an unknown-marker warning cannot hide a typo'd decorator, which
 # would silently include a 30-second test in every tight edit loop.
 markers = [
-    "slow: re-measures every published metric in a subprocess (~30 s). Deselect with -m 'not slow' while iterating; never deselect it before a submission, because it is what keeps reports/metrics/*.json honest.",
+    "slow: re-measures every published metric in a subprocess (~30 s). Deselect with -m 'not slow' while iterating; never deselect it before a release, because it is what keeps reports/metrics/*.json honest.",
 ]
 filterwarnings = [
     "ignore::UserWarning:openpyxl",

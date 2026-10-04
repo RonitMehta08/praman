@@ -3,11 +3,10 @@
 Two different kinds of rule live here, and conflating them is why neither was
 being checked.
 
-**Deliverable limits** (``GLOBAL_RULESET.md`` R10.3) are absolute and external: an
+**Document budgets** are fixed project conventions: an
 architecture document of **max 2 pages**, a demo video of **max 2 minutes**, a
-technical presentation of **max 5 slides**. §247 lists overrunning one as the
-cheapest possible way to lose points, and they are cheap to check and impossible
-to argue with. Exceeding one fails.
+technical presentation of **max 5 content slides**. They are cheap to check
+automatically. Exceeding one fails.
 
 **File length** (§145, "every file ≤500 lines; split before that") is a house
 style rule that this repository does not currently meet — 29 files are over, one
@@ -49,12 +48,11 @@ PRESENTATION = PROJECT_ROOT / "docs" / "PRESENTATION.md"
 ARCHITECTURE_PDF = PROJECT_ROOT / "docs" / "ARCHITECTURE.pdf"
 SCRIPT = PROJECT_ROOT / "docs" / "SCRIPT.md"
 
-#: R10.3 says five. The SIH template's own instruction slide says six *including
-#: the title*, which is the same deliverable counted differently — a title slide
-#: carries no technical content and no grader reads it as one of the five. So the
+#: The project presentation budget is five content slides plus a title slide.
+#: The title is counted separately — a title slide
+#: carries no technical content and does not consume that budget. So the
 #: limit is applied to content slides and the title is named explicitly rather
-#: than silently subtracted, because "we allow one more than the rule says" is
-#: exactly the kind of adjustment that should be visible in a diff.
+#: than silently subtracted, so the counting convention is visible in a diff.
 MAX_CONTENT_SLIDES = 5
 TITLE_SLIDE = 1
 _SLIDE_RE = re.compile(r"^## Slide (\d+) — (.+?)\s*$", re.MULTILINE)

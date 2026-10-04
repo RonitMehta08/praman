@@ -254,7 +254,7 @@ export async function dashboardView({ outlet }) {
   return void outlet.replaceChildren(
     page(
       'Overview',
-      `${health.app || 'PRAMAN'} ${health.version || ''} — ${health.problem_statement?.title || ''}`.trim(),
+      `${health.app || 'PRAMAN'} ${health.version || ''} — ${health.description || ''}`.trim(),
       [
         button('Upload configs', () => navigate('upload')),
         button('Verify ledger', () => navigate('ledger'), { class: 'btn-quiet' }),

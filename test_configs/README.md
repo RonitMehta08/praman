@@ -73,7 +73,7 @@ and a demo built on it would mislead.
 
 ### `multivendor/` — one device per non-IOS platform
 
-PS 26155 C5 asks for vendor-agnostic scalability, and a claim of vendor-agnosticism
+PRAMAN supports vendor-agnostic scalability, and a claim of vendor-agnosticism
 that only ever runs against Cisco IOS is not evidence of anything. These six files
 are the evidence: one realistic device per remaining platform, each in that
 vendor's own configuration dialect, each carrying enough of a real posture that its
@@ -129,8 +129,8 @@ Adding a pole pair for a vendor promotes it to the strong bar automatically.
 
 ### `device_identity/` — proving the report knows which device it is about
 
-PS 26155 C4 asks for a per-device report identifying the device "including serial
-numbers and hardware", and neither appears anywhere in a running configuration.
+PRAMAN's per-device reports identify devices by serial numbers and hardware,
+and neither appears anywhere in a running configuration.
 Both come from `show version` / `show inventory` text bundled into the same
 upload, which is how a real collection script hands a config over. Every other
 fixture here is config-only, so before these two existed `device.serials` and

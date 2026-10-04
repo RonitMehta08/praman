@@ -4,7 +4,7 @@
 .venv-dev-ccp2/
 
 # Model weights
-# Tier 1 (TF-IDF, 1.5 MB) and Tier 2 (SetFit, ~89 MB) are committed so judges
+# Tier 1 (TF-IDF, 1.5 MB) and Tier 2 (SetFit, ~89 MB) are committed so users
 # can run the AI classifier out of the box.
 # Tier 3 (Qwen 4B GGUF, 2.4 GB) and its LoRA adapter are too large for GitHub
 # (100 MB per-file limit) and require separate download.

@@ -114,7 +114,7 @@ EXPECTATIONS: dict[str, dict] = {
         "min_findings": 3,
         "has_hostname": True,
     },
-    # ── device_identity/ — PS 26155 C4. Serial and hardware come from bundled
+    # ── device_identity/ — capability C4. Serial and hardware come from bundled
     # 'show version' / 'show inventory' text, not from the config, so these are the
     # only two fixtures where device.serials is non-empty. Asserted exactly:
     # a stack has one serial per member and no board serials, and the ceiling on
@@ -192,7 +192,7 @@ def validate_config(name: str, data: dict, elapsed: float | None = None) -> Test
     if expect.get("has_hostname"):
         tr.check(bool(device.get("hostname")), "hostname is non-empty")
 
-    # ── Device identity (PS 26155 C4) ──────────────────────
+    # ── Device identity (capability C4) ──────────────────────
     # Exact equality on serials, not containment: a superset would pass while the
     # parser also swallowed a motherboard or power-supply serial, which is the
     # regression this guards. Only the device_identity/ fixtures declare these.

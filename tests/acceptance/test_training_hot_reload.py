@@ -1,4 +1,4 @@
-"""Acceptance test: Training hot-reload — PS 26155 Capability C2.
+"""Acceptance test: Training hot-reload — capability C2.
 
 Map one queued line, re-audit, assert the new mapping takes effect
 with NO process restart. The mapping is DATA, not code.

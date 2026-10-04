@@ -13,7 +13,7 @@ passes on purpose:
 The canonical-path enum is injected into the schema at load time from
 ``canonical_paths.schema.json``, so the two files can never drift.
 
-Hot reload (PS 26155 C2, GLOBAL_RULESET R3.6): ``RulePackLoader`` stamps a
+Hot reload (capability C2): ``RulePackLoader`` stamps a
 fingerprint over the pack's paths, sizes and mtimes. ``reload_if_changed()``
 re-reads only when that fingerprint moves, so the running process picks up a new
 mapping without a redeploy and without re-parsing YAML on every request.

@@ -1,7 +1,7 @@
 """Mapping store — the C2 training module's durable half.
 
-PS 26155 asks for a GUI where an admin teaches the system a new vendor format
-"without redeploying the backend". These tests cover the part of that promise that
+PRAMAN provides a GUI where an admin teaches the system a new vendor format
+without redeploying the backend. These tests cover the part of that promise that
 has to survive a restart, and the two safety properties that make a
 teach-at-runtime feature something other than a foot-gun:
 
@@ -506,7 +506,7 @@ def test_provider_sees_a_new_mapping_without_being_invalidated(conn, tmp_path) -
     The provider caches compiled patterns, so the question is whether its
     fingerprint notices a write. If it does not, the operator's mapping appears
     to be accepted and does nothing until the process restarts — which is exactly
-    the redeploy the problem statement forbids.
+    a redeploy that would break the runtime-training contract.
 
     All three writes happen inside one second, which is deliberate: the store's
     timestamps have second resolution, so a fingerprint leaning on

@@ -66,7 +66,7 @@ PUBLISHING_DOCS = (
 #: later: the slide deck states its headline figure as ``| `1,648` | tests green``
 #: — a two-column KPI row, figure in one cell and noun in the next. That form was
 #: invisible here, so while five figures on the same deck were swept to the
-#: current count this one stayed behind and the submission document carried two
+#: current count this one stayed behind and the presentation document carried two
 #: different test counts. Emphasis, code-span and cell-boundary are all just
 #: punctuation between a number and its noun; none of them changes the claim.
 _COUNT_RE = re.compile(r"[`*]{0,2}(\d[\d,]{2,7})[`*]{0,2}\s*\|?\s+(?:tests|progress marks)\b")
@@ -279,7 +279,7 @@ def test_every_column_paired_test_count_is_current(collected_tests: int) -> None
     the test count. It is drawn in an ASCII mockup with the label on the next
     line, so the line-scoped :data:`_COUNT_RE` never saw it: five figures on that
     deck were swept to the current count and this one was not, which left the
-    submission document asserting two different totals about itself — the exact
+    presentation document asserting two different totals about itself — the exact
     disagreement this module exists to make impossible.
 
     The pairing is read by column rather than by proximity. "The number above the
@@ -353,7 +353,7 @@ def test_every_published_canonical_path_count_is_current() -> None:
 
     Published as "the 330 paths are the contract" in ARCHITECTURE.md and as a
     slide chip. It moved to 330 and two slide references stayed at 329, which is
-    the kind of error a reader cannot catch and a grader might.
+    the kind of error a casual reader cannot catch and a careful reviewer might.
 
     Scanned wider than ``PUBLISHING_DOCS``. The path count is the one figure in
     this repository that is quoted as a *definition* rather than as a result —

@@ -7,7 +7,7 @@ with no mapping are reported as XCCDF ``notchecked`` rather than dropped.
 
 Catalogs are built by scripts/build_catalog.py and cached as JSON under
 data/frameworks/catalog/. They are pure data: adding a benchmark never requires
-a code change (PS 26155 capability C5).
+a code change (capability C5).
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@
 
 ## Context
 
-PS 26155 C4 asks for "device-specific step-by-step remediation CLI". The output
+PRAMAN provides device-specific step-by-step remediation CLI. The output
 is a list of commands an operator will paste into a production router.
 
 A local LLM is already in the project for C2. Generating remediation commands

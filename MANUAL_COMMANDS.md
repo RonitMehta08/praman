@@ -1,7 +1,7 @@
 # MANUAL_COMMANDS.md — heavy commands, run by the human (Windows / PowerShell)
 
 **Project:** PRAMAN — AI-Driven Multi-Vendor Network Security Compliance Auditor
-**SIH 2026 · Problem Statement 26155 · token `SIH26155` · NTRO**
+**Local setup, optional AI models, and reproducible project artifacts**
 
 ---
 
@@ -228,7 +228,7 @@ Reopen the terminal. Nothing else was installed.
 
 **Purpose.** Create the main backend environment. Pins come from `.build/SPINE.md`, resolved **2026-08-24**; the installer resolves transitive dependencies itself.
 
-**Critical:** `ciscoconfparse2` is **not** installed here. It is GPL-3.0-only (a copyleft risk for an NTRO deliverable) *and* it hard-pins `hier-config==2.3.1`, which is incompatible with the `hier-config 3.7.0` API this project requires. It gets its own throwaway venv in Step 2b, dev-only.
+**Critical:** `ciscoconfparse2` is **not** installed here. It is GPL-3.0-only (a copyleft risk for distribution) *and* it hard-pins `hier-config==2.3.1`, which is incompatible with the `hier-config 3.7.0` API this project requires. It gets its own throwaway venv in Step 2b, dev-only.
 
 **Command**
 
@@ -331,7 +331,7 @@ Remove-Item -Recurse -Force .venv
 >
 > You have two honest options — pick one and write it down in `docs/GAPS.md` either way:
 > 1. **Rebuild on 3.10.11** (recommended for reproducibility): `deactivate`, `Remove-Item -Recurse -Force .venv`, `conda deactivate` until no prefix remains, then re-run this step from the top. ~10 minutes.
-> 2. **Keep the newer Python** if all pins installed at their exact pinned versions: verify with the snippet below, then **update the version stated in Step 0 and here** so the document matches reality. Do not leave the file claiming 3.10.11 while the venv is something else — a doc that disagrees with the machine is how a judge finds a contradiction.
+> 2. **Keep the newer Python** if all pins installed at their exact pinned versions: verify with the snippet below, then **update the version stated in Step 0 and here** so the document matches reality. Do not leave the file claiming 3.10.11 while the venv is something else — a doc that disagrees with the machine misleads the operator.
 >
 > ```powershell
 > @'
@@ -765,7 +765,7 @@ Expect 21 sheets. **Suppress the `UserWarning: Data Validation extension is not 
 
 ## Step 5 — Real configuration corpora (test fixtures)
 
-**Purpose.** Real multi-vendor configs to test parsers against. Synthetic configs here would invalidate every parse-coverage claim you make to the judges.
+**Purpose.** Real multi-vendor configs to test parsers against. Synthetic configs here would invalidate the published parse-coverage claims.
 
 **Command**
 
@@ -1018,7 +1018,7 @@ Get-Content reports\metrics\classifier.json
 It must contain measured metrics with the split described. Two non-negotiables:
 
 1. **Grouping must be by device**, using `StratifiedGroupKFold`. Splitting by *line* leaks: the same device's lines appear in train and test, and the score becomes meaningless. The report must state the grouping it used.
-2. **Every number you show a judge comes from this file.** `GLOBAL_RULESET.md` R1.3 forbids any accuracy/F1/coverage/latency figure that a script in `scripts\bench\` did not regenerate into `reports\metrics\*.json`. Docs and slides read *from* these files. Never type a number into a slide by hand.
+2. **Every published number comes from this file.** `GLOBAL_RULESET.md` R1.3 forbids any accuracy/F1/coverage/latency figure that a script in `scripts\bench\` did not regenerate into `reports\metrics\*.json`. Docs and slides read *from* these files. Never type a number into a slide by hand.
 
 **Undo.**
 
@@ -1137,13 +1137,13 @@ pip uninstall weasyprint -y
 
 The primary pipeline is unaffected.
 
-> **The report font must include U+2014 (em dash).** Real OSCAL control titles contain it — `sc-7.5` is *"Deny by Default — Allow by Exception"*. A font lacking the glyph renders a black box or mojibake in the PDF, in front of the judges. Test with that exact string.
+> **The report font must include U+2014 (em dash).** Real OSCAL control titles contain it — `sc-7.5` is *"Deny by Default — Allow by Exception"*. A font lacking the glyph renders a black box or mojibake in the PDF. Test with that exact string.
 
 ---
 
 ## Step 10 — STIG Viewer 3.x as an independent oracle — OPTIONAL but recommended
 
-**Purpose.** DISA's own desktop STIG Viewer gives you a **ground-truth second opinion**. Load the same STIG and compare its rule list and CAT counts against what your parser produced. The cheapest possible defence against a judge asking "how do you know your parsing is right?" — and it needs no Docker.
+**Purpose.** DISA's own desktop STIG Viewer gives you a **ground-truth second opinion**. Load the same STIG and compare its rule list and CAT counts against what your parser produced. This is an independent check of the parser's output, and it needs no Docker.
 
 **Command**
 
@@ -1504,13 +1504,13 @@ Remove-Item -Recurse -Force data\schemas
 
 ---
 
-## Step 15 — Build the two R10.3 deliverables that code cannot produce — RUN ONCE before submission, then after any edit to `docs\PRESENTATION.md` or `docs\SCRIPT.md`
+## Step 15 — Build the presentation and demo recording — RUN ONCE before presenting, then after any edit to `docs\PRESENTATION.md` or `docs\SCRIPT.md`
 
 **Purpose.** `GLOBAL_RULESET.md` R10.3 names five deliverables: source link, README, **architecture document (max 2 pages)**, **demo video (max 2 minutes)**, **technical presentation (max 5 slides)**. Three of them are already produced and gated by this repository. Two are not, and this step exists because *nothing in the codebase can honestly produce them*.
 
 The architecture PDF **is** built by code — `python scripts\build_architecture_pdf.py` renders `docs\ARCHITECTURE.md` to `docs\ARCHITECTURE.pdf` at exactly two pages, and it is committed. You do not need this step for it. It is mentioned here only so the accounting is complete, and because the verify block below re-checks it for free.
 
-**Why the deck is not scripted.** `docs\PRESENTATION.md` carries the finished slide content, and its own header is an instruction to a person: paste into `SIT_SIH2026-IDEA-Presentation-Format.pptx`, keep the template's images and footers, delete slide 7, export as PDF. A generator would produce a clean, competent deck that is **not the SIH template** — wrong images, wrong footers, wrong slide furniture — and it would look finished, which is the worst possible failure mode for a submitted artefact. The slide *count* is therefore gated where the count actually lives (`scripts\check_deliverable_limits.py` reads the `## Slide N —` headings in the Markdown), and the export stays a human act.
+**Why the deck is not scripted.** `docs\PRESENTATION.md` carries the finished slide content for a person to lay out and export as PDF. The slide *count* is gated where the count actually lives (`scripts\check_deliverable_limits.py` reads the `## Slide N —` headings in the Markdown), and the export stays a human act so the visual layout can be reviewed.
 
 **Why the video is not scripted either.** Same shape, less arguable: `docs\SCRIPT.md` holds the words and the shot list, `docs\DEMO.md` holds the sequence, and `check_script()` re-derives the duration from the document's own word count so the two-minute claim keeps following from the script underneath it. Recording is yours.
 
@@ -1679,7 +1679,7 @@ The contract in one table. If an artifact is absent, the named code path raises 
 | `data\praman.db` operator rows | Step 13 | every route except `/health`, `/auth/login` and the static assets | `401` naming this script and Step 13; `/auth/login` answers `503`. **There is no default account** — absence is the intended state of a deployment nobody has provisioned |
 | `data\schemas\*.json` | Step 14 | `scripts\check_export_conformance.py`, and nothing else | the script exits **2** naming Step 14 and validates nothing. No runtime path reads these files: the exporters never load a schema, so `/devices/{id}/oscal.json`, `/simulate/sarif` and all 1,798 tests are unaffected. A schema present but not the pinned one exits **3**, never a pass |
 | `docs\ARCHITECTURE.pdf` | Step 15 (`scripts\build_architecture_pdf.py`) | `scripts\check_deliverable_limits.py`; no runtime path | **committed, so normally present.** Deleted, `check_architecture()` returns a violation naming the builder and `tests\test_deliverable_limits.py` fails — R10.3 lists it as a deliverable and "not built" is not a pass. Present but stale against `ARCHITECTURE.md`, a *second* test fails on the text diff |
-| `docs\PRESENTATION.pdf` | Step 15 (**by hand**, from the SIH `.pptx` template) | nothing — it is a submission artefact, not an input | absent by default and **not** gated: the slide limit is checked against `docs\PRESENTATION.md`, where the count actually lives. A generated stand-in would be the wrong template and would look finished, which is why no code produces it |
+| `docs\PRESENTATION.pdf` | Step 15 (**by hand**, from the slide content) | nothing — it is a presentation artifact, not an input | absent by default and **not** gated: the slide limit is checked against `docs\PRESENTATION.md`, where the count actually lives. The visual layout and final export are reviewed by a person |
 | `data\frameworks\oscal\baselines.json` | Step 16 (optional) | `scripts\bench\bench_rule_latency.py` governance reach; no runtime path | **absent by default.** `load_baselines()` returns `{}` and the metric prints the full-catalog reach plus a sentence naming this step. No verdict, rule or `Finding` changes either way — the baseline scopes a denominator, not an audit |
 
 ---

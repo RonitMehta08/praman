@@ -38,7 +38,7 @@ the bearer token starts crossing a network.
 ## Hosted demonstrations
 
 `ONLINE.md` describes the second, intentionally narrower profile: a managed web
-service can expose the same app at a live HTTPS URL for a hackathon, while the
+service can expose the same app at a live HTTPS URL for a demonstration, while the
 offline profile remains the correct place for real sensitive configurations. The
 hosted profile disables optional AI inference, uses the provider's TLS, and can
 use `PRAMAN_DATABASE_PATH` for a mounted SQLite volume.

@@ -1,4 +1,4 @@
-# Benchmark applicability scope — PURE DATA, no code change needed (PS 26155 C5).
+# Benchmark applicability scope — PURE DATA, no code change needed (capability C5).
 #
 # Each entry maps a published benchmark to the canonical vendor / os_family
 # values it governs. The build script matches `match` as a case-insensitive

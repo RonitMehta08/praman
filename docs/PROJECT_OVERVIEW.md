@@ -1,6 +1,6 @@
-# PRAMAN — Idea Submission Deck
+# PRAMAN — Project Overview Deck
 
-**Nine slides, one per required section.** Each slide gives you the exact text
+**Nine slides covering the project.** Each slide gives you the exact text
 to put on it, a one-line layout note, and 20–30 s of speaker notes (put those in
 PowerPoint's Notes pane, not on the slide).
 
@@ -13,10 +13,10 @@ PowerPoint's Notes pane, not on the slide).
 
 ---
 
-## Slide 1 — Team Details
+## Slide 1 — Project Overview
 
 > **Layout:** Project name huge, one-line tagline under it, then a clean
-> two-column table. Nothing else. This slide is a label, not an argument.
+> one-line operating profile. Nothing else. This slide is a label, not an argument.
 
 # PRAMAN
 *Sanskrit **pramāṇa** — "proof", "a valid means of knowledge"*
@@ -24,28 +24,16 @@ PowerPoint's Notes pane, not on the slide).
 **AI-Driven Multi-Vendor Network Security Compliance Auditor**
 *Hand it a router config. Get back a signed, re-verifiable compliance verdict — offline.*
 
-| | |
-|---|---|
-| **Team Name** | _fill in_ |
-| **Team ID** | _fill in_ |
-| **Institute / Organisation** | _fill in_ |
-| **Team Lead** | _name · email · phone_ |
-| **Member 2** | _name · role (e.g. parsing & vendor packs)_ |
-| **Member 3** | _name · role (e.g. rule engine & frameworks)_ |
-| **Member 4** | _name · role (e.g. ML / training loop)_ |
-| **Member 5** | _name · role (e.g. frontend & reporting)_ |
-| **Member 6** | _name · role (e.g. crypto ledger & security)_ |
-| **Mentor** | _name · designation_ |
-| **Repository** | _link_ |
+**Operating profile:** Offline-first auditing, with an optional hosted sample demo.
 
-**Speaker notes:** "We're team _X_. Our project is PRAMAN — Sanskrit for
+**Speaker notes:** "This is PRAMAN — Sanskrit for
 *proof*. That name is the whole thesis: a compliance report should be evidence
 you can independently re-check, not an opinion you have to trust. Everything I'm
 about to show you is already running."
 
 ---
 
-## Slide 2 — Problem Statement / Title
+## Slide 2 — The Network Audit Problem
 
 > **Layout:** Title band at top, the one-sentence problem in large type in the
 > middle, the four constraint chips at the bottom. Keep it to ~40 words of body

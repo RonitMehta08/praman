@@ -75,7 +75,7 @@ normal, confident pace. Do not rush it — the pauses are what make it land.
 |---|---|
 | Opening line | Say it flat and confident. Don't start with "So, um, basically…" |
 | "330 canonical paths" | **Slow down and pause after.** This is your one novel idea — let it land. |
-| "the AI never decides a verdict" | Say this *directly to the judges*, not to the screen. It is the line that separates you from every other AI-wrapper project in the room. |
+| "the AI never decides a verdict" | Say this *directly to the audience*, not to the screen. It explains the boundary between AI-assisted parsing and deterministic compliance decisions. |
 | "six milliseconds" | Small pause before the number. Numbers land better with a beat in front of them. |
 | Closing blue bar | Slow, three beats: *verdict … signature … nothing skipped.* Then stop. Do not add "yeah, so that's it." |
 | Hands | Point at the slide 4 times only (marked above). Constant pointing reads as nervous. |
@@ -85,7 +85,7 @@ Everything on this slide is built and measured — speak in the present tense.
 
 ---
 
-## LIKELY JUDGE QUESTIONS (30-second answers)
+## LIKELY AUDIENCE QUESTIONS (30-second answers)
 
 **"Where is the AI actually doing something?"**
 > Two places. It classifies config lines our regex packs don't recognise, and it
@@ -135,7 +135,7 @@ Everything on this slide is built and measured — speak in the present tense.
 
 ## FastAPI — where exactly (`backend/app/main.py`)
 
-28 endpoints across eight groups. If a judge asks "show me", name these:
+28 endpoints across eight groups. If someone asks "show me", name these:
 
 | Group | Endpoints | What it does |
 |---|---|---|
@@ -207,7 +207,7 @@ actually used anywhere in the codebase** — only mentioned in a docstring. Ther
 *is* a vector index (`sqlite-vec`) in `scripts/build_template_index.py`, but it
 isn't wired into the running app.
 
-If a judge asks "where's your full-text search?", the safe answer is:
+If someone asks "where's your full-text search?", the accurate answer is:
 
 > Full-text search isn't in the current path — our lookups are indexed
 > equality on device, path and framework, which is what the query pattern
@@ -215,7 +215,7 @@ If a judge asks "where's your full-text search?", the safe answer is:
 
 **Better: change the slide to "SQLite (WAL, JSON1)"** — both true, and JSON1 is
 the more interesting claim anyway. Never leave a claim on a slide you can't
-demonstrate; judges dig exactly there.
+demonstrate; reviewers will ask about those gaps.
 
 ---
 
@@ -295,7 +295,7 @@ outside the signed byte range. The PDF also carries `X-PRAMAN-Record-Hash` and
 ## THREE STORIES THAT WIN THE ROOM
 
 These are your best material — they show engineering judgment, not just features.
-Judges remember stories, not feature lists.
+Audiences remember stories, not feature lists.
 
 ### Story 1 — "Our integrity check was broken, and we found it"
 
@@ -389,7 +389,7 @@ The `1,010` above is quoted deliberately: it is what the frozen slide image says
 not a claim about the repository. `tests/test_published_counts.py` keeps the
 second figure current and leaves the first alone.
 
-Re-verify before submitting:
+Re-verify before presenting:
 
 ```bash
 .venv/Scripts/python.exe -m pytest -q

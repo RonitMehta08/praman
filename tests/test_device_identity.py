@@ -1,4 +1,4 @@
-"""Test: PS 26155 C4 device identity — serial numbers and hardware.
+"""Test: Device identity — serial numbers and hardware.
 
 C4 requires the per-device report to identify the device "including serial
 numbers and hardware". Neither appears anywhere in a running-config, so both are

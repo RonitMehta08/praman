@@ -172,8 +172,6 @@ async function stampFooter(footer) {
     footer.replaceChildren(
       el('span', { text: `${health.app} ${health.version}` }),
       el('span', { class: 'footer-sep', text: '·' }),
-      el('span', { text: `${health.problem_statement.id} · ${health.problem_statement.org}` }),
-      el('span', { class: 'footer-sep', text: '·' }),
       el('span', {
         text: `${health.runtime.rules_loaded} rules · ${health.runtime.controls_total} controls · ${health.runtime.catalogs_loaded} catalogs`,
       }),

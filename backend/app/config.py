@@ -12,11 +12,7 @@ from pathlib import Path
 # ─── Identity ──────────────────────────────────────────────────────────
 APP_NAME = "PRAMAN"
 APP_VERSION = "0.1.0"
-PS_ID = "26155"
-PS_TOKEN = "SIH26155"
-PS_ORG = "NTRO"
-PS_THEME = "Blockchain & Cybersecurity"
-PS_TITLE = "AI-Driven Multi-Vendor Network Security Compliance Auditor"
+APP_DESCRIPTION = "AI-Driven Multi-Vendor Network Security Compliance Auditor"
 
 # ─── Paths ─────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent

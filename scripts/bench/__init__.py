@@ -239,7 +239,7 @@ def check(payload: dict[str, Any], *, filename: str) -> int:
     Returning 0 there is the load-bearing choice, and it is a narrow exemption
     rather than a softening of the gate: every substantive figure is still gated
     whenever the configuration matches, which is the shipped default and so the
-    case CI and a grader both hit. The alternative — failing — was the behaviour
+    case CI and a new user both hit. The alternative — failing — was the behaviour
     this replaced, and it fails for a reason unrelated to correctness on any
     machine with a model server up. A gate that cries wolf on demo day is a gate
     someone switches off, and then it catches nothing at all.

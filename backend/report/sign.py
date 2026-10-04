@@ -226,7 +226,7 @@ def _demo_signer() -> Any:
         name = x509.Name(
             [
                 x509.NameAttribute(NameOID.COMMON_NAME, "PRAMAN Demo Signer"),
-                x509.NameAttribute(NameOID.ORGANIZATION_NAME, "PRAMAN SIH26155"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, "PRAMAN"),
                 x509.NameAttribute(
                     NameOID.ORGANIZATIONAL_UNIT_NAME, "Not for production use"
                 ),

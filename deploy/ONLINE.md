@@ -5,10 +5,10 @@ PRAMAN has two valid operating profiles:
 | Profile | Where configs are processed | Best use |
 |---|---|---|
 | **Offline appliance** | The assessor's laptop or an internal machine | Real sensitive configurations and air-gapped assessments |
-| **Hosted demo** | The web service's private runtime and SQLite volume | A hackathon link using only the shipped sample configurations |
+| **Hosted demo** | The web service's private runtime and SQLite volume | A public demo using only the shipped sample configurations |
 
 These profiles use the same FastAPI app, deterministic rules engine, frontend and
-ledger. Hosting the app does not make the offline claim false; it gives judges a
+ledger. Hosting the app does not make the offline claim false; it gives users a
 convenient way to inspect a demonstration. It does mean that a config uploaded to
 the hosted URL leaves the user's machine, so never upload a real customer or
 production configuration to the public demo.
@@ -75,7 +75,7 @@ multi-tenant architecture change, not a setting to turn on for the demo.
 
 ## Persistence
 
-The hosted demo works without a volume for a short-lived judging session, but a
+The hosted demo works without a volume for a short-lived demo session, but a
 restart or redeploy can erase the SQLite database on providers with ephemeral
 filesystems. If the provider offers a mounted persistent disk, set:
 
@@ -115,7 +115,7 @@ The hosted demo does not need Tier 3 Qwen/llama.cpp. Disabling it makes the
 deployment smaller, cheaper and easier to reproduce while leaving the compliance
 verdict path unchanged.
 
-## Security language for the submission
+## Describing the deployment's security boundaries
 
 Use wording like:
 

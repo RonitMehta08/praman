@@ -468,7 +468,7 @@ asks for. Details in [`GAPS.md`](GAPS.md).
   *first*; a mismatch now reports **not comparable** and returns 0, printing
   which knob differs. Every substantive figure is still gated whenever the
   configuration matches, which is the shipped default and therefore the case CI
-  and a grader both hit. Held open by
+  and a new user both hit. Held open by
   `tests/test_metrics_are_current.py::TestConfigurationIsNotConfusedWithStaleness`,
   which asserts a mismatch passes, a match still catches a moved number, and
   `ai_abstention.json` is the only metric declaring a `configuration` at all —
@@ -517,8 +517,8 @@ asks for. Details in [`GAPS.md`](GAPS.md).
 
 ### 2.6 A published benchmark ratio had no gate at all
 
-> **Resolved.** Three graded deliverables — `README.md`,
-> `docs/PRESENTATION.md` and `docs/IDEA_ROUND_DECK.md` — stated that the
+> **Resolved.** Three public documents — `README.md`,
+> `docs/PRESENTATION.md` and `docs/PROJECT_OVERVIEW.md` — stated that the
 > ReportLab-less fallback renderer was **61.6× faster**. The regenerated
 > `reports/metrics/pdf_generation.json` records **72.1×**, computed from the same
 > run that supplies the ReportLab latency it is a ratio against. The metrics file
@@ -635,9 +635,8 @@ values is already written. §13 also instructs writing it with stdlib `json` and
 §13.3 specifies **SARIF v2.1.0** on the `/simulate` path, with the field names
 still carrying an explicit `TODO(verify)`.
 
-This is the enterprise integration story, and it is also the artifact
-`MASTER_PROMPT.md` §29.3 names against the official SIH criterion "potential for
-future work progression". See §5.2 and §5.3.
+This is the enterprise integration story and a foundation for future product
+development. See §5.2 and §5.3.
 
 ### 3.2 ~~`backend/db/` — no schema, no migrations~~ — **both directions now exist**
 
@@ -1036,13 +1035,9 @@ is the one artefact in this repository that can go stale in silence: rewrite
 `ARCHITECTURE.md`, leave the PDF alone, and the page count still says two.
 
 `docs/PRESENTATION.pdf` is the opposite case and **stays a human step.**
-`docs/PRESENTATION.md`'s own header is an instruction to a person: *"Paste into
-`SIT_SIH2026-IDEA-Presentation-Format.pptx`, keep the template's images and
-footers, delete slide 7, export as PDF. Six slides including the title, per the
-template's own instruction slide."* A script that generated a deck from that
-Markdown would produce a competent PDF that is **not the required SIH template**
-— wrong images, wrong footers, wrong slide furniture — which is a worse outcome
-than not having one, because it looks finished. So the slide *count* is gated by
+`docs/PRESENTATION.md` carries six slides including the title for a person to
+lay out and export as PDF. The visual layout needs human review, so the slide
+*count* is gated by
 `check_presentation()` against the Markdown, where the count actually lives, and
 the export is recorded as **Step 15 in `MANUAL_COMMANDS.md`**, with the same six
 fields every other operator step carries. The remaining R10.3 item is the demo
@@ -1376,9 +1371,8 @@ CIS-CAT or Batfish pages reviewed. The spec is complete in §13 with all enums
 frozen and the XCCDF→AR mapping written for all nine result values. Use stdlib
 `json`; do not add `compliance-trestle` (it hard-pins `jinja2==3.1.6`).
 
-This is also the artifact §29.3 names against the official SIH criterion
-"potential for future work progression" — so it serves the submission and the
-product with one piece of work.
+This artifact also provides a foundation for future product development and
+enterprise integrations.
 
 ### 5.3 SARIF v2.1.0 on `/simulate` — shift the whole product left
 
@@ -1433,7 +1427,7 @@ with the clearest evidence of being unoccupied. It is also already built.
 ### 5.5 Offline threat enrichment — one path fix from working
 
 The 53.8 MB ATT&CK bundle is on disk. Fixing the path in §3.3 and wiring the
-module makes §22.4's threat appendix real. For an NTRO audience specifically,
+module makes §22.4's threat appendix real. For critical-infrastructure operators,
 the corpus already identifies campaign **C0043 "Indian Critical Infrastructure
 Intrusions"** and group **G1045 Salt Typhoon** — a narrative that connects a
 misconfigured SNMP community on a router to a documented adversary's technique.
@@ -1450,7 +1444,7 @@ content acquisition is a human step and becomes a new numbered entry appended to
 `MANUAL_COMMANDS.md`.
 
 A CERT-In or NCCS ITSAR mapping pack is a framework no tool in the reviewed set
-ships, it is directly relevant to the sponsoring organisation, and — because a
+ships, it is directly relevant to Indian network operators, and — because a
 framework is a mapping pack — it is authoring work against catalogs, not engine
 work. The 401 is the real risk: without acquirable control text this stays a
 plan, so verify acquisition before it appears in any deliverable.

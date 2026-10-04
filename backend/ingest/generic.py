@@ -20,7 +20,7 @@ Parsing happens in four passes, in this order, because each depends on the last:
    see what is present, so absence is asserted here, from ``defaults`` and
    ``absent_path``, with ``present=False`` and a line span of 0.
 4. **Identity.** Read the ``device.*`` facts back out to fill the Device record,
-   including the serial numbers and hardware PS 26155 C4 requires on the report.
+   including the serial numbers and hardware required on the device report.
 
 Everything the parser could not place lands in ``ParseResult.unparsed_lines``.
 That list is not debug output - it is the input to the AI escalation ladder and
@@ -413,8 +413,8 @@ class PatternAdapter(VendorAdapter):
     ) -> Device:
         """Assemble the Device record from the identity facts.
 
-        Serial numbers and hardware models are what PS 26155 C4 asks the report
-        to identify the device by. They are not in a running-config, so they are
+        Serial numbers and hardware models identify the device in its report.
+        They are not in a running-config, so they are
         parsed from any ``show version`` / ``show inventory`` output included in
         the upload. When the upload is config-only both stay ``[]``, and the
         report says so rather than inventing an identifier.

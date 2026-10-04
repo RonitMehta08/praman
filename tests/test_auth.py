@@ -263,7 +263,7 @@ def test_a_forged_token_is_refused(client: TestClient) -> None:
 
 
 def test_a_viewer_may_read_but_not_commit(client: TestClient) -> None:
-    """The role separation PS 26155 asks for, at its narrowest point.
+    """PRAMAN's role separation, at its narrowest point.
 
     A viewer is refused before the handler runs, so the 403 arrives whether or not
     the device exists — which is why a nonexistent id is used here. A 404 would

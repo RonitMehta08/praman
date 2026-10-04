@@ -1,4 +1,4 @@
-"""Acceptance test: PDF report — PS 26155 Capability C4.
+"""Acceptance test: PDF report — capability C4.
 
 Single per-device PDF must carry:
   - Device Identification (serial numbers + hardware + OS version)

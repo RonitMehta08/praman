@@ -194,7 +194,7 @@ def test_the_report_is_byte_identical_across_runs() -> None:
 
 
 def test_the_device_is_identified_by_serial_and_hardware(report_text: str) -> None:
-    """PS 26155 names serial numbers and hardware explicitly."""
+    """Device reports include serial numbers and hardware explicitly."""
     assert "FDO1734Z1AB" in report_text
     assert "FDO1734Z1CD" in report_text
     assert "WS-C3750X-48P" in report_text
@@ -205,7 +205,7 @@ def test_a_list_is_never_printed_as_a_python_repr(report_text: str) -> None:
     """The old cover page printed ``['FDO1734Z1AB', 'FDO1734Z1CD']``.
 
     Brackets and quotes on the page are a tell that nobody read the output --
-    on the two fields the problem statement calls out by name.
+    on the two fields that identify the device in its report.
     """
     assert "['" not in report_text
     assert "']" not in report_text

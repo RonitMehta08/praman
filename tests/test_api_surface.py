@@ -5,7 +5,7 @@ claims and nobody checks. Before it was written, five routes had **zero**
 coverage anywhere in the suite — ``GET /vendors``, ``GET /canonical/paths``,
 ``GET /training/mappings``, ``POST /training/retire`` and
 ``GET /training/export`` — and three of those five are the C2 training module,
-the capability PS 26155 makes the centrepiece. A demo would have been the first
+the capability PRAMAN makes the centrepiece. A demo would have been the first
 thing to run them. (The training round trip has since moved to its own file,
 ``tests/test_api_training.py``; the inventory below still refuses to let it go
 uncovered.)
@@ -255,7 +255,7 @@ def test_health_reports_what_is_loaded(client: TestClient) -> None:
     """
     body = client.get("/health").json()
     assert body["status"] == "ok"
-    assert body["problem_statement"]["id"]
+    assert body["description"]
     runtime = body["runtime"]
     assert runtime["pattern_packs"] >= 1
     assert runtime["rules_loaded"] >= 1

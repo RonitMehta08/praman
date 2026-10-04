@@ -4,7 +4,7 @@
 
 ## Context
 
-PS 26155 C2 asks for an "AI-powered training module" that lets an operator teach
+PRAMAN's AI-powered training module lets an operator teach
 the tool a configuration format it has not seen, through a GUI, without a backend
 redeploy. The AI's job is to look at a line the pattern packs did not recognise
 and propose which canonical path it belongs to.

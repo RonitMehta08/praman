@@ -1,8 +1,8 @@
 # The 2-minute demo, shot by shot
 
-PS 26155 caps the demo video at **2 minutes**. That is roughly 300 spoken words,
+This demo is designed for **2 minutes**. That is roughly 300 spoken words,
 which is not enough for a tour — so this is not a tour. It shows the four things
-a grader cannot verify from the README alone, and skips everything they can.
+a reader cannot verify from the README alone, and skips everything they can.
 
 **What is deliberately not shown:** the setup (it is two commands in the README),
 the layout of the code, the ADRs, and eight of the ten views. A demo that pans
@@ -78,7 +78,7 @@ not doing that.
 
 ## Shot 3 — Teach it an unseen line · 0:50–1:25
 
-This is the longest shot because it is the PS requirement most likely to be
+This is the longest shot because it is the training capability most likely to be
 claimed without being implemented.
 
 **Do:**
@@ -147,7 +147,7 @@ If the recording overruns, cut shot 4's PDF scroll before touching shot 3.
 **Say the honest number.** *"71 of 90 CIS controls and 32 of 35 STIG NDM
 controls are automated, and all 22 that are not are listed individually in
 GAPS.md."* Volunteering the gap is more convincing in a 2-minute video than a
-coverage claim a grader has no way to check.
+coverage claim a reviewer has no way to check.
 
 **Say what the AI does not do.** *"The AI never decides a verdict."* That one
 sentence pre-empts the obvious question about an "AI-powered" compliance tool.

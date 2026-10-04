@@ -1,7 +1,7 @@
 """Pattern-driven parsing engine — a vendor is a data file, not a Python module.
 
-PS 26155 C5 asks that new vendors, OS versions and standards be added "without
-manual code modification". A hand-written adapter per vendor cannot deliver that:
+PRAMAN supports adding new vendors, OS versions and standards without
+manual code modification. A hand-written adapter per vendor cannot deliver that:
 every new platform is a new Python file, a code review and a redeploy. So the
 parsing logic lives in data instead.
 

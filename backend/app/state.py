@@ -7,7 +7,7 @@ from disk — roughly 3,400 controls parsed to answer one question about one
 device. Handlers now ask :data:`STATE` for what they need and get a cached
 object back.
 
-The cache is not a plain memo, because two of PS 26155's five capabilities are
+The cache is not a plain memo, because two of PRAMAN's five capabilities are
 promises about *change taking effect without a restart*:
 
 * **C2** — a mapping taught in the GUI must apply to the next parse. The learned

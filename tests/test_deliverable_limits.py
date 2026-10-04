@@ -1,10 +1,8 @@
 """Deliverable limits are checked here because a limit nobody measures is a wish.
 
-``GLOBAL_RULESET.md`` §247 lists overrunning a stated deliverable limit as "the
-cheapest possible way to lose points", and it is right: two pages, two minutes,
-five slides are not judgement calls, and being over is discovered by a grader
-rather than by the team. Every one of them is a counting problem, so every one of
-them belongs in the suite.
+The project document budgets are two pages, two minutes, and five content slides.
+Each is a counting problem, so each belongs in the suite rather than relying on
+an author to notice that a document has grown beyond its budget.
 
 The line-length rule is different in kind and is treated differently. This
 repository does not meet it — 29 files are over 500 lines — and a gate that goes
@@ -33,12 +31,11 @@ from scripts.check_deliverable_limits import (
 
 
 def test_the_presentation_is_within_five_content_slides() -> None:
-    """R10.3. The title slide is excluded, and the exclusion is argued, not assumed.
+    """The title slide is excluded from the five-content-slide budget.
 
-    The SIH template's own instruction slide asks for six including the title,
-    which is the same deliverable counted differently. The script names that
-    reconciliation in a constant so that "we allow one more than the rule says"
-    shows up in a diff rather than in a grader's notes.
+    The presentation budget is six slides including the title,
+    with five content slides. The script records that budget in a constant
+    so a change to it appears explicitly in a diff.
     """
     violations = check_presentation()
     assert not violations, "\n".join(f"{v.subject}: {v.detail}" for v in violations)

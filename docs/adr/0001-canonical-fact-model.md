@@ -5,7 +5,7 @@
 ## Context
 
 A compliance audit joins a device configuration (vendor grammar) to a benchmark
-(prose about concepts). PS 26155 requires four frameworks (CIS, NIST SP 800-53,
+(prose about concepts). PRAMAN supports four frameworks (CIS, NIST SP 800-53,
 DISA STIG, ISO 27001) and vendor-agnostic scalability across at least Cisco,
 Juniper, Fortinet, Palo Alto and Arista.
 

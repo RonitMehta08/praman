@@ -1,4 +1,4 @@
-"""Acceptance test: Multi-framework evaluation — PS 26155 Capability C3.
+"""Acceptance test: Multi-framework evaluation — capability C3.
 
 One Canonical Model evaluated against all four rule packs, each
 Finding.framework set, Finding.result restricted to the XCCDF enum.

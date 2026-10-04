@@ -122,7 +122,7 @@ def test_the_kind_is_always_one_of_the_three(committed) -> None:
             )
 
 
-# ── Device-specific, which is the word the PS uses ────────────────────
+# ── Device-specific remediation ────────────────────
 
 
 def test_every_prompt_carries_this_devices_hostname(committed) -> None:

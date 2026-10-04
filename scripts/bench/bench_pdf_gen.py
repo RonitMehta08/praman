@@ -3,7 +3,7 @@
     python scripts/bench/bench_pdf_gen.py
     python scripts/bench/bench_pdf_gen.py --check
 
-PS 26155 C4 asks for a per-device PDF. Three things about it are worth measuring
+PRAMAN produces a per-device PDF. Three things about it are worth measuring
 and one is worth measuring more than the other two.
 
 **Latency and size** are the routine figures, measured on the fixture with the

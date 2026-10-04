@@ -367,7 +367,7 @@ def render(destination: Path) -> tuple[int, float]:
         pagesize=(PAGE_WIDTH, PAGE_HEIGHT),
         title="PRAMAN — Architecture",
         author="PRAMAN",
-        subject="SIH 2026 PS 26155 — architecture document (R10.3, 2 pages)",
+        subject="PRAMAN — architecture document (2 pages)",
         leftMargin=MARGIN_X, rightMargin=MARGIN_X,
         topMargin=MARGIN_TOP, bottomMargin=MARGIN_BOTTOM,
     )

@@ -2,7 +2,7 @@
 #
 # This file IS the Cisco IOS parser. There is no cisco_ios.py: backend/ingest/
 # generic.py runs this data, and the same engine runs every other vendor's pack.
-# That is what makes PS 26155 C5 ("add vendors without manual code modification")
+# That is what makes capability C5 ("add vendors without manual code modification")
 # literally true rather than aspirational.
 #
 # Reading order for a reviewer:
@@ -226,7 +226,7 @@ ignore:
 patterns:
 
   # ── Device identity ───────────────────────────────────────────────────
-  # PS 26155 C4 requires the report to identify a device by serial number and
+  # Device reports identify a device by serial number and
   # hardware. Neither appears in a running-config, so both are read from any
   # 'show version' / 'show inventory' text included in the upload. When the
   # upload is config-only they stay empty and the report says so.

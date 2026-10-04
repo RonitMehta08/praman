@@ -26,7 +26,7 @@ is that no script inherits caches another paid for.
 The cost is the honest one: this is the slowest test in the suite by an order of
 magnitude, because it genuinely re-runs every benchmark. It is marked ``slow`` so
 ``-m "not slow"`` skips it during a tight edit loop, and it is the last thing that
-should be skipped before a submission.
+should be skipped before a release.
 """
 
 from __future__ import annotations

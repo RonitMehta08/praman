@@ -358,7 +358,7 @@ Every screen has the same shape:
 
 ### The footer
 
-Stamped with live information from the server: the app name, version, and the problem statement it was built for. Plus this line, which is a statement of design intent:
+Stamped with live information from the server: the app name, version, and loaded rule and catalog counts. Plus this line, which is a statement of design intent:
 
 > No telemetry. No outbound network calls. Verdicts are deterministic — no model is in the decision path.
 

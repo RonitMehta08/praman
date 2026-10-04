@@ -55,7 +55,7 @@ Tier availability is reported rather than assumed, and the report is part of the
 metric rather than a footnote: an abstention rate of 1.0 with every tier down says
 something very different from the same number with all three up. On a fresh clone
 tier 2 (SetFit) is untrained and tier 3 (llama-server) is not running, which is the
-*shipped default* — the configuration a grader will have, and the one an operator
+*shipped default* — the configuration a new user will have, and the one an operator
 has before running MANUAL_COMMANDS.md Step 6. That makes the abstention figures an
 upper bound on silence, not a lower one: adding tiers can only convert abstentions
 into answers.

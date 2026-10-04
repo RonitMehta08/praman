@@ -75,7 +75,7 @@ def resolve_scope(name: str, patterns: list[dict]) -> tuple[list[str], list[str]
 
 
 def is_excluded(name: str, excludes: list[str]) -> bool:
-    """Return True when a benchmark is outside the problem statement's scope."""
+    """Return True when a benchmark is outside the project's supported scope."""
     haystack = normalise_for_match(name)
     return any(
         normalise_for_match(token) in haystack for token in excludes if str(token).strip()

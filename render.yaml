@@ -1,4 +1,4 @@
-# Disposable hackathon demo. Configure the password in Render, never in Git.
+# Disposable hosted demo. Configure the password in Render, never in Git.
 services:
   - type: web
     name: praman-demo

@@ -1,7 +1,7 @@
 """The training module's persistence layer — capability C2.
 
-PS 26155 asks for "a GUI-based training module where an admin can teach the
-system a new vendor format without redeploying the backend". This module is the
+PRAMAN provides a GUI-based training module where an admin can teach the
+system a new vendor format without redeploying the backend. This module is the
 half of that which survives a restart. The flow it implements:
 
 1. An ingest leaves lines no pattern claimed.

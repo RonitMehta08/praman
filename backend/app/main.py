@@ -8,7 +8,7 @@ not a convenience:
 * ``POST /audit/commit`` — writes exactly one immutable ``AuditRecord`` to the
   hash-chained ledger. This is the operation that produces evidence.
 
-Everything else serves one of PS 26155's five capabilities:
+Everything else serves one of PRAMAN's five capabilities:
 
 * C1 ingestion — ``/ingest`` (single) and ``/ingest/bulk`` (archive).
 * C2 training — ``/training/queue``, ``/training/map``, ``/training/mappings``,
@@ -92,14 +92,10 @@ from backend.app.auth import (
 )
 from backend.app.bulk import ArchiveRejectedError, open_archive, read_members
 from backend.app.config import (
+    APP_DESCRIPTION,
     APP_NAME,
     APP_VERSION,
     MAX_UPLOAD_BYTES,
-    PS_ID,
-    PS_ORG,
-    PS_THEME,
-    PS_TITLE,
-    PS_TOKEN,
     SIGNING_PFX_PASSPHRASE,
     SIGNING_PFX_PATH,
     SIGNING_TSA_URL,
@@ -133,7 +129,7 @@ from backend.rules.projection import DIRECT_FRAMEWORKS
 app = FastAPI(
     title=APP_NAME,
     version=APP_VERSION,
-    description=f"{PS_TITLE} — {PS_TOKEN} ({PS_ORG})",
+    description=APP_DESCRIPTION,
 )
 
 # The UI is served from this same origin, so no cross-origin request is needed
@@ -310,7 +306,7 @@ def _store_parse(conn, result: ParseResult, source_file: str) -> int:
 
     Queuing the unparsed lines here rather than in a separate step is what makes
     the training module self-feeding. Before this, ``training_queue`` was written
-    by nothing, so the GUI that PS 26155 asks for had an empty list to show no
+    by nothing, so the training GUI had an empty list to show no
     matter how many unrecognised commands the estate contained.
     """
     device_dict = result.device.model_dump(mode="json")
@@ -570,13 +566,7 @@ async def health_check() -> dict[str, Any]:
         "status": "ok",
         "app": APP_NAME,
         "version": APP_VERSION,
-        "problem_statement": {
-            "id": PS_ID,
-            "token": PS_TOKEN,
-            "org": PS_ORG,
-            "theme": PS_THEME,
-            "title": PS_TITLE,
-        },
+        "description": APP_DESCRIPTION,
         "runtime": STATE.versions(),
         "ai": _ai_status(),
     }

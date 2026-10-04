@@ -1,6 +1,6 @@
 # Architecture
 
-PRAMAN, SIH 2026 PS 26155. Two pages.
+PRAMAN — network security compliance auditing. Two pages.
 
 ## The problem shape
 
@@ -61,7 +61,7 @@ a local quantised LLM. Each tier stops at its confidence threshold and
 verdict, which is worse than no verdict. The suggestion goes to the operator in
 the Training GUI, who confirms or corrects it; the accepted mapping is written to
 the pattern store and hot-reloaded via `RulePackLoader.reload_if_changed()`.
-**No redeploy, no restart** — that is the PS requirement, and
+**No redeploy, no restart** — that is the training requirement, and
 `tests/acceptance/test_training_hot_reload.py` is the assertion.
 With no models installed every tier reports its own absence and the rest of the
 system is unaffected.

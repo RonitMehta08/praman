@@ -66,7 +66,7 @@ documented:
 ## Costs we accepted
 
 **The headline number is worse.** 71 of 90 reads as less impressive than 71 of
-71, and in a judged competition that is a real cost paid on purpose.
+71, and that trade-off in presentation is accepted to keep coverage honest.
 
 **`notchecked` totals need their own explanation.** 205 for DISA STIG looks
 alarming until it is split: 3 are argued decisions about Router NDM controls, 202

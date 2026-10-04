@@ -2,8 +2,6 @@
 
 **Automated compliance auditing for network device configurations.**
 
-SIH 2026 · Problem Statement **26155** · NTRO · Theme: Blockchain & Cybersecurity
-
 Hand a router or switch configuration to PRAMAN and it returns a per-device
 compliance verdict against CIS, DISA STIG, NIST SP 800-53 and ISO 27001, with
 the remediation CLI the publisher wrote for each failure, signed into a
@@ -17,7 +15,7 @@ required. An optional hosted demo uses the same audit engine with sample configs
 
 ## What it does
 
-| PS capability | Where it lives | Status |
+| Capability | Where it lives | Status |
 |---|---|---|
 | **C1** Unified ingestion engine | `backend/ingest/` — pattern-driven, vendor packs are data files | 7 vendor packs shipped, 4,302 facts from 20 configs |
 | **C2** AI-powered training module | `backend/ai/`, `frontend/js/views/training.js` | 3-tier classifier + GUI; new formats taught without redeploy |
@@ -57,7 +55,7 @@ other interface the bearer token crosses the network in clear text. Put
 ### Live hosted demo
 
 The same application can also run behind a managed HTTPS web service for a
-hackathon demo. Use only the shipped sample configurations there: the hosted
+public demo. Use only the shipped sample configurations there: the hosted
 profile processes uploads on the service, while the offline profile keeps them
 on the assessor's machine. See [`deploy/ONLINE.md`](deploy/ONLINE.md) for the
 provider-agnostic build/start settings, bootstrap account variables, and SQLite
@@ -404,7 +402,7 @@ Four of those tests matter more than the rest:
   diffs the substance against `reports/metrics/*.json`. Nothing about a stale
   number looks wrong, so this is what keeps the table above honest. Marked
   `slow`; `-m "not slow"` skips it while iterating, and it is the last thing
-  that should be skipped before a submission.
+  that should be skipped before a release.
 
 **What PRAMAN does not check is written down.** [`docs/GAPS.md`](docs/GAPS.md)
 lists all 19 unautomated CIS controls and 3 unautomated DISA STIG controls

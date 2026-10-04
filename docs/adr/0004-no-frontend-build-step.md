@@ -10,7 +10,7 @@ xyflow. That is a good stack and a reasonable default for a tool with ten views,
 a config viewer and a topology map — which is exactly what PRAMAN has.
 
 The deliverable, though, is a compliance tool that an assessor clones and runs.
-Likely on a locked-down machine. Possibly air-gapped. Judged in a fixed time
+Likely on a locked-down machine. Possibly air-gapped. Evaluated in a limited time
 window during which "it doesn't build on my machine" is indistinguishable from
 "it doesn't work."
 
