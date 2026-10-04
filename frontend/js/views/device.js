@@ -205,6 +205,12 @@ export async function deviceView({ outlet, params, query }) {
               download: `${device.hostname || deviceId}-audit-${latest.seq}.pdf`,
             })
           : null,
+        latest
+          ? linkButton('Export OSCAL', api.oscalUrl(deviceId, { audit_id: latest.audit_id }), {
+              class: 'btn-quiet',
+              download: `praman-${device.hostname || deviceId}-seq${latest.seq}.oscal.json`,
+            })
+          : null,
         button('Remediation plan', () => navigate('remediation', [deviceId])),
         commitButton,
       ].filter(Boolean),
@@ -324,6 +330,10 @@ export async function deviceView({ outlet, params, query }) {
                     linkButton('PDF', api.reportUrl(deviceId, { audit_id: audit.audit_id }), {
                       class: 'btn-tiny',
                       download: `${device.hostname || deviceId}-audit-${audit.seq}.pdf`,
+                    }),
+                    linkButton('OSCAL', api.oscalUrl(deviceId, { audit_id: audit.audit_id }), {
+                      class: 'btn-tiny btn-quiet',
+                      download: `praman-${device.hostname || deviceId}-seq${audit.seq}.oscal.json`,
                     }),
                     button('Plan', () => navigate('remediation', [deviceId], { audit_id: audit.audit_id }), {
                       class: 'btn-tiny btn-quiet',

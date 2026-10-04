@@ -1,0 +1,19 @@
+# Keep executable scripts and CSP-hashed frontend bytes stable on Windows/Linux.
+*.py text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=lf
+requirements*.txt text eol=lf
+
+# Publisher source artifacts and trained models retain their original bytes.
+data/frameworks/** -text
+data/models/** -text
+*.pdf binary
+*.xlsx binary
+*.zip binary

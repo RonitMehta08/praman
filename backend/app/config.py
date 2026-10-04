@@ -31,7 +31,14 @@ METRICS_DIR = REPORTS_DIR / "metrics"
 RULES_DIR = PROJECT_ROOT / "rules"
 
 # ─── Database ──────────────────────────────────────────────────────────
-DATABASE_PATH = DATA_DIR / "praman.db"
+#
+# Local/offline runs keep the database beside the project data. Hosted services
+# can point this at their mounted persistent disk without moving the read-only
+# framework packs or changing application code. The override is deliberately a
+# file path rather than a second database backend: SQLite remains the same
+# zero-infrastructure store in both deployment profiles.
+_database_path = os.environ.get("PRAMAN_DATABASE_PATH", "").strip()
+DATABASE_PATH = Path(_database_path).expanduser() if _database_path else DATA_DIR / "praman.db"
 
 # ─── Encoding ──────────────────────────────────────────────────────────
 FILE_ENCODING = "utf-8"

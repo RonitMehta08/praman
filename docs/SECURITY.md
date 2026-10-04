@@ -147,7 +147,7 @@ TLS 1.2 floor, HSTS, a CSP that matches what the frontend actually loads, the
 per-request rate limiter §4 lists as missing, `/docs` refused, `/health`
 restricted by address, and `client_max_body_size` pinned to `MAX_UPLOAD_BYTES`.
 Three of those numbers are asserted against the application by
-`tests/test_frontend_contract.py`, because a proxy config that has drifted from
+`tests/test_deploy_config.py`, because a proxy config that has drifted from
 the app breaks only in the one environment nobody develops in.
 
 Two details in it are easy to get wrong and are worth repeating here:

@@ -18,22 +18,26 @@ categories exist because the answer differs:
 
 | Category | A failure here means | Fixtures |
 |---|---|---|
-| `compliance_extremes/` | **A rule is wrong.** These configs have a known, total verdict. | 2 |
+| `compliance_extremes/` | **A rule is wrong.** These configs have a known, total verdict. | 6 |
 | `realistic/` | Something changed — investigate which. Scores here are observations, not contracts. | 5 |
 | `multivendor/` | **A vendor pack or its mapping pack regressed.** One config per non-IOS platform. | 6 |
 | `device_identity/` | The report cannot say *which* device it is about. | 2 |
 | `feature_coverage/` | A parser regression. These reach canonical paths no compliance benchmark touches. | 1 |
 
-### `compliance_extremes/` — the two poles
+### `compliance_extremes/` — the pole pairs
 
 These are the only fixtures whose results are asserted exactly, and they are the
 only tests in the project that can catch a **wrong verdict** rather than a crash.
 
-- **`fully_hardened.conf`** satisfies the published remediation text for every
-  control the engine claims to automate. Every `fail` it produces is therefore a
-  false positive in the rule pack, not a finding about the device. False
-  positives are how an auditor stops trusting a tool.
-- **`fully_noncompliant.conf`** violates all of them. Every `pass` it produces is
+A pole *pair* is two files for one platform, and three platforms have one:
+Cisco IOS (`fully_hardened.conf` / `fully_noncompliant.conf`), Arista EOS
+(`eos_fully_*.conf`) and PAN-OS (`panos_fully_*.conf`). Within each pair:
+
+- **The hardened file** satisfies the published remediation text for every
+  control the engine claims to automate on that platform. Every `fail` it
+  produces is therefore a false positive in the rule pack, not a finding about
+  the device. False positives are how an auditor stops trusting a tool.
+- **The violating file** violates all of them. Every `pass` it produces is
   a missed finding. **False negatives outrank false positives** in this
   project's policy: a missed finding leaves a device exposed while the report
   says it is fine.
@@ -41,12 +45,16 @@ only tests in the project that can catch a **wrong verdict** rather than a crash
 A `notapplicable` on either pole is a third kind of failure, and the tests assert
 zero of those too. It means the fixture never managed to express the control's
 applicable case, so the rule is untested in that direction — the verdict is not
-wrong yet, but nothing is stopping it from becoming wrong.
+wrong yet, but nothing is stopping it from becoming wrong. This is not
+hypothetical: writing the Arista violating file is what exposed V-255979 as a
+rule that was simultaneously scoped by `requires_paths` and carrying
+`on_missing: fail`, so absence resolved to `notapplicable` and the rule could
+never fail on any input at all.
 
-Both poles must automate the **identical** control set. If the hardened file
-reached a control the violating one did not, that control would only ever be
-tested in the passing direction. `tests/test_rules_mapping.py` asserts the set
-equality.
+Both halves of a pair must automate the **identical** control set. If the
+hardened file reached a control the violating one did not, that control would
+only ever be tested in the passing direction. `tests/test_rules_mapping.py`
+asserts the set equality.
 
 ### `realistic/` — configs that look like they came off a device
 
@@ -108,12 +116,13 @@ What each one is *for*, and what a failure means:
 Their scores are observations, like the `realistic/` rows, and they are not poles.
 That is a real limitation rather than a formality: `asa_dmz_firewall.conf` scores
 100.0% under CIS, which means all 45 CIS ASA controls are exercised in the
-**passing direction only**. Across all six vendors, 316 of the 351 non-IOS controls
-only ever pass, 34 only ever fail and one is only ever `notapplicable` — none is
-exercised both ways, because doing that needs a hardened *and* a violating fixture
-per platform and `compliance_extremes/` supplies that pair for Cisco IOS alone. The consequence is
+**passing direction only**. Across the four vendors with no pole pair, 274 of
+their 304 controls only ever pass, 29 only ever fail and one is only ever
+`notapplicable` — none is exercised both ways, because doing that needs a
+hardened *and* a violating fixture per platform, and `compliance_extremes/`
+supplies that pair for Cisco IOS, Arista EOS and PAN-OS only. The consequence is
 stated precisely rather than glossed:
-`test_every_control_is_exercised_in_both_directions` holds these six vendors to a
+`test_every_control_is_exercised_in_both_directions` holds these four vendors to a
 weaker bar (each control reached in at least one direction), which still catches a
 rule that stopped firing but *cannot* catch a rule that returns the wrong verdict.
 Adding a pole pair for a vendor promotes it to the strong bar automatically.
@@ -200,7 +209,7 @@ README counts the significant column only.
 
 ### Verdicts
 
-One row per fixture per directly-evaluated framework (CIS, DISA_STIG), governance projection off, so each row is what that framework's own rules decided rather than what a roll-up inferred. **Bold** rows are the two poles, whose verdicts are constrained by `tests/test_rules_mapping.py`; the rest are observations.
+One row per fixture per directly-evaluated framework (CIS, DISA_STIG), governance projection off, so each row is what that framework's own rules decided rather than what a roll-up inferred. **Bold** rows are the pole fixtures, whose verdicts are constrained by `tests/test_rules_mapping.py`; the rest are observations.
 
 | Fixture | Framework | Score | pass | fail | unknown | n/a | notchecked |
 |---|---|--:|--:|--:|--:|--:|--:|
@@ -262,7 +271,8 @@ Reading the columns that are easy to misread:
   `unknown` are excluded from the ratio, because folding them in either
   direction would misstate the posture. Excluding them is also why the score
   cannot be improved by failing to check something.
-- **The two poles are not symmetric.** `fully_noncompliant.conf` scores 0.0%
+- **The Cisco IOS pair is not symmetric**, and it is the only one that is not.
+  `fully_noncompliant.conf` scores 0.0%
   under both frameworks, but `fully_hardened.conf` scores 100.0% under CIS and
   96.9% under DISA STIG. The single remaining failure is V-215698, NTP
   authentication: DISA's own check text records that Cisco IOS is limited to MD5
@@ -304,23 +314,25 @@ Reading the columns that are easy to misread:
 
 ## Coverage guarantee
 
-Across these sixteen fixtures, **every one of the 454 automated controls is
-exercised** — no rule in any pack is dead. 102 of them, all on Cisco IOS, are
-exercised in **both directions**: each passes on at least one fixture and fails on
-at least one. `tests/test_rules_mapping.py::test_every_control_is_exercised_in_both_directions`
+Across these twenty fixtures, **every one of the 454 automated controls is
+exercised** — no rule in any pack is dead. 149 of them are exercised in **both
+directions**: each passes on at least one fixture and fails on at least one. They
+are the three vendors with a pole pair — Cisco IOS 102, Arista EOS 28, PAN-OS 19.
+`tests/test_rules_mapping.py::test_every_control_is_exercised_in_both_directions`
 asserts both tiers and names the offenders if either stops being true. The one
 exemption is V-215698, which is held to the failing direction only, for the platform
-reason given above.
+reason given above — which is why the strong tier is 150 controls and 149 of them
+reach both directions.
 
-The remaining 351 controls — the six non-IOS vendors — are exercised in at most
-one direction each: 316 only pass, 34 only fail, and one (DISA STIG NX-OS NDM
-V-220515) is reached only as `notapplicable`, because its check text makes PKI
-applicability an organisational question rather than a configuration one. That is
-stated as a set of numbers rather than described as "covered" because the gap is
-exactly what the numbers say. The strong
-bar needs a hardened *and* a violating fixture per platform, `compliance_extremes/`
-has that pair for Cisco IOS only, and the honest alternative to a two-tier bar was
-not a stricter test but six vendors with no coverage assertion at all.
+The remaining 304 controls — the four vendors with no pole pair, ASA, NX-OS,
+FortiGate and Junos — are exercised in at most one direction each: 274 only pass,
+29 only fail, and one (DISA STIG NX-OS NDM V-220515) is reached only as
+`notapplicable`, because its check text makes PKI applicability an organisational
+question rather than a configuration one. That is stated as a set of numbers
+rather than described as "covered" because the gap is exactly what the numbers
+say. The strong bar needs a hardened *and* a violating fixture per platform, and
+the honest alternative to a two-tier bar was not a stricter test but four vendors
+with no coverage assertion at all.
 
 This matters more than the count of fixtures. A control that only ever passes
 hides a rule that cannot detect its own violation; a control that only ever

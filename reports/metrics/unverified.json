@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-12T17:36:47+00:00",
+  "generated_at": "2026-09-29T02:23:21+00:00",
   "counts": {
     "TODO(verify)": 11,
     "ASSUMPTION:": 2,
@@ -51,7 +51,7 @@
     },
     {
       "file": "praman/README.md",
-      "line": 271,
+      "line": 290,
       "marker": "TODO(verify)",
       "text": "both, so this is not load cost. `TODO(verify):` the cause is not established —"
     },
@@ -81,19 +81,19 @@
     },
     {
       "file": "praman/docs/PRODUCTION-ROADMAP.md",
-      "line": 487,
+      "line": 591,
       "marker": "TODO(verify)",
       "text": "> re-export byte-identical. §13.3's `TODO(verify)` on the SARIF field names is"
     },
     {
       "file": "praman/docs/PRODUCTION-ROADMAP.md",
-      "line": 532,
+      "line": 636,
       "marker": "TODO(verify)",
       "text": "still carrying an explicit `TODO(verify)`."
     },
     {
       "file": "praman/docs/PRODUCTION-ROADMAP.md",
-      "line": 1271,
+      "line": 1422,
       "marker": "TODO(verify)",
       "text": "No competitor reviewed publishes SARIF. Field names are still `TODO(verify)` in"
     },

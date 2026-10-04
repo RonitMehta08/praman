@@ -1,0 +1,22 @@
+# Disposable hackathon demo. Configure the password in Render, never in Git.
+services:
+  - type: web
+    name: praman-demo
+    runtime: python
+    plan: free
+    buildCommand: python -m pip install -r requirements.lock.txt
+    startCommand: sh deploy/start-online.sh
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.10.11"
+      - key: PYTHONUTF8
+        value: "1"
+      - key: SENTINEL_AI_BACKEND
+        value: none
+      - key: PRAMAN_BOOTSTRAP_USERNAME
+        value: demo
+      - key: PRAMAN_BOOTSTRAP_ROLE
+        value: approver
+      - key: PRAMAN_BOOTSTRAP_PASSWORD
+        sync: false

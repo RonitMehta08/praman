@@ -385,12 +385,12 @@ def test_every_control_is_exercised_in_both_directions(
     The bar is deliberately two-tier, and the reason is worth stating because the
     weaker tier is a real weakening. Exercising *both* directions requires two
     fixtures per platform — one that satisfies every control and one that violates
-    every control — and ``compliance_extremes/`` supplies that pair for Cisco IOS
-    only. When cisco_ios was the sole mapped vendor, a single universal bar was
-    both correct and satisfiable. Now that six more vendors have mapping packs,
-    the same bar would demand twelve more pole fixtures, and the alternative to
-    writing them is not "relax the test" but "ship six vendors with no coverage
-    assertion at all". So:
+    every control — and ``compliance_extremes/`` supplies that pair for Cisco IOS,
+    Arista EOS and PAN-OS. When cisco_ios was the sole mapped vendor, a single
+    universal bar was both correct and satisfiable. Four vendors still have no
+    pair, and the same bar would demand eight more pole fixtures; the alternative
+    to writing them is not "relax the test" but "ship four vendors with no
+    coverage assertion at all". So:
 
     * **Pole vendors** — those with fixtures under ``compliance_extremes/`` — are
       held to the original bar: every control both passes and fails somewhere.

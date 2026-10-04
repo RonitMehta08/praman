@@ -1108,15 +1108,17 @@ It is listed as not started rather than quietly counted.
 A configuration from a vendor with no pattern pack is detected as unclaimed and
 reported as such rather than mis-parsed by the nearest available pack.
 
-**What the fixture corpus does and does not prove about these packs.** Each
-non-IOS vendor has exactly one fixture, and a fixture and its pack written in the
+**What the fixture corpus does and does not prove about these packs.** Four of the
+seven vendors have exactly one fixture, and a fixture and its pack written in the
 same change parse each other perfectly by construction. So zero unparsed lines on
-the six multi-vendor fixtures is weaker evidence than the same figure on Cisco IOS,
+those fixtures is weaker evidence than the same figure on Cisco IOS,
 where five fixtures written at different times exercise the pack from different
-directions. More precisely: of the 454 automated controls, 102 are exercised in
-**both** the passing and failing direction and all 102 are Cisco IOS; the other 352
-are exercised in at most one direction — 316 pass-only, 34 fail-only, and one
-(DISA STIG NX-OS NDM V-220515) reached only as `notapplicable`. A one-direction
+directions. More precisely: of the 454 automated controls, 149 are exercised in
+**both** the passing and failing direction — Cisco IOS 102, Arista EOS 28 and
+PAN-OS 19, the three vendors with a pole pair; the other 305
+are exercised in at most one direction — 274 pass-only, 29 fail-only, one
+(DISA STIG NX-OS NDM V-220515) reached only as `notapplicable`, and V-215698 held
+to the failing direction by a documented platform exemption. A one-direction
 control catches a rule that stopped firing entirely. It cannot catch a rule that
 fires and returns the wrong verdict. Closing that needs a hardened/violating
 fixture pair per vendor under `test_configs/compliance_extremes/`, at which point
@@ -1152,8 +1154,8 @@ config-only upload, because `show running-config` does not contain them. Device
 identity in a report is only as complete as the evidence supplied; upload
 `show version` and `show inventory` to populate it.
 
-**Unparsed lines are reported, never dropped** — 44 lines spanning 34 distinct
-commands across the sixteen shipped fixtures. Constructs no shipped rule reads
+**Unparsed lines are reported, never dropped** — 46 lines spanning 36 distinct
+commands across the twenty shipped fixtures. Constructs no shipped rule reads
 (route-maps, prefix-lists, BGP peering, `snmp-server ifindex persist`,
 `switchport trunk encapsulation`, `radius-server retransmit`, routing-protocol
 `network` statements) are returned with their line numbers rather than silently
@@ -1171,6 +1173,61 @@ its own pack", not "this pack handles the dialect".
 
 ## 6. Housekeeping
 
+- **The route-inventory gate could not see a mounted router, and had not been
+  able to since the export router landed.** `tests/test_frontend_contract.py`
+  asserts that every path `frontend/js/api.js` calls is a path the app serves.
+  It built its denominator by reading `route.path` off `app.routes` — which, for
+  a router mounted with `include_router`, is one opaque `_IncludedRouter` object
+  whose `path` is the empty string. So `/devices/{id}/oscal.json`,
+  `/simulate/sarif` and then the three `/jobs` routes were absent from the set
+  of "routes that exist", and a frontend call to any of them would have been
+  reported as a call to a route that does not exist. The bug was invisible for
+  as long as the frontend happened not to call one: it surfaced only when
+  `api.js` grew `job()` and `cancelJob()`, and it surfaced as the gate accusing
+  correct code. `tests/test_api_surface.py` had walked routers properly all
+  along, through `conftest.walk_routes`; the contract test now walks the same
+  function, and `test_the_inventory_sees_routes_behind_an_included_router`
+  asserts both the export and the job routes are visible to it, so the next
+  router cannot go missing quietly. The lesson is narrower than "use the right
+  helper": a gate whose *denominator* can silently shrink fails in the one
+  direction nothing detects, because a smaller denominator always passes.
+
+- **A `ProcessPoolExecutor` over archive members was measured and rejected, and
+  the measurement found a real defect on the way.** MASTER_PROMPT §9.2 specifies
+  one, but its rationale assumes a `textfsm`/`ntc-templates` parser stack that
+  PRAMAN does not use, so the premise was re-measured rather than inherited. A
+  warm 4-worker pool came out *slower* than serial parsing (0.82–1.08x over three
+  runs, 16 logical CPUs) — which is not how CPU-bound work behaves, so the next
+  step was a profile. The profile showed that **every config parse opened seven
+  SQLite connections, one per installed pattern pack, and re-ran the schema DDL
+  on each**: detection scores an upload against every pack, and each pack's
+  learned-mapping lookup reconnected to re-read the same freshness fingerprint.
+  That was 53% of parse time, and it was why four worker processes bought
+  nothing — they spent their parallelism contending on one SQLite file.
+  `LearnedPatterns.load_many()` now answers a whole sweep through one connection:
+  **156 ms → 22.5 ms per config (6.9x)**, and a projected 2,000-member archive
+  falls from 311 s to 45 s. Semantics are unchanged; the fingerprint is still
+  read once per sweep, which `tests/test_mapping_store.py` pins, and
+  `tests/test_pattern_packs.py` pins that the caller actually takes the bulk
+  path — the regression would otherwise be invisible, because each individual
+  answer stays correct and only the *number* of calls was ever wrong. With the
+  contention gone a pool does show 2.45x on parsing alone, and it is still not
+  taken: 45 s fits inside a background job, the remaining per-device cost is the
+  SQLite write path a pool cannot parallelise, and it would add process spawn,
+  picklability constraints and a second concurrency model. This is a decision
+  with numbers behind it, not a quiet downscope. See §3.5 of
+  `docs/PRODUCTION-ROADMAP.md`.
+
+- **Job state lives in memory and is deliberately not durable.** `GET /jobs/{id}`
+  404s after a restart or once 64 newer jobs have finished. Everything a job
+  *produces* — devices, facts, audit records — is committed to SQLite as it goes,
+  so what is lost on a crash is the progress bar and nothing else; the members
+  already ingested stay ingested. Persisting job rows would add a schema, a
+  migration and a rehydration path to make a transient display survive, and would
+  invite the reading that an interrupted job is resumable, which it is not. The
+  404 body says so explicitly rather than letting an operator read it as "my
+  upload vanished".
+
 - **`mgmt.local_user.secret_type` was deleted from the vocabulary, and the reason
   is worth keeping.** It was read by no rule and emitted by four packs — holding
   the per-account hash algorithm on EOS (`sha512`), the storage format on the ASA
@@ -1187,28 +1244,42 @@ its own pack", not "this pack handles the dialect".
   unfalsifiable**, and every emitter is free to mean something different until
   the day a rule needs one of them.
 
-- **`reports/metrics/ai_abstention.json` records the environment it was measured
-  in.** Its `tiers_available.tier3` is `true`, which is only true while a local
-  `llama-server` is running. Stop the server and
-  `tests/test_metrics_are_current.py` will correctly fail, because the published
-  abstention figures no longer describe the machine. That is the intended
-  behaviour — a metrics file that survived its own preconditions would be worse —
-  but it surprises anyone who runs the suite on a machine with no model loaded.
-  Re-measure with:
+- **`reports/metrics/ai_abstention.json` records the configuration it was
+  measured in**, and it is the only metric in the project that has to. Its
+  abstention rate with a local `llama-server` up is a different *true* number
+  from the rate with it down, so which tiers were reachable is published as the
+  envelope's `configuration` rather than as a result.
+
+  `--check` compares that first. A machine whose tiers differ is told the figure
+  is **not comparable** and the gate stays green; a machine whose tiers match is
+  gated on every substantive number as before. The distinction is the point:
+  stale means the code moved and the published figure is now wrong, whereas
+  not-comparable means the published figure is still true of the setup it was
+  measured in and this machine is simply in a different one. Regenerating on a
+  mismatch would overwrite a deliberate publication with an accident of whether
+  a server happened to be running.
+
+  This is a deliberate hole in an otherwise unconditional gate, so it is held
+  open by exactly one file: `tests/test_metrics_are_current.py::
+  TestConfigurationIsNotConfusedWithStaleness` asserts that a mismatched
+  configuration passes, that a matching one still catches a moved number, and
+  that `ai_abstention.json` is the *only* metric declaring a `configuration` at
+  all. A second file appearing in that list is a gate being switched off.
+
+  Republish only when the tiers are in the state you intend to ship:
 
   ```bash
   .venv/Scripts/python.exe scripts/bench/run_all.py --only bench_llm_abstention
   ```
 
   Roughly 165 s with the server up, a few seconds without. The regenerated file
-  records whichever tiers were actually reachable, so the suite goes green either
-  way; what it must not do is publish tier-3 numbers on a machine that has no
-  tier 3.
+  records whichever tiers were actually reachable; what it must not do is publish
+  tier-3 numbers on a machine that has no tier 3.
 
-- **29 source files exceed the 500-line limit, by 7,780 lines in total, and this
+- **28 source files exceed the 500-line limit, by 7,208 lines in total, and this
   is a ratchet rather than a fix.** `GLOBAL_RULESET.md` §145 says every file is
-  ≤500 lines; `backend/app/main.py` is 1,928, `backend/report/render.py` is
-  1,303, `tests/test_api_surface.py` is 1,157. Splitting all 29 is a real
+  ≤500 lines; `backend/app/main.py` is 1,912, `backend/report/render.py` is
+  1,303, `tests/test_api_surface.py` is 1,064. Splitting them all is a real
   refactor with real regression risk and it is not what was in front of us, so
   `scripts/check_deliverable_limits.py` records each file at its current length
   and fails if any of them **grows**, if a new file crosses 500, or if a paid-off
@@ -1259,14 +1330,14 @@ One exemption is granted by name rather than by kind: `praman/backend/frameworks
 | `MANUAL_COMMANDS.md` | 1630 | `TODO(verify)` | 1. **Step 2 prints three non-zero counts.** `TODO(verify):` `MASTER_PROMPT.md` §10.1 states the allocation as **LOW 149 / MODERATE 287 / HIGH 370**. That figure |
 | `MANUAL_COMMANDS.md` | 1676 | `UNVERIFIED` | \| `reports\metrics\*.json` \| Step 8a, Step 8c, `scripts\bench\*` \| any metric in docs/slides/PDF \| metric renders as `UNVERIFIED`; CI fails release \| |
 | `MANUAL_COMMANDS.md` | 1730 | `TODO(verify)` | Every byte size, filename, version and count above was probed or parsed during the research phase and recorded under `.research\synth\`, with one exception note |
-| `praman/README.md` | 271 | `TODO(verify)` | both, so this is not load cost. `TODO(verify):` the cause is not established — |
+| `praman/README.md` | 290 | `TODO(verify)` | both, so this is not load cost. `TODO(verify):` the cause is not established — |
 | `praman/backend/frameworks/cis/extract.py` | 495 | `UNVERIFIED` | f"Section recorded as UNVERIFIED.", |
 | `praman/backend/frameworks/cis/extract.py` | 498 | `UNVERIFIED` | section_num = "UNVERIFIED" |
 | `praman/data/ingest/patterns/cisco_nxos.yaml` | 1545 | `ASSUMPTION:` | is a poor fit. `ASSUMPTION:` a device with a non-timer trigger (`event |
 | `praman/docs/GAPS.md` | 744 | `TODO(verify)` | value set) and flag a path whose emitters disagree. `TODO(verify):` no such |
-| `praman/docs/PRODUCTION-ROADMAP.md` | 487 | `TODO(verify)` | > re-export byte-identical. §13.3's `TODO(verify)` on the SARIF field names is |
-| `praman/docs/PRODUCTION-ROADMAP.md` | 532 | `TODO(verify)` | still carrying an explicit `TODO(verify)`. |
-| `praman/docs/PRODUCTION-ROADMAP.md` | 1271 | `TODO(verify)` | No competitor reviewed publishes SARIF. Field names are still `TODO(verify)` in |
+| `praman/docs/PRODUCTION-ROADMAP.md` | 591 | `TODO(verify)` | > re-export byte-identical. §13.3's `TODO(verify)` on the SARIF field names is |
+| `praman/docs/PRODUCTION-ROADMAP.md` | 636 | `TODO(verify)` | still carrying an explicit `TODO(verify)`. |
+| `praman/docs/PRODUCTION-ROADMAP.md` | 1422 | `TODO(verify)` | No competitor reviewed publishes SARIF. Field names are still `TODO(verify)` in |
 | `praman/rules/mappings/disa_stig/cisco_nx_os_switch_ndm_v3r6.yaml` | 583 | `ASSUMPTION:` | Blowfish, CAST, and CBC-mode AES. `ASSUMPTION:` this list is treated as |
 
 <!-- END GENERATED: unverified-register -->

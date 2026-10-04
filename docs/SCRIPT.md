@@ -127,7 +127,7 @@ Everything on this slide is built and measured — speak in the present tense.
 ## The 20-second answer (say this first)
 
 > FastAPI **is** the product — it's not a wrapper around a script. The entire
-> tool is one FastAPI process: it serves 25 REST endpoints *and* serves the
+> tool is one FastAPI process: it serves 28 REST endpoints *and* serves the
 > frontend itself, so `python scripts/serve.py` is the whole deployment. SQLite
 > is our system of record — devices, facts, findings, the audit ledger and the
 > training queue are all tables in one file, `data/praman.db`. No database
@@ -135,7 +135,7 @@ Everything on this slide is built and measured — speak in the present tense.
 
 ## FastAPI — where exactly (`backend/app/main.py`)
 
-25 endpoints across seven groups. If a judge asks "show me", name these:
+28 endpoints across eight groups. If a judge asks "show me", name these:
 
 | Group | Endpoints | What it does |
 |---|---|---|
@@ -145,6 +145,7 @@ Everything on this slide is built and measured — speak in the present tense.
 | **Exports** | `GET /devices/{id}/oscal.json`, `POST /simulate/sarif` | OSCAL 1.2.3 Assessment Results from a **committed** audit; SARIF 2.1.0 from a **simulation**, for a CI gate. |
 | **Training (C2)** | `GET /training/queue`, `POST /training/map`, `GET /training/mappings`, `POST /training/retire`, `GET /training/export` | The human-in-the-loop loop — this is the AI training module. |
 | **Identity** | `POST /auth/login`, `POST /auth/logout`, `GET /auth/whoami` | Three roles; the authenticated operator is hashed **into** each ledger record. |
+| **Jobs** | `GET /jobs`, `GET /jobs/{id}`, `POST /jobs/{id}/cancel` | `POST /ingest/bulk?background=true` returns a job id instead of blocking; these poll it and stop it. Cancelling keeps the members already ingested. |
 | **Metadata** | `GET /health`, `/vendors`, `/frameworks`, `/canonical/paths` | Self-describing API; `/canonical/paths` returns all 330 paths. |
 
 **Three things worth naming if they push:**
@@ -377,10 +378,10 @@ teams lose credibility in one sentence.
 ## 1. The test count
 
 The slide image says **"pytest – 1,010 tests green"**, but the repo is currently
-at **1,649 tests** (`README.md`, `docs/PRESENTATION.md`).
+at **1,798 tests** (`README.md`, `docs/PRESENTATION.md`).
 
 Pick one:
-- **Best:** update the slide graphic to `1,649`, and say "over sixteen hundred tests".
+- **Best:** update the slide graphic to `1,798`, and say "over seventeen hundred tests".
 - **If the slide is frozen:** say **"over a thousand tests, all green"** — true for
   both numbers, and you never contradict your own slide on stage.
 
@@ -402,12 +403,12 @@ Not used in the codebase (see Deep Dive 1). Change the slide to
 ## 3. "10 offline views" vs vendor count
 
 The slide says **10 offline views** — correct, that's the frontend. But don't
-confuse it with **7 vendor pattern packs** and **16 shipped fixture configs**.
+confuse it with **7 vendor pattern packs** and **20 shipped fixture configs**.
 Three different numbers, easy to swap under pressure:
 
 - **7** vendors (Cisco IOS, NX-OS, ASA, Arista EOS, Juniper JunOS, Fortinet, Palo Alto)
 - **10** frontend views
-- **16** device configs shipped
+- **20** device configs shipped
 - **330** canonical paths
 - **454** rules · **42** catalogs · **3,366** controls
 

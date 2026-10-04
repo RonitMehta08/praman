@@ -58,7 +58,6 @@ pydantic_core==2.46.4
 Pygments==2.21.0
 pyHanko==0.36.2
 pyhanko-certvalidator==0.31.4
-pymerkle==6.1.0
 PyNaCl==1.6.2
 pypdfium2==5.13.0
 pyserial==3.5

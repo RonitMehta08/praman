@@ -45,7 +45,7 @@ from backend.frameworks.baseline import (
 from backend.frameworks.catalog import CATALOG_DIR
 from backend.frameworks.crosswalk import normalise_control_id
 
-MANUAL_COMMANDS = PROJECT_ROOT.parent / "MANUAL_COMMANDS.md"
+MANUAL_COMMANDS = PROJECT_ROOT / "MANUAL_COMMANDS.md"
 NIST_CATALOG = CATALOG_DIR / "nist_800_53_rev5_5_2_0.json"
 
 

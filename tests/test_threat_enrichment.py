@@ -47,7 +47,7 @@ from backend.threat.enrichment import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MANUAL_COMMANDS = PROJECT_ROOT.parent / "MANUAL_COMMANDS.md"
+MANUAL_COMMANDS = PROJECT_ROOT / "MANUAL_COMMANDS.md"
 
 #: The location Step 4a writes, as a POSIX-relative path under ``data/``.
 EXPECTED_RELATIVE = "frameworks/attack/ent.json"
@@ -96,7 +96,7 @@ def test_step_4a_still_writes_the_path_the_loader_reads() -> None:
     is the literal an operator copies.
     """
     if not MANUAL_COMMANDS.is_file():  # pragma: no cover
-        pytest.skip("MANUAL_COMMANDS.md lives at the workspace root, which is absent")
+        pytest.fail("MANUAL_COMMANDS.md must ship with the project")
 
     text = MANUAL_COMMANDS.read_text(encoding="utf-8")
     windows = "praman\\data\\" + EXPECTED_RELATIVE.replace("/", "\\")

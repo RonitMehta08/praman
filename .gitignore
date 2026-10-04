@@ -82,6 +82,22 @@ frontend/dist/
 .env
 .env.local
 .env.production
+.env.*
+!.env.example
+!.env.*.example
+
+# Local databases and cryptographic identities, wherever an override puts them.
+*.db
+*.db-*
+*.db.bak-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.key
+*.pem
+*.pfx
+*.p12
+*.pub
 
 # OS
 Thumbs.db
@@ -102,6 +118,11 @@ data/frameworks/attack/ent.json
 # Reports (except committed samples)
 reports/*.pdf
 out/
+# Scratch report outputs; the published architecture PDF stays in docs/.
+/report.pdf
+/e2e.pdf
+/degraded.pdf
+/_cis_sample*.json
 
 # Tool caches
 .pytest_cache/

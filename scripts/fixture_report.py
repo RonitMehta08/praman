@@ -201,7 +201,7 @@ def render(parses: list[Parse], verdicts: list[Verdict]) -> str:
         f"One row per fixture per directly-evaluated framework "
         f"({', '.join(DIRECT_FRAMEWORKS)}), governance projection off, so each row "
         "is what that framework's own rules decided rather than what a roll-up "
-        "inferred. **Bold** rows are the two poles, whose verdicts are constrained "
+        "inferred. **Bold** rows are the pole fixtures, whose verdicts are constrained "
         "by `tests/test_rules_mapping.py`; the rest are observations.",
         "",
         "| Fixture | Framework | Score | pass | fail | unknown | n/a | notchecked |",

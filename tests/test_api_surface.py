@@ -6,7 +6,9 @@ coverage anywhere in the suite — ``GET /vendors``, ``GET /canonical/paths``,
 ``GET /training/mappings``, ``POST /training/retire`` and
 ``GET /training/export`` — and three of those five are the C2 training module,
 the capability PS 26155 makes the centrepiece. A demo would have been the first
-thing to run them.
+thing to run them. (The training round trip has since moved to its own file,
+``tests/test_api_training.py``; the inventory below still refuses to let it go
+uncovered.)
 
 Two things are asserted here that are not asserted anywhere else:
 
@@ -74,6 +76,31 @@ _SEVERITY_ORDER = sorted(_SEVERITY_RANK, key=_SEVERITY_RANK.__getitem__)
 #: inventory a real gate — a third export route would still fail it.
 EXPORT_ROUTES = {"/devices/{device_id}/oscal.json", "/simulate/sarif"}
 
+#: The three ``/jobs`` routes, for the same reason and with the same limit. What
+#: can break about them is not "the route answers" but the queue semantics
+#: underneath: cancellation stops at an item boundary and keeps finished work,
+#: "already finished" is a 409 and not a 404, and a job that has aged out of the
+#: bounded in-memory history 404s with a message saying where the data went.
+#: ``tests/test_job_queue.py`` asserts all of that against a real archive, twice
+#: — once through the queue directly and once through ``POST /ingest/bulk
+#: ?background=true``. Naming exactly three paths keeps this a gate: a fourth
+#: job route would still fail it.
+JOB_ROUTES = {"/jobs", "/jobs/{job_id}", "/jobs/{job_id}/cancel"}
+
+#: The five ``/training`` routes, tested in ``tests/test_api_training.py``. Same
+#: reason once more: the C2 loop is one *ordered* workflow — teach, list, export,
+#: retire, retire again — and the thing worth proving is that the same mapping is
+#: visible at each stage. Held here it read like a set of independent surface
+#: checks that happened to run in order. Naming exactly five paths keeps this a
+#: gate: a sixth training route would still fail it.
+TRAINING_ROUTES = {
+    "/training/queue",
+    "/training/map",
+    "/training/mappings",
+    "/training/retire",
+    "/training/export",
+}
+
 #: Routes that exist but are deliberately not called by name below.
 #:
 #: * The static asset catch-all is tested by pattern (index, a real asset, a
@@ -89,7 +116,7 @@ ROUTES_COVERED_BY_PATTERN = {
     "/docs",
     "/redoc",
     "/docs/oauth2-redirect",
-} | EXPORT_ROUTES
+} | EXPORT_ROUTES | JOB_ROUTES | TRAINING_ROUTES
 
 
 @pytest.fixture(scope="module")
@@ -196,9 +223,9 @@ def test_the_inventory_sees_routes_behind_an_included_router() -> None:
     passes quietly forever.
     """
     declared = {path for path, _ in walk_routes(app.routes)}
-    missing = sorted(EXPORT_ROUTES - declared)
+    missing = sorted((EXPORT_ROUTES | JOB_ROUTES | TRAINING_ROUTES) - declared)
     assert not missing, (
-        f"the export router is invisible to the route inventory: {missing}. "
+        f"a mounted router is invisible to the route inventory: {missing}. "
         "Every 'every route must ...' assertion in the suite walks this same "
         "function, so a router it cannot see is a router nothing checks."
     )
@@ -1017,127 +1044,7 @@ def test_static_assets_are_not_written_to_the_access_log(client: TestClient) -> 
     )
 
 
-# ─── C2: the training module ───────────────────────────────────────────
-
-
-class TestTrainingRoundTrip:
-    """Teach, list, export, retire — the whole C2 loop against a live process.
-
-    Ordered deliberately: the mapping taught in the first test is the one the
-    later ones list, export and retire. Splitting them into independent tests
-    would need four mappings and would stop proving that the *same* mapping is
-    visible at each stage, which is the only thing an operator cares about.
-    """
-
-    TEMPLATE = "logging api-surface-probe <*>"
-    PATH = "logging.origin_id"
-
-    def test_the_queue_is_reachable_and_shaped(self, client: TestClient, ingested: str) -> None:
-        body = client.get("/training/queue").json()
-        assert body["count"] == len(body["queue"])
-        assert "counts" in body
-        for item in body["queue"]:
-            assert item["template"], "a queue entry with no template is unmappable"
-
-    def test_teaching_a_mapping_takes_effect_without_a_restart(
-        self, client: TestClient
-    ) -> None:
-        response = client.post(
-            "/training/map",
-            json={
-                "drain3_template": self.TEMPLATE,
-                "canonical_path": self.PATH,
-                "admin_id": "test-api-surface",
-                "note": "written by tests/test_api_surface.py",
-            },
-        )
-        assert response.status_code == 200, response.text
-        body = response.json()
-        assert body["status"] == "ok"
-        assert body["mapping"]["canonical_path"] == self.PATH
-        assert "no redeploy" in body["message"]
-
-    def test_a_mapping_to_an_undeclared_path_is_refused(self, client: TestClient) -> None:
-        """The canonical vocabulary is a closed set, and the API enforces it.
-
-        Without this the training GUI is a way to write facts no rule can read,
-        and the operator gets a success message for work that changed nothing.
-        """
-        response = client.post(
-            "/training/map",
-            json={
-                "drain3_template": "logging bogus <*>",
-                "canonical_path": "logging.not_a_real_path",
-                "admin_id": "test-api-surface",
-            },
-        )
-        assert response.status_code == 400
-        assert "logging.not_a_real_path" in response.json()["detail"]
-
-    def test_the_taught_mapping_is_listed_as_in_force(self, client: TestClient) -> None:
-        body = client.get("/training/mappings").json()
-        assert body["count"] == len(body["mappings"])
-        mine = [m for m in body["mappings"] if m["template"] == self.TEMPLATE]
-        assert mine, f"{self.TEMPLATE} was taught but is not listed"
-        assert mine[0]["canonical_path"] == self.PATH
-        assert body["in_force"] >= 1
-        # not_in_force is surfaced rather than logged: a mapping that stopped
-        # compiling is silent loss of parsing coverage.
-        assert isinstance(body["not_in_force"], list)
-
-    def test_export_renders_a_pattern_pack_fragment(self, client: TestClient) -> None:
-        """The store is a working surface; a pack is the reviewed artefact.
-
-        The export is parsed as YAML rather than string-matched, because "it
-        contains the path" would also pass for output no pack loader could read.
-        """
-        import yaml
-
-        response = client.get("/training/export")
-        assert response.status_code == 200
-        assert "text/yaml" in response.headers["content-type"]
-        assert "attachment" in response.headers["content-disposition"]
-
-        parsed = yaml.safe_load(response.text)
-        patterns = parsed["patterns"] or []
-        assert self.PATH in {p["path"] for p in patterns}, (
-            f"the taught mapping is not in the export:\n{response.text[:400]}"
-        )
-        for pattern in patterns:
-            assert pattern["id"] and pattern["regex"] and pattern["path"]
-
-    def test_retiring_the_mapping_removes_it_from_force(self, client: TestClient) -> None:
-        response = client.post(
-            "/training/retire", json={"drain3_template": self.TEMPLATE}
-        )
-        assert response.status_code == 200, response.text
-        assert response.json()["retired"] == self.TEMPLATE
-
-        active = client.get("/training/mappings").json()["mappings"]
-        assert self.TEMPLATE not in {m["template"] for m in active}
-
-        # The record survives retirement. A compliance tool that forgets a
-        # mapping once applied cannot explain a verdict it produced last month.
-        history = client.get("/training/mappings?include_retired=true").json()["mappings"]
-        assert self.TEMPLATE in {m["template"] for m in history}
-
-    def test_retiring_it_twice_is_a_404_that_says_so(self, client: TestClient) -> None:
-        response = client.post(
-            "/training/retire", json={"drain3_template": self.TEMPLATE}
-        )
-        assert response.status_code == 404
-        assert "include_retired" in response.json()["detail"], (
-            "the 404 must point at the query that shows the retired record, or "
-            "the operator concludes their mapping was lost"
-        )
-
-
-def test_training_map_rejects_an_empty_template(client: TestClient) -> None:
-    response = client.post(
-        "/training/map",
-        json={"drain3_template": "", "canonical_path": "logging.on", "admin_id": "x"},
-    )
-    assert response.status_code == 422
+# ─── The shape of a refusal ────────────────────────────────────────────
 
 
 def test_error_responses_are_json_not_html(client: TestClient) -> None:

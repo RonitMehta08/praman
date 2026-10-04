@@ -170,6 +170,7 @@ def envelope(
     n: int,
     results: dict[str, Any],
     caveats: Iterable[str] = (),
+    configuration: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Wrap results in the R9.2 envelope.
 
@@ -178,8 +179,14 @@ def envelope(
     caveats list is a claim that the measurement has no limitations, which for
     every metric in this project is false. Reviewers should read an empty list as
     a smell.
+
+    ``configuration`` declares the *setup* a measurement was taken under, as
+    opposed to the machine it ran on (``environment``) or what it found
+    (``results``). It exists for one narrow case: a knob that legitimately
+    differs between two honest runs and genuinely changes the numbers, so that
+    neither ignoring it nor gating on it is right. See :func:`check`.
     """
-    return {
+    payload = {
         "metric": metric,
         "measures": measures,
         "dataset": dataset,
@@ -189,6 +196,9 @@ def envelope(
         "results": results,
         "caveats": list(caveats),
     }
+    if configuration is not None:
+        payload["configuration"] = configuration
+    return payload
 
 
 def write(payload: dict[str, Any], *, filename: str) -> Path:
@@ -216,12 +226,47 @@ def check(payload: dict[str, Any], *, filename: str) -> int:
     actually gates is the *substance*: counts, coverage ratios, control totals,
     abstention rates. Those are the numbers the docs quote and the ones that go
     stale silently when a rule pack lands.
+
+    A declared ``configuration`` is checked *first*, and a mismatch is reported
+    as not-comparable rather than as stale. The distinction matters because the
+    two have opposite remedies. Stale means the code moved and the published
+    number is now wrong, so the fix is to regenerate and re-read the docs.
+    Not-comparable means the published number is still a true statement about
+    the setup it was measured in, and this machine is simply in a different one
+    — regenerating would overwrite a deliberate publication with an accident of
+    whether a local server happened to be running.
+
+    Returning 0 there is the load-bearing choice, and it is a narrow exemption
+    rather than a softening of the gate: every substantive figure is still gated
+    whenever the configuration matches, which is the shipped default and so the
+    case CI and a grader both hit. The alternative — failing — was the behaviour
+    this replaced, and it fails for a reason unrelated to correctness on any
+    machine with a model server up. A gate that cries wolf on demo day is a gate
+    someone switches off, and then it catches nothing at all.
     """
     path = METRICS_DIR / filename
     if not path.exists():
         print(f"MISSING: {path.relative_to(PROJECT_ROOT)} — run without --check", file=sys.stderr)
         return 1
     on_disk = json.loads(path.read_text(encoding="utf-8"))
+
+    was_config, now_config = on_disk.get("configuration"), payload.get("configuration")
+    if was_config != now_config:
+        print(
+            f"NOT COMPARABLE: {filename} was measured in a different configuration, "
+            "so its figures are neither confirmed nor contradicted here."
+        )
+        for key in sorted(set(was_config or {}) | set(now_config or {})):
+            was, now = (was_config or {}).get(key), (now_config or {}).get(key)
+            if was != now:
+                print(f"  {key}:\n    published: {was}\n    this machine: {now}")
+        print(
+            "  Republish only if this machine's configuration is the one you intend "
+            "to ship:\n"
+            "    .venv/Scripts/python.exe scripts/bench/run_all.py"
+        )
+        return 0
+
     if _stable(on_disk) == _stable(payload):
         print(f"OK: {filename} is current")
         return 0

@@ -28,6 +28,7 @@ import {
   initTheme, toggleTheme, route, startRouter, navigate, refresh, store, toast,
 } from './shell.js';
 import { identity, requireIdentity, signOut } from './auth.js';
+import { icon, initExperience, openWorkspaceSearch } from './experience.js';
 import { dashboardView } from './views/dashboard.js';
 import { uploadView } from './views/upload.js';
 import { simulateView } from './views/simulate.js';
@@ -38,6 +39,7 @@ import { trainingView } from './views/training.js';
 import { topologyView } from './views/topology.js';
 import { ledgerView } from './views/ledger.js';
 import { remediationView } from './views/remediation.js';
+import { accessView } from './views/access.js';
 
 const NAV = [
   ['dashboard', 'Overview'],
@@ -48,6 +50,7 @@ const NAV = [
   ['training', 'Training'],
   ['topology', 'Topology'],
   ['ledger', 'Ledger'],
+  ['access', 'Access log'],
 ];
 
 route('dashboard', dashboardView);
@@ -60,6 +63,7 @@ route('training', trainingView);
 route('topology', topologyView);
 route('ledger', ledgerView);
 route('remediation', remediationView);
+route('access', accessView);
 
 function buildNav() {
   return el(
@@ -69,9 +73,9 @@ function buildNav() {
       el('a', {
         class: 'nav-link',
         href: `#/${name}`,
-        dataset: { nav: name },
-        text: label,
-      })
+        hidden: name === 'access',
+        dataset: { nav: name, roleLink: name === 'access' ? 'approver' : null },
+      }, icon(name, 19), el('span', { text: label }), el('span', { class: 'nav-active-dot', 'aria-hidden': 'true' }))
     )
   );
 }
@@ -87,6 +91,9 @@ function buildIdentitySlot() {
 
   function render() {
     const who = identity();
+    document.querySelectorAll('[data-role-link="approver"]').forEach((link) => {
+      link.hidden = !who || who.role !== 'approver';
+    });
     if (!who) {
       slot.replaceChildren();
       return;
@@ -126,35 +133,31 @@ function buildIdentitySlot() {
 }
 
 function buildChrome() {
-  const themeButton = el('button', {
-    class: 'btn btn-quiet btn-icon',
-    type: 'button',
-    title: 'Switch between light and dark',
-    'aria-label': 'Switch between light and dark',
-    text: '◐',
-    onclick: () => toggleTheme(),
-  });
-
-  const badge = el('span', { class: 'brand-badge', text: 'offline' });
-
-  return el(
-    'header',
-    { class: 'topbar' },
-    el(
-      'a',
-      { class: 'brand', href: '#/dashboard' },
-      el('span', { class: 'brand-mark', 'aria-hidden': 'true', text: '◈' }),
-      el(
-        'span',
-        { class: 'brand-text' },
-        el('span', { class: 'brand-name', text: 'PRAMAN' }),
-        el('span', { class: 'brand-sub', text: 'Network configuration compliance auditor' })
-      ),
-      badge
-    ),
+  const sidebar = el('aside', { class: 'workspace-sidebar', id: 'workspace-navigation', 'aria-label': 'Workspace navigation' },
+    el('a', { class: 'brand', href: '#/dashboard', 'aria-label': 'PRAMAN overview' },
+      el('span', { class: 'brand-mark' }, icon('shield', 24)),
+      el('span', { class: 'brand-text' }, el('span', { class: 'brand-name', text: 'PRAMAN' }),
+        el('span', { class: 'brand-sub', text: 'Evidence. Not assumptions.' }))),
+    el('div', { class: 'workspace-label' }, el('span', { class: 'workspace-avatar', text: 'P' }),
+      el('span', {}, el('strong', { text: 'Local workspace' }), el('small', { text: 'Network compliance' }))),
+    el('p', { class: 'nav-section-label', text: 'WORKSPACE' }),
     buildNav(),
-    el('div', { class: 'topbar-actions' }, buildIdentitySlot(), themeButton)
-  );
+    el('div', { class: 'sidebar-bottom' },
+      el('div', { class: 'privacy-card' }, icon('shield', 19),
+        el('strong', { text: 'Your infrastructure. Your data.' }),
+        el('p', { text: 'Offline-first. No telemetry. Configs are processed on the machine running PRAMAN.' }),
+        el('span', { class: 'brand-badge', text: 'Offline-capable' })),
+      el('span', { class: 'sidebar-signature', text: 'BUILT FOR VERIFIABLE TRUST' })));
+
+  const header = el('header', { class: 'topbar' },
+    el('button', { class: 'btn btn-quiet btn-icon mobile-menu', type: 'button', 'aria-label': 'Toggle navigation', 'aria-expanded': 'false', 'aria-controls': 'workspace-navigation', dataset: { menuToggle: '' } }, icon('menu')),
+    el('div', { class: 'workspace-breadcrumb' }, el('span', { text: 'Workspace' }), el('span', { class: 'breadcrumb-slash', text: '/' }), el('strong', { id: 'workspace-location', text: 'Overview' })),
+    el('button', { class: 'workspace-search-trigger', type: 'button', onclick: () => openWorkspaceSearch(NAV), 'aria-label': 'Jump to workspace (Control or Command K)' }, icon('search', 16), el('span', { text: 'Jump to…' }), el('kbd', { text: '⌘ / Ctrl K' })),
+    el('div', { class: 'topbar-actions' },
+      el('button', { class: 'btn btn-quiet btn-icon', type: 'button', 'aria-label': 'Pause decorative motion', 'aria-pressed': 'false', dataset: { motionToggle: '' } }, icon('motion', 17)),
+      el('button', { class: 'btn btn-quiet btn-icon', type: 'button', title: 'Switch between light and dark', 'aria-label': 'Switch between light and dark', onclick: () => toggleTheme() }, icon('theme', 18)),
+      buildIdentitySlot()));
+  return [sidebar, el('button', { class: 'sidebar-scrim', type: 'button', 'aria-label': 'Close navigation', tabindex: '-1' }), header];
 }
 
 /** Fill in the version and runtime facts once `/health` answers.
@@ -208,10 +211,12 @@ async function boot() {
       text: 'Skip to content',
       onclick: () => outlet.focus(),
     }),
-    buildChrome(),
+    ...buildChrome(),
     outlet,
-    footer
+    footer,
+    el('button', { class: 'btn back-to-top', type: 'button', hidden: true, 'aria-label': 'Back to top', title: 'Back to top', onclick: () => { window.scrollTo({ top: 0, behavior: 'auto' }); outlet.focus({ preventScroll: true }); } }, icon('up', 18))
   );
+  initExperience(NAV);
 
   // An unhandled rejection anywhere in a view is a bug, and a silent one is a
   // support call. Surfacing it as a toast costs nothing and turns "the page did

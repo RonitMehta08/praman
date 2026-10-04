@@ -8,6 +8,13 @@
     "A high abstention rate is only good news for verdicts because verdicts never depend on this ladder. If suggestions ever gained authority over a finding, the same number would read as a defect.",
     "Latency is one process with the pattern library and tier 1 warm. A cold start pays model load; a running llama-server would add a network round trip per escalated line and dominate everything here."
   ],
+  "configuration": {
+    "tiers_available": {
+      "tier1": true,
+      "tier2": true,
+      "tier3": false
+    }
+  },
   "dataset": "44 distinct unparsed lines harvested from the shipped fixtures, and 10 hand-written non-config lines used as a negative control, against the 330-entry canonical path schema.",
   "environment": {
     "cpu_count": 16,
@@ -15,27 +22,27 @@
     "platform": "Windows-10-10.0.26200-SP0",
     "python": "3.10.11"
   },
-  "generated_at": "2026-09-12T17:28:06.211858+00:00",
+  "generated_at": "2026-09-27T11:09:28.140297+00:00",
   "measures": "Abstention behaviour of backend/ai/escalation.escalate_line over two populations: config lines no deterministic pattern claimed, and text with no correct canonical path at all. Reports the tier reached, the abstention rate for each population, and whether any suggestion fell outside the published canonical path schema. Accuracy is not measured -- no hand-labelled ground truth exists.",
   "metric": "ai_escalation_abstention",
   "n": 54,
   "results": {
     "abstention_gap": 0.0227,
     "canonical_paths_published": 330,
-    "latency_per_line_ms": 31.1065,
+    "latency_per_line_ms": 30.2541,
     "latency_whole_population": {
-      "max_ms": 1377.879,
-      "mean_ms": 1366.627,
-      "min_ms": 1357.252,
+      "max_ms": 1478.903,
+      "mean_ms": 1347.803,
+      "min_ms": 1287.188,
       "n": 5,
-      "p50_ms": 1368.687,
-      "p95_ms": 1377.879,
+      "p50_ms": 1331.18,
+      "p95_ms": 1478.903,
       "timings_ms": [
-        1370.22,
-        1368.687,
-        1359.096,
-        1377.879,
-        1357.252
+        1478.903,
+        1331.18,
+        1308.588,
+        1287.188,
+        1333.155
       ]
     },
     "on_nonsense_negative_control": {
@@ -91,11 +98,6 @@
     },
     "tier1_reachable_paths": 15,
     "tier1_schema_reach": 0.0455,
-    "tier3_probe_age_s": 0.5,
-    "tiers_available": {
-      "tier1": true,
-      "tier2": true,
-      "tier3": false
-    }
+    "tier3_probe_age_s": 0.5
   }
 }

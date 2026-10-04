@@ -160,9 +160,29 @@ export async function simulateView({ outlet, query }) {
 
   const resultsHost = el('div', { class: 'simulate-results' });
   let lastConfig = '';
+  let lastSourceFile = 'inline.conf';
 
   function reset() {
     clear(resultsHost);
+  }
+
+  async function downloadSarif() {
+    try {
+      const response = await api.simulateSarif(lastConfig, lastSourceFile);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `praman-${lastSourceFile.replace(/[^a-z0-9._-]+/gi, '-')}.sarif`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('SARIF export ready.', 'success', 'This is a stateless CI artifact — it is not a signed ledger record.');
+    } catch (error) {
+      const { message, detail } = describeError(error);
+      toast(message, 'error', detail);
+    }
   }
 
   async function run() {
@@ -172,11 +192,12 @@ export async function simulateView({ outlet, query }) {
       return;
     }
     lastConfig = text;
+    lastSourceFile = sourceName.value.trim() || 'inline.conf';
     clear(resultsHost);
     resultsHost.appendChild(spinner('Parsing, evaluating rules, and classifying unknown lines…'));
 
     try {
-      const body = await api.simulate(text, sourceName.value.trim() || 'inline.conf');
+      const body = await api.simulate(text, lastSourceFile);
       clear(resultsHost);
       resultsHost.appendChild(renderRun(body));
       resultsHost.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -197,7 +218,7 @@ export async function simulateView({ outlet, query }) {
 
     const viewer = configViewer(lastConfig, {
       marks,
-      sourceFile: sourceName.value.trim() || 'inline.conf',
+      sourceFile: lastSourceFile,
     });
 
     const findingsHost = findingsTable({
@@ -243,6 +264,11 @@ export async function simulateView({ outlet, query }) {
           el(
             'div',
             { class: 'button-row' },
+            button('Download SARIF', downloadSarif, {
+              class: 'btn-quiet',
+              disabled: !mayIngest(),
+              title: mayIngest() ? 'Download this stateless run for a CI gate' : needsRole('auditor', 'Exporting a SARIF simulation'),
+            }),
             button('Ingest this config for real', async (event) => {
               const btn = event.currentTarget;
               btn.disabled = true;

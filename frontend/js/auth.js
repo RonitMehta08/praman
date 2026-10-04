@@ -30,6 +30,7 @@
  */
 
 import { el } from './dom.js';
+import { evidenceCore, icon } from './experience.js';
 import {
   ApiError,
   login as apiLogin,
@@ -170,6 +171,9 @@ function closeGate(result) {
     overlay.remove();
     overlay = null;
   }
+  const app = document.getElementById('app');
+  if (app) app.inert = false;
+  document.getElementById('view-outlet')?.focus({ preventScroll: true });
   const resolve = resolveGate;
   gatePromise = null;
   resolveGate = null;
@@ -269,11 +273,20 @@ function showOverlay(message) {
   overlay = el(
     'div',
     { class: 'auth-overlay', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'auth-title' },
+    el('div', { class: 'auth-layout' },
+    el('section', { class: 'auth-story', 'aria-label': 'About PRAMAN' },
+      el('div', { class: 'auth-brand' }, icon('shield', 26), el('span', { text: 'PRAMAN' })),
+      el('p', { class: 'eyebrow', text: 'THE EVIDENCE-FIRST WORKSPACE' }),
+      el('h2', { class: 'auth-statement' }, 'Confidence,', el('br'), 'with proof.'),
+      el('p', { class: 'auth-story-note', text: 'Bring clarity to network compliance. Every finding traceable. Every committed audit verifiable.' }),
+      evidenceCore(),
+      el('p', { class: 'auth-local' }, icon('shield', 16), 'Offline-first · Private by design')),
     el(
       'div',
       { class: 'auth-card' },
-      el('span', { class: 'auth-mark', 'aria-hidden': 'true', text: '◈' }),
-      el('h1', { class: 'auth-title', id: 'auth-title', text: 'PRAMAN' }),
+      el('span', { class: 'auth-mark' }, icon('shield', 28)),
+      el('p', { class: 'eyebrow', text: 'YOUR SECURE WORKSPACE' }),
+      el('h1', { class: 'auth-title', id: 'auth-title', text: 'Welcome to PRAMAN' }),
       el('p', {
         class: 'auth-sub',
         text: 'Sign in. Every audit committed to the ledger is signed with the name you use here.',
@@ -286,9 +299,20 @@ function showOverlay(message) {
           'There is no default account. The first one is created on the server ' +
           'with scripts/manage_users.py, which is Step 13 of MANUAL_COMMANDS.md.',
       })
-    )
+    ))
   );
 
+  // The role=dialog overlay must behave as a modal for keyboard users too.
+  overlay.addEventListener('keydown', (event) => {
+    if (event.key !== 'Tab') return;
+    const focusable = [...overlay.querySelectorAll('input:not(:disabled), button:not(:disabled)')];
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  });
+  const app = document.getElementById('app');
+  if (app) app.inert = true;
   document.body.appendChild(overlay);
   if (message) setStatus(status, message, 'note');
   // After the append, or the node is not focusable yet.

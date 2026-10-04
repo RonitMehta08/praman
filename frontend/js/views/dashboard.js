@@ -20,6 +20,7 @@ import { el, table, num, pct, when, emptyState, stat, shortHash, count } from '.
 import { store, page, panel, button, navigate, toast } from '../shell.js';
 import { frameworkStackedBars, resultDistribution, trendLine, severityBars } from '../charts.js';
 import * as api from '../api.js';
+import { overviewHero, workflowLinks } from '../experience.js';
 
 /** Score from a ledger record's summary.
  *
@@ -258,7 +259,9 @@ export async function dashboardView({ outlet }) {
         button('Upload configs', () => navigate('upload')),
         button('Verify ledger', () => navigate('ledger'), { class: 'btn-quiet' }),
       ],
+      overviewHero(),
       tiles,
+      workflowLinks(),
       devices.length === 0
         ? panel(
             null,

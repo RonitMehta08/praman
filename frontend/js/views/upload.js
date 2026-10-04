@@ -38,6 +38,9 @@ export async function uploadView({ outlet }) {
   /** @type {Array<{file: string, state: string, detail: string, row: object}>} */
   let queue = [];
   let running = false;
+  //: The job id of a background archive currently in flight, or null. Drives the
+  //: cancel control, so it must be cleared on every exit path.
+  let cancellableJob = null;
 
   const resultsHost = el('div', { class: 'upload-results' });
   const progressHost = el('div', { class: 'upload-progress' });
@@ -70,6 +73,23 @@ export async function uploadView({ outlet }) {
           rows,
           { caption: 'One row per file. A failure here does not affect the others.' }
         ),
+        // A cancel control only while a background archive is in flight. It stops
+        // at the next member boundary, so the devices already in the table stay
+        // ingested — which the label has to say, or "cancel" reads as "undo".
+        cancellableJob
+          ? el(
+              'div',
+              { class: 'button-row' },
+              button(
+                'Stop importing',
+                () => cancelRunningJob(),
+                {
+                  class: 'btn-quiet',
+                  title: 'Stops after the file being read. Devices already imported stay imported.',
+                }
+              )
+            )
+          : null,
         ok.length
           ? el(
               'div',
@@ -163,35 +183,86 @@ export async function uploadView({ outlet }) {
     );
   }
 
+  /** Render one job poll into the results table.
+   *
+   * Results stream in as the worker walks the archive, so a 400-device import
+   * fills the table device by device rather than showing nothing for a minute
+   * and everything at once. */
+  function renderJob(body, zipName) {
+    const pending = Math.max(0, (body.total || 0) - (body.done || 0));
+    queue = [
+      ...(body.results || []).map((item) => ({
+        file: item.file,
+        state: 'ok',
+        hostname: item.hostname,
+        vendor: item.vendor,
+        facts_count: item.facts_count,
+        unparsed_count: item.unparsed_count,
+        device_id: item.device_id,
+        detail: item.queued_templates ? `${count(item.queued_templates, 'template')} queued` : '',
+      })),
+      ...(body.errors || []).map((item) => ({
+        file: item.file,
+        state: 'failed',
+        detail: item.error,
+      })),
+    ];
+    if (pending && body.state === 'running') {
+      queue.push({
+        file: zipName,
+        state: 'running',
+        detail: `${num(body.done)} of ${num(body.total)} — ${count(pending, 'file')} to go`,
+      });
+    }
+    renderResults();
+  }
+
+  /** Ask the running import to stop. Failure here is not the operator's problem:
+   * the job may simply have finished between the render and the click, which is
+   * a race the backend answers with 409 and the poll loop resolves anyway. */
+  async function cancelRunningJob() {
+    const jobId = cancellableJob;
+    if (!jobId) return;
+    cancellableJob = null;
+    renderResults();
+    try {
+      await api.cancelJob(jobId);
+    } catch {
+      // The poll loop reports the real outcome; nothing useful to add here.
+    }
+  }
+
   async function uploadArchive(zip) {
     queue = [{ file: zip.name, state: 'running', detail: 'expanding archive…' }];
     renderResults();
     try {
-      const body = await api.ingestBulk(zip);
-      queue = [
-        ...(body.results || []).map((item) => ({
-          file: item.file,
-          state: 'ok',
-          hostname: item.hostname,
-          vendor: item.vendor,
-          facts_count: item.facts_count,
-          unparsed_count: item.unparsed_count,
-          device_id: item.device_id,
-          detail: item.queued_templates ? `${count(item.queued_templates, 'template')} queued` : '',
-        })),
-        ...(body.errors || []).map((item) => ({
-          file: item.file,
-          state: 'failed',
-          detail: item.error,
-        })),
-      ];
-      renderResults();
+      // The archive limits allow far more than a request can be held open for,
+      // so the archive goes on the job queue and this polls it. The POST still
+      // rejects a malformed archive synchronously, which is why a bad zip lands
+      // in the catch below rather than as a failed job.
+      const started = await api.ingestBulkBackground(zip);
+      cancellableJob = started.job_id;
+      let body = started;
+      while (body.state === 'queued' || body.state === 'running') {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        body = await api.job(started.job_id);
+        renderJob(body, zip.name);
+      }
+      cancellableJob = null;
+      renderJob(body, zip.name);
       store.invalidateAfterWrite();
+
+      if (body.state === 'failed') {
+        toast('Archive import failed.', 'error', body.error || '');
+        return;
+      }
+      const verb = body.state === 'cancelled' ? 'Archive cancelled' : 'Archive expanded';
       toast(
-        `Archive expanded: ${num(body.success)} ingested, ${num(body.failed)} failed.`,
-        body.failed ? 'warn' : 'success'
+        `${verb}: ${num(body.succeeded)} ingested, ${num(body.failed)} failed.`,
+        body.failed || body.state === 'cancelled' ? 'warn' : 'success'
       );
     } catch (error) {
+      cancellableJob = null;
       const { message, detail } = describeError(error);
       queue = [{ file: zip.name, state: 'failed', detail: detail || message }];
       renderResults();

@@ -13,7 +13,7 @@
     "platform": "Windows-10-10.0.26200-SP0",
     "python": "3.10.11"
   },
-  "generated_at": "2026-09-12T17:28:31.139199+00:00",
+  "generated_at": "2026-09-27T11:09:56.433316+00:00",
   "measures": "Wall-clock latency and output size of render_pdf() for the shipped fixture with the most failing controls and the one with the fewest, plus the same for the dependency-free fallback renderer that render_pdf selects when ReportLab cannot be imported.",
   "metric": "pdf_generation",
   "n": 10,
@@ -27,18 +27,18 @@
         "findings": 1462,
         "fixture": "fully_hardened.conf",
         "latency": {
-          "max_ms": 892.464,
-          "mean_ms": 816.688,
-          "min_ms": 736.529,
+          "max_ms": 1044.793,
+          "mean_ms": 919.068,
+          "min_ms": 840.241,
           "n": 5,
-          "p50_ms": 803.269,
-          "p95_ms": 892.464,
+          "p50_ms": 900.366,
+          "p95_ms": 1044.793,
           "timings_ms": [
-            892.464,
-            736.529,
-            859.616,
-            791.562,
-            803.269
+            840.241,
+            898.002,
+            1044.793,
+            900.366,
+            911.94
           ]
         }
       },
@@ -50,18 +50,18 @@
         "findings": 1462,
         "fixture": "insecure_minimal.conf",
         "latency": {
-          "max_ms": 1339.018,
-          "mean_ms": 1247.886,
-          "min_ms": 1180.559,
+          "max_ms": 1503.38,
+          "mean_ms": 1390.921,
+          "min_ms": 1251.204,
           "n": 5,
-          "p50_ms": 1251.341,
-          "p95_ms": 1339.018,
+          "p50_ms": 1407.513,
+          "p95_ms": 1503.38,
           "timings_ms": [
-            1205.783,
-            1339.018,
-            1180.559,
-            1262.728,
-            1251.341
+            1503.38,
+            1429.548,
+            1251.204,
+            1407.513,
+            1362.96
           ]
         }
       }
@@ -71,23 +71,23 @@
       "bytes_with_reportlab": 199628,
       "is_valid_pdf_header": true,
       "latency": {
-        "max_ms": 32.907,
-        "mean_ms": 28.968,
-        "min_ms": 22.637,
+        "max_ms": 19.721,
+        "mean_ms": 19.469,
+        "min_ms": 19.125,
         "n": 5,
-        "p50_ms": 29.487,
-        "p95_ms": 32.907,
+        "p50_ms": 19.521,
+        "p95_ms": 19.721,
         "timings_ms": [
-          22.637,
-          28.532,
-          32.907,
-          31.276,
-          29.487
+          19.521,
+          19.612,
+          19.125,
+          19.363,
+          19.721
         ]
       },
       "note": "backend/report/minimal_pdf.py, reached through render_pdf's own except ImportError after making reportlab unimportable. Same verdicts, same record hash, no charts, no third-party dependency -- and marginally LARGER on the wire, because uncompressed monospaced text costs more than the compressed vector charts it replaces. Much faster to produce: see speedup_vs_reportlab, which is computed, not asserted.",
       "selected_by_the_real_import_guard": true,
-      "speedup_vs_reportlab": 42.4
+      "speedup_vs_reportlab": 72.1
     },
     "reportlab_available": true
   }

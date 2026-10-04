@@ -7,10 +7,11 @@ as the reverse proxy's job; this directory holds the other half of that sentence
 | File | What it is |
 |---|---|
 | [`nginx/praman.conf`](nginx/praman.conf) | A complete server block: TLS 1.2 floor, HSTS, CSP, rate limits, `/docs` refused, `/health` restricted by address |
+| [`ONLINE.md`](ONLINE.md) | Hosted-demo deployment using a managed Python web service, HTTPS termination, and optional persistent storage |
 
 Nothing here is executed by the application or by the test suite's fixtures, so a
 deployment that ignores it still runs. Three of its numbers are not free-floating,
-though — `tests/test_frontend_contract.py` asserts that the config's
+though — `tests/test_deploy_config.py` asserts that the config's
 `client_max_body_size` equals `MAX_UPLOAD_BYTES`, that its upstream port is the
 one `scripts/serve.py` binds, and that its CSP hash matches the single inline
 script in `frontend/index.html`. A proxy config that has drifted from the
@@ -33,3 +34,11 @@ the bearer token starts crossing a network.
 - There is still no multi-tenancy: one SQLite file, no tenant column. Two
   business units under separate assessors cannot share a deployment, whatever
   sits in front of it.
+
+## Hosted demonstrations
+
+`ONLINE.md` describes the second, intentionally narrower profile: a managed web
+service can expose the same app at a live HTTPS URL for a hackathon, while the
+offline profile remains the correct place for real sensitive configurations. The
+hosted profile disables optional AI inference, uses the provider's TLS, and can
+use `PRAMAN_DATABASE_PATH` for a mounted SQLite volume.

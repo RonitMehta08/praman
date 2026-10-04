@@ -206,9 +206,12 @@ async function dispatch() {
     currentCleanup = null;
   }
 
+  const routeChanged = currentRoute !== name;
   currentRoute = name;
+  outlet.dataset.route = name;
+  const navName = name === 'device' || name === 'remediation' ? 'devices' : name;
   document.querySelectorAll('[data-nav]').forEach((link) => {
-    const active = link.dataset.nav === name;
+    const active = link.dataset.nav === navName;
     link.classList.toggle('active', active);
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
@@ -218,6 +221,11 @@ async function dispatch() {
   try {
     const cleanup = await handler({ params, query, outlet });
     currentCleanup = typeof cleanup === 'function' ? cleanup : null;
+    const title = outlet.querySelector('.page-title')?.textContent || 'Workspace';
+    const location = document.getElementById('workspace-location');
+    if (location) location.textContent = title;
+    document.title = `${title} — PRAMAN`;
+    if (routeChanged) window.scrollTo({ top: 0, behavior: 'instant' });
   } catch (error) {
     render(outlet, reportError(error));
   }

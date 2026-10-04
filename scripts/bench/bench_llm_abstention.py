@@ -61,11 +61,12 @@ upper bound on silence, not a lower one: adding tiers can only convert abstentio
 into answers.
 
 Because the tier states are recorded, this is the one published metric whose
-freshness depends on the machine as well as the code. Starting or stopping
-llama-server changes ``tiers_available.tier3`` and will make ``--check`` report
-this metric stale — correctly, since the published rate no longer describes the
-configuration it was measured in. Regenerate with the tiers in the state you
-intend to publish:
+freshness depends on the machine as well as the code. They are recorded as the
+envelope's ``configuration`` rather than as a result, so starting or stopping
+llama-server makes ``--check`` report this metric *not comparable* rather than
+stale: the published rate is still a true statement about the configuration it
+was measured in, and this machine is simply in a different one. Republish only
+when the tiers are in the state you intend to ship:
 
     python scripts/bench/run_all.py --only bench_llm_abstention
 """
@@ -252,8 +253,12 @@ def main() -> int:
             "path schema."
         ),
         n=len(real) + len(NONSENSE),
+        # Which tiers were up is not a result — it is the setup the results
+        # describe, and it is the one knob in this project that two honest runs
+        # legitimately differ on. Declaring it here makes ``--check`` say "not
+        # comparable" on a machine with a model server up, instead of "stale".
+        configuration={"tiers_available": tier_states},
         results={
-            "tiers_available": tier_states,
             "tier3_probe_age_s": round(llm_age, 1),
             "thresholds": {"tau_tfidf": TAU_TFIDF, "tau_setfit": TAU_SETFIT, "tau_llm": TAU_LLM},
             "canonical_paths_published": len(valid_paths),

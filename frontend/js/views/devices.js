@@ -82,6 +82,9 @@ export async function devicesView({ outlet }) {
           audited
             ? linkButton('PDF', api.reportUrl(device.device_id), { class: 'btn-tiny', download: `${device.hostname || device.device_id}.pdf` })
             : null,
+          audited
+            ? linkButton('OSCAL', api.oscalUrl(device.device_id), { class: 'btn-tiny btn-quiet', download: `praman-${device.hostname || device.device_id}.oscal.json` })
+            : null,
           el('button', {
             class: 'btn btn-tiny',
             type: 'button',

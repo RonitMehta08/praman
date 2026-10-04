@@ -147,6 +147,75 @@ class TestEveryMetricFileIsWellFormed:
         )
 
 
+class TestConfigurationIsNotConfusedWithStaleness:
+    """``check()`` must distinguish "the code moved" from "this machine differs".
+
+    ``ai_abstention.json`` is the only metric whose numbers depend on the machine
+    as well as the code: the abstention rate with a llama-server up is a different
+    true number from the one with it down. Before this branch existed, starting a
+    model server made the gate report the published figure *stale* and demand a
+    regeneration that would have overwritten a deliberate publication with an
+    accident of local process state.
+
+    The exemption is narrow and these tests are what keeps it narrow: a mismatched
+    configuration passes, and everything else about the same file is still gated.
+    """
+
+    def _payload(self, **overrides: object) -> dict:
+        payload = json.loads(
+            (METRICS_DIR / "ai_abstention.json").read_text(encoding="utf-8")
+        )
+        payload.update(overrides)
+        return payload
+
+    def test_the_published_metric_declares_its_configuration(self) -> None:
+        """Without the declaration the branch below can never fire."""
+        payload = self._payload()
+        assert "configuration" in payload, (
+            "ai_abstention.json publishes no `configuration`, so scripts/bench "
+            "cannot tell a different machine from a stale measurement."
+        )
+        assert "tiers_available" in payload["configuration"]
+
+    def test_a_different_tier_configuration_is_not_reported_as_stale(self) -> None:
+        """Starting llama-server must not turn the gate red."""
+        from scripts.bench import check
+
+        fresh = self._payload()
+        fresh["configuration"] = {"tiers_available": {"tier1": True, "tier2": True, "tier3": True}}
+        assert check(fresh, filename="ai_abstention.json") == 0
+
+    def test_a_matching_configuration_still_gates_the_substance(self) -> None:
+        """The escape hatch must not swallow a genuinely stale number."""
+        from scripts.bench import check
+
+        fresh = self._payload()
+        # Same configuration, moved result: this is the staleness the gate exists
+        # for, and it must still fail.
+        fresh["results"] = dict(fresh["results"], canonical_paths_published=1)
+        assert check(fresh, filename="ai_abstention.json") == 1
+
+    def test_only_metrics_that_need_it_declare_a_configuration(self) -> None:
+        """One exemption is a considered decision; five is a habit.
+
+        Every other metric is a pure function of the repository, so declaring a
+        configuration there would exempt it from the gate for no reason anyone
+        could state. If a second file ever needs one, that is a real argument to
+        make in review rather than a line to add quietly.
+        """
+        declared = sorted(
+            path.name
+            for path in METRICS_DIR.glob("*.json")
+            if "configuration" in json.loads(path.read_text(encoding="utf-8"))
+        )
+        assert declared == ["ai_abstention.json"], (
+            f"{declared} declare a `configuration`, which exempts them from "
+            "--check whenever this machine differs. Only ai_abstention.json has "
+            "an argument for that: its numbers genuinely change with which model "
+            "tiers are up. Anything else is a gate being quietly switched off."
+        )
+
+
 class TestTrainingOutputIsNotMistakenForABenchmark:
     """``classifier.json`` reports ``mean_accuracy: 0.959``. On its own that lies.
 

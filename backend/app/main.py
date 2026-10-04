@@ -53,7 +53,6 @@ import sqlite3
 import time
 import uuid
 import zipfile
-from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -62,14 +61,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
+from backend.ai.mapping_queue import pending_queue, queue_counts, queue_unparsed
 from backend.ai.mapping_store import (
     ANY_VENDOR,
     MappingError,
     export_pack_patterns,
     list_mappings,
-    pending_queue,
-    queue_counts,
-    queue_unparsed,
     retire_mapping,
     upsert_mapping,
 )
@@ -93,12 +90,10 @@ from backend.app.auth import (
     open_session,
     user_count,
 )
+from backend.app.bulk import ArchiveRejectedError, open_archive, read_members
 from backend.app.config import (
     APP_NAME,
     APP_VERSION,
-    MAX_ARCHIVE_MEMBERS,
-    MAX_MEMBER_BYTES,
-    MAX_TOTAL_UNCOMPRESSED_BYTES,
     MAX_UPLOAD_BYTES,
     PS_ID,
     PS_ORG,
@@ -110,6 +105,7 @@ from backend.app.config import (
     SIGNING_TSA_URL,
 )
 from backend.app.routes_export import router as export_router
+from backend.app.routes_jobs import router as jobs_router
 from backend.app.services import evaluate_facts, parse_config, require_device
 from backend.app.state import STATE
 from backend.canonical.findings import build_summary
@@ -127,6 +123,7 @@ from backend.db.connection import (
 )
 from backend.ingest.base import ParseResult
 from backend.ingest.decode import decode_config, normalise
+from backend.jobs import QUEUE, Job
 from backend.ledger.chain import compute_merkle_root, compute_record_hash, sign_record
 from backend.rules.evaluator import compute_compliance_score, score_from_counts
 from backend.rules.projection import DIRECT_FRAMEWORKS
@@ -819,7 +816,16 @@ async def ingest_file(file: UploadFile = File(...)) -> IngestResponse:
 
 
 @app.post("/ingest/bulk", dependencies=[Depends(REQUIRE_AUDITOR)])
-async def ingest_bulk(file: UploadFile = File(...)) -> JSONResponse:
+async def ingest_bulk(
+    file: UploadFile = File(...),
+    background: bool = Query(
+        False,
+        description=(
+            "Return 202 and a job_id immediately instead of holding the request "
+            "open. Poll GET /jobs/{job_id} for progress."
+        ),
+    ),
+) -> JSONResponse:
     """Ingest a ZIP archive of configurations — the estate-scale path (C1).
 
     The archive is treated as hostile input, because an auditor is handed
@@ -832,78 +838,69 @@ async def ingest_bulk(file: UploadFile = File(...)) -> JSONResponse:
     One member failing does not fail the archive. A 400-device upload where two
     files are Word documents should ingest 398 devices and say which two failed —
     an all-or-nothing bulk import is a bulk import that never completes.
+
+    ``background=true`` runs the same walk on the job queue and returns a
+    ``job_id`` at once. It is opt-in rather than the default because changing the
+    shape of an existing route's response is how you break every client that
+    already calls it; the archive ceilings (2,000 members, 512 MB expanded) are
+    nonetheless far wider than a synchronous request can carry, so the async mode
+    is the one a real estate should use. Validation happens *before* the 202, so
+    a malformed archive still fails fast with a 400 rather than succeeding into a
+    job that immediately dies.
     """
     raw = await _read_upload(file)
-    results: list[dict[str, Any]] = []
-    errors: list[dict[str, Any]] = []
-
     try:
-        archive = zipfile.ZipFile(BytesIO(raw), "r")
-    except zipfile.BadZipFile as err:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "uploaded file is not a valid ZIP archive. Send a .zip of "
-                "configuration files, or use POST /ingest for a single file."
-            ),
-        ) from err
+        archive, members = open_archive(raw)
+    except ArchiveRejectedError as err:
+        raise HTTPException(status_code=err.status_code, detail=err.detail) from err
 
+    if background:
+        job = QUEUE.submit(
+            "ingest_bulk",
+            lambda job: _run_bulk_ingest(job, archive, members),
+            label=file.filename or "archive.zip",
+            total=len(members),
+        )
+        return JSONResponse(status_code=202, content=job.as_dict(include_items=False))
+
+    job = Job(job_id="", kind="ingest_bulk", total=len(members))
     with archive:
-        members = [info for info in archive.infolist() if not info.is_dir()]
-        if len(members) > MAX_ARCHIVE_MEMBERS:
-            raise HTTPException(
-                status_code=413,
-                detail=(
-                    f"archive holds {len(members)} files, above the "
-                    f"{MAX_ARCHIVE_MEMBERS} limit. Split it into batches."
-                ),
-            )
-        declared_total = sum(info.file_size for info in members)
-        if declared_total > MAX_TOTAL_UNCOMPRESSED_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=(
-                    "archive expands to "
-                    f"{declared_total // (1024 * 1024)} MB, above the "
-                    f"{MAX_TOTAL_UNCOMPRESSED_BYTES // (1024 * 1024)} MB limit. "
-                    "This is the zip-bomb guard; split the archive if the size "
-                    "is genuine."
-                ),
-            )
+        _run_bulk_ingest(job, archive, members)
+    return JSONResponse(
+        content={
+            "total_files": len(job.results) + len(job.errors),
+            "success": len(job.results),
+            "failed": len(job.errors),
+            "results": job.results,
+            "errors": job.errors,
+        }
+    )
 
-        conn = STATE.connect()
-        try:
-            consumed = 0
-            for info in members:
-                name = info.filename
+
+def _run_bulk_ingest(
+    job: Job, archive: zipfile.ZipFile, members: list[zipfile.ZipInfo]
+) -> None:
+    """Parse and store every member, recording progress on ``job``.
+
+    Runs on the request thread in synchronous mode and on the queue's worker
+    thread otherwise, which is why it opens its own connection: a SQLite
+    connection belongs to the thread that created it.
+    """
+    conn = STATE.connect()
+    try:
+        for outcome in read_members(archive, members, _decode_config):
+            job.raise_if_cancelled()
+            if outcome.error is not None:
+                job.errors.append(
+                    {"file": outcome.name, "status": "failed", "error": outcome.error}
+                )
+            else:
                 try:
-                    _reject_unsafe_member(name)
-                    if info.file_size > MAX_MEMBER_BYTES:
-                        raise ValueError(
-                            f"member is {info.file_size // 1024} KB, above the "
-                            f"{MAX_MEMBER_BYTES // 1024} KB per-file limit"
-                        )
-                    # Read with an explicit ceiling as well as trusting the
-                    # header: a crafted archive can understate file_size, and
-                    # the read is where that lie becomes memory.
-                    with archive.open(info, "r") as handle:
-                        payload = handle.read(MAX_MEMBER_BYTES + 1)
-                    if len(payload) > MAX_MEMBER_BYTES:
-                        raise ValueError(
-                            "member expands past the per-file limit; its "
-                            "declared size did not match its contents"
-                        )
-                    consumed += len(payload)
-                    if consumed > MAX_TOTAL_UNCOMPRESSED_BYTES:
-                        raise ValueError(
-                            "archive expanded past the total size limit"
-                        )
-
-                    parsed = parse_config(_decode_config(payload), name)
-                    queued = _store_parse(conn, parsed, name)
-                    results.append(
+                    parsed = parse_config(outcome.text, outcome.name)
+                    queued = _store_parse(conn, parsed, outcome.name)
+                    job.results.append(
                         {
-                            "file": name,
+                            "file": outcome.name,
                             "device_id": parsed.device.device_id,
                             "hostname": parsed.device.hostname,
                             "vendor": parsed.device.vendor.value,
@@ -914,34 +911,20 @@ async def ingest_bulk(file: UploadFile = File(...)) -> JSONResponse:
                         }
                     )
                 except Exception as exc:
-                    errors.append(
+                    job.errors.append(
                         {
-                            "file": name,
+                            "file": outcome.name,
                             "status": "failed",
                             "error": f"{type(exc).__name__}: {exc}",
                         }
                     )
-        finally:
-            conn.close()
-
-    return JSONResponse(
-        content={
-            "total_files": len(results) + len(errors),
-            "success": len(results),
-            "failed": len(errors),
-            "results": results,
-            "errors": errors,
-        }
-    )
-
-
-def _reject_unsafe_member(name: str) -> None:
-    """Refuse an archive member name that tries to escape its own tree."""
-    pure = name.replace("\\", "/")
-    if pure.startswith("/") or ".." in pure.split("/") or ":" in pure.split("/")[0][1:]:
-        raise ValueError(
-            "member name attempts directory traversal or names an absolute path"
-        )
+            job.done += 1
+    finally:
+        conn.close()
+        if job.job_id:
+            # The async path owns the archive handle; the synchronous path holds
+            # it in a `with` block that is still open around this call.
+            archive.close()
 
 
 # ─── C3/C4: audit and reports ──────────────────────────────────────────
@@ -1868,6 +1851,7 @@ async def training_export(vendor: str | None = Query(None)) -> Response:
 # above the static handler below, so no asset name can shadow either route.
 
 app.include_router(export_router)
+app.include_router(jobs_router)
 
 
 # ─── Static frontend ───────────────────────────────────────────────────

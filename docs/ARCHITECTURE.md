@@ -49,8 +49,8 @@ written against paths, never against syntax. So:
 
 **C1 — Unified ingestion.** `backend/ingest/generic.py` runs a pattern pack over
 the text: line patterns, block patterns, and nested blocks. Detection is by
-content, not by filename. Eighteen shipped fixtures across seven vendors parse to
-3,748 facts with 46 lines
+content, not by filename. Twenty shipped fixtures across seven vendors parse to
+4,302 facts with 46 lines
 reported unparsed — *reported*, because the unparsed set is the input to C2 and
 silently dropping a line is how a parser hides its own coverage.
 
@@ -140,12 +140,16 @@ See [`adr/0004-no-frontend-build-step.md`](adr/0004-no-frontend-build-step.md).
 
 ## Scale and limits
 
-Single-process, SQLite, synchronous evaluation: sized for an estate audited in
-batches, not for thousands of concurrent uploads. `/ingest/bulk` takes an archive
-and reports **per-member outcomes**, because an all-or-nothing bulk import never
-completes on a real estate. Archives are treated as hostile input — member count,
-per-member size, total expanded size and name traversal are all refused before
-anything is read.
+Single-process and SQLite: sized for an estate audited in batches, not for
+thousands of concurrent uploads. `/ingest/bulk` takes an archive and reports
+**per-member outcomes**, because an all-or-nothing bulk import never completes on
+a real estate. Archives are treated as hostile input — member count, per-member
+size, total expanded size and name traversal are all refused before anything is
+read. `?background=true` runs the same walk on an in-process job queue and
+returns a `job_id` to poll or cancel; one worker thread, because WAL takes one
+writer at a time. A process pool was measured and rejected — see
+[`GAPS.md`](GAPS.md) §6, where profiling that question found and fixed a 6.9x
+parse regression.
 
 **Identity is per request, and inside the record.** Three ordered roles — viewer
 reads, auditor uploads, approver commits and teaches — resolved from a bearer

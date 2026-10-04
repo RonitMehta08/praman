@@ -29,6 +29,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.ai.mapping_queue import pending_queue, queue_counts, queue_unparsed
 from backend.ai.mapping_store import (
     ANY_VENDOR,
     STATUS_APPROVED,
@@ -38,9 +39,6 @@ from backend.ai.mapping_store import (
     export_pack_patterns,
     list_mappings,
     load_mappings,
-    pending_queue,
-    queue_counts,
-    queue_unparsed,
     retire_mapping,
     upsert_mapping,
 )

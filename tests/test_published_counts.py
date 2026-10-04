@@ -55,7 +55,7 @@ PUBLISHING_DOCS = (
     PROJECT_ROOT / "docs" / "ARCHITECTURE.md",
     PROJECT_ROOT / "docs" / "PRODUCTION-ROADMAP.md",
     PROJECT_ROOT / "guide.md",
-    WORKSPACE_ROOT / "MANUAL_COMMANDS.md",
+    PROJECT_ROOT / "MANUAL_COMMANDS.md",
     WORKSPACE_ROOT / "slides_content.md",
 )
 

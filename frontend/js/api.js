@@ -162,12 +162,31 @@ export async function ingest(file) {
  * The route takes one field, `file`, holding a **ZIP archive**; it is not a
  * repeated file field. One member failing does not fail the archive, so the
  * response separates `results` from `errors` and the UI must show both — a bulk
- * import that silently drops two of 400 devices is worse than one that refuses. */
-export async function ingestBulk(zipFile) {
+ * import that silently drops two of 400 devices is worse than one that refuses.
+ *
+ * This is the background form. The archive ceilings are 2,000 members and
+ * 512 MB expanded, which is more than any browser or reverse proxy will hold a
+ * connection open for, so the request returns `202` with a job to poll and the
+ * UI shows progress instead of a spinner that becomes a gateway timeout. The
+ * server still offers the synchronous form (`POST /ingest/bulk` with no
+ * `background` flag) for scripts and for compatibility; the UI has no use for
+ * it, so there is no wrapper here.
+ *
+ * Validation happens before the `202`: a file that is not a ZIP fails here and
+ * now, rather than becoming a job the operator has to poll to discover it was
+ * never going to work. */
+export async function ingestBulkBackground(zipFile) {
   const form = new FormData();
   form.append('file', zipFile, zipFile.name);
-  return (await request('/ingest/bulk', { method: 'POST', body: form })).json();
+  return (await request('/ingest/bulk?background=true', { method: 'POST', body: form })).json();
 }
+
+/** Poll one job. 404s once the job has aged out of the in-process history. */
+export const job = (jobId) => getJson(`/jobs/${encodeURIComponent(jobId)}`);
+
+/** Ask a running job to stop. Work already committed stays committed. */
+export const cancelJob = (jobId) =>
+  postJson(`/jobs/${encodeURIComponent(jobId)}/cancel`, {});
 
 // ── Simulate (stateless, no ledger write) ────────────────────────────
 
@@ -192,6 +211,19 @@ export const remediation = (deviceId, opts = {}) =>
  * report in memory to achieve the same thing. */
 export const reportUrl = (deviceId, opts = {}) =>
   `/devices/${encodeURIComponent(deviceId)}/report.pdf${query(opts)}`;
+
+/** The committed machine-readable assessment, streamed as a browser download. */
+export const oscalUrl = (deviceId, opts = {}) =>
+  `/devices/${encodeURIComponent(deviceId)}/oscal.json${query(opts)}`;
+
+/** Render a stateless simulation as a deterministic SARIF download. */
+export async function simulateSarif(configText, sourceFile = 'inline.conf') {
+  return request('/simulate/sarif', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ config_text: configText, source_file: sourceFile }),
+  });
+}
 
 // ── Identity ─────────────────────────────────────────────────────────
 

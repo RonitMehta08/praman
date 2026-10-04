@@ -10,7 +10,8 @@ the remediation CLI the publisher wrote for each failure, signed into a
 hash-chained ledger so the report can be re-checked later without trusting the
 process that produced it.
 
-It runs entirely offline on one laptop. No cloud, no API keys, no network.
+It can run entirely offline on one laptop, with no cloud or external API keys
+required. An optional hosted demo uses the same audit engine with sample configs.
 
 ---
 
@@ -18,7 +19,7 @@ It runs entirely offline on one laptop. No cloud, no API keys, no network.
 
 | PS capability | Where it lives | Status |
 |---|---|---|
-| **C1** Unified ingestion engine | `backend/ingest/` — pattern-driven, vendor packs are data files | 7 vendor packs shipped, 3,748 facts from 18 configs |
+| **C1** Unified ingestion engine | `backend/ingest/` — pattern-driven, vendor packs are data files | 7 vendor packs shipped, 4,302 facts from 20 configs |
 | **C2** AI-powered training module | `backend/ai/`, `frontend/js/views/training.js` | 3-tier classifier + GUI; new formats taught without redeploy |
 | **C3** Multi-framework compliance engine | `backend/rules/` | 454 rules over 13 benchmarks → 4 frameworks, 42 catalogs / 3,366 controls |
 | **C4** Actionable intelligence + PDF report | `backend/report/`, `backend/remediation/` | Per-device signed PDF, publisher-sourced fix CLI |
@@ -53,6 +54,22 @@ other interface the bearer token crosses the network in clear text. Put
 [`deploy/nginx/praman.conf`](deploy/nginx/praman.conf) in front of it and read
 [`docs/SECURITY.md`](docs/SECURITY.md) before exposing it.
 
+### Live hosted demo
+
+The same application can also run behind a managed HTTPS web service for a
+hackathon demo. Use only the shipped sample configurations there: the hosted
+profile processes uploads on the service, while the offline profile keeps them
+on the assessor's machine. See [`deploy/ONLINE.md`](deploy/ONLINE.md) for the
+provider-agnostic build/start settings, bootstrap account variables, and SQLite
+persistence guidance.
+
+For this standalone GitHub repository, leave Render's **Root Directory blank**.
+The root-level `render.yaml` also supports **New → Blueprint** in Render; enter
+the demo password when prompted. Python is pinned by `.python-version`.
+
+On Windows, start locally with `powershell -File deploy/start-windows.ps1`.
+The `sh deploy/start-online.sh` command is for the Linux hosting service.
+
 ### Create the first operator
 
 There is no default account and no bootstrap endpoint, so a fresh clone has
@@ -84,7 +101,7 @@ requires a separate download and a GPU — see
 
 ## Try it in 60 seconds
 
-Eighteen configurations across seven vendors ship with the project, so you do
+Twenty configurations across seven vendors ship with the project, so you do
 not need a device:
 
 ```bash
@@ -103,6 +120,21 @@ Through the API, with the server running:
 ```bash
 curl -F "file=@test_configs/realistic/telnet_exposed.conf" http://127.0.0.1:8012/ingest
 ```
+
+A whole estate goes up as one ZIP. Archives may hold 2,000 members and expand to
+512 MB, which is more than a request can be held open for, so add
+`?background=true` to get a `job_id` back immediately and poll it:
+
+```bash
+curl -F "file=@estate.zip" "http://127.0.0.1:8012/ingest/bulk?background=true"
+curl http://127.0.0.1:8012/jobs/<job_id>
+```
+
+`POST /jobs/<job_id>/cancel` stops the import after the member being read;
+devices already ingested stay ingested. Without the flag the route is
+synchronous and returns the full result, which is still the right shape for a
+handful of files. Job state is in memory and bounded — see `docs/GAPS.md` §6 for
+why it is deliberately not durable.
 
 ## How it works
 
@@ -135,17 +167,17 @@ Every figure below is read from `reports/metrics/*.json`, written by
 `scripts/bench/run_all.py`, and re-verified inside the test suite. Machine:
 i5-13500H, 16 GB RAM, RTX 4050 Laptop (6 GB), Windows 11, Python 3.10.
 
-**Ingestion (C1)** — 16 shipped fixtures across 7 vendors, 3,489 lines
+**Ingestion (C1)** — 20 shipped fixtures across 7 vendors, 3,477 significant lines
 
 | | |
 |---|---|
-| Vendor detected | 18 of 18 fixtures |
-| Lines parsed | **98.49%** of 3,043 significant lines (98.83% of all 3,927) |
+| Vendor detected | 20 of 20 fixtures |
+| Lines parsed | **98.68%** of 3,477 significant lines (98.99% of all 4,576) |
 | Unparsed residue | 46 lines, **36 distinct commands** — enumerated in `reports/metrics/parse_coverage.json` |
-| Facts extracted | 3,748 across the corpus; 430 from a single 280-line config |
-| Parse latency | p50 **7.8 ms**, p95 11.5 ms (largest fixture, n=20) |
+| Facts extracted | 4,302 across the corpus; 430 from a single 280-line config |
+| Parse latency | p50 **8.2 ms**, p95 11.7 ms (largest fixture, n=20) |
 
-Ten of the eighteen fixtures parse at 100%, including four of the six
+Twelve of the twenty fixtures parse at 100%, including four of the six
 non-Cisco-IOS vendors outright. The largest residue is `enterprise_complex.conf`
 — 18 lines, 91.4% — and it is routing configuration (BGP prefix-lists,
 route-maps) that no CIS or STIG control in the loaded catalogs asks about. The
@@ -178,9 +210,9 @@ form is what the ignore list covers and the `no` form means the service is on.
 | CIS Juniper OS v2.0.0 | **47 of 172** controls automated (27.3%) |
 | CIS Palo Alto Firewall 11 v1.2.0 | **19 of 79** controls automated (24.1%) |
 | Of *all* 3,366 loaded controls | 13.49% — most catalogs are for platforms no pattern pack covers yet |
-| Governance reach over 16 fixtures | NIST 800-53 **43 of 1,014** (4.24%) · ISO 27001 **21 of 121** (17.36%) — projected, never evaluated directly |
-| Evaluation latency | p50 **5.3 ms** direct-only (n=20) |
-| Verdicts over 16 fixtures | 1,245 decided (684 pass / 561 fail), 3,295 `notchecked`, 131 n/a, 5 `unknown` |
+| Governance reach over 20 fixtures | NIST 800-53 **43 of 1,014** (4.24%) · ISO 27001 **21 of 121** (17.36%) — projected, never evaluated directly |
+| Evaluation latency | p50 **8.4 ms** direct-only (n=20) |
+| Verdicts over 20 fixtures | 1,339 decided (732 pass / 607 fail), 3,587 `notchecked`, 131 n/a, 5 `unknown` |
 | ATT&CK reach | **272 of 454 rules** (59.9%) map to a technique — PRAMAN's own editorial mapping, never a verdict |
 
 The 13.49% is published because it is the honest denominator: PRAMAN loads every
@@ -238,7 +270,7 @@ config export. Guessing at those would raise the percentage and lower the value.
 |---|---|
 | PDF size | 124 KB (2 failures) → 200 KB (122 failures) |
 | Render latency | p50 **0.80 s** – 1.25 s per device |
-| Without ReportLab | 201,721 bytes, valid PDF, **61.6× faster** — same verdicts, same record hash |
+| Without ReportLab | 201,721 bytes, valid PDF, **72.1× faster** — same verdicts, same record hash |
 
 Finding count is constant at 1,462 per device (every device is evaluated against
 the whole loaded catalog), so report size tracks *failures*, not config size.
@@ -263,7 +295,9 @@ committed), so the run walks tier 1 → tier 2 before abstaining and pays a
 sentence-transformer forward pass per line. A fresh clone stops at tier 1 and is
 far faster; the abstention rows are unaffected, because both tiers declined.
 `tiers_available` in `reports/metrics/ai_abstention.json` records which tiers the
-run actually saw.
+run actually saw, as the envelope's `configuration` rather than as a result: a
+machine whose tiers differ from the published ones is told the figure is *not
+comparable*, not that it is stale. See `docs/GAPS.md` §6.
 
 The range is the honest form. Four consecutive standalone runs of
 `bench_llm_abstention.py` landed at 88–89 ms per line; two runs of the same
@@ -349,7 +383,7 @@ A compliance tool that cannot be audited itself is not worth much, so every
 published number is regenerable and every guarantee is a test.
 
 ```bash
-.venv/Scripts/python.exe -m pytest -q          # 1,649 tests
+.venv/Scripts/python.exe -m pytest -q          # 1,798 tests
 .venv/Scripts/python.exe -m ruff check backend/ scripts/ tests/
 .venv/Scripts/python.exe scripts/bench/run_all.py --check    # every published metric is current
 .venv/Scripts/python.exe scripts/fixture_report.py --check   # published table is current
@@ -406,12 +440,12 @@ data/
   frameworks/  catalogs and crosswalks (CIS, STIG, NIST, ISO, ATT&CK)
   ingest/patterns/  vendor pattern packs
   models/      Tier 1 (TF-IDF) + Tier 2 (SetFit) shipped; Tier 3 excluded (2.4 GB)
-test_configs/  16 shipped device configurations, documented per category
+test_configs/  20 shipped device configurations, documented per category
 docs/          architecture, gaps, security, ADRs
 scripts/       every published number is produced by one of these
   bench/       run_all.py regenerates or --check-verifies reports/metrics/*.json
 reports/metrics/  the measured numbers quoted in this README and the slides
-tests/         1,649 tests
+tests/         1,798 tests
 ```
 
 ## Documentation

@@ -33,10 +33,8 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-#: ``MANUAL_COMMANDS.md`` lives at the *workspace* root, one level above the
-#: Python project, because it covers the whole machine setup (conda envs, MSYS2,
-#: corpora sitting beside the repo) and not just this package.
-MANUAL_COMMANDS = PROJECT_ROOT.parent / "MANUAL_COMMANDS.md"
+# The project includes the runbook so a standalone GitHub clone can resolve it.
+MANUAL_COMMANDS = PROJECT_ROOT / "MANUAL_COMMANDS.md"
 
 #: The six fields every step must carry, verbatim as the file writes them.
 #: ``Est. time`` and ``Est. disk`` are load-bearing rather than decorative: they

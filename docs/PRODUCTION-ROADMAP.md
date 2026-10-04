@@ -188,7 +188,7 @@ gates.
 
 | Debt | Where | Status | Note |
 |---|---|---|---|
-| Plain HTTP, no TLS | SECURITY.md §2 | **Config shipped, app unchanged** | `deploy/nginx/praman.conf` terminates TLS 1.2+, sets HSTS and a CSP, adds `Secure` to the session cookie, rate-limits `/auth/login` at 6r/m, and refuses `/docs`. The application still speaks plain HTTP and will not change: it cannot know whether it is behind TLS, so a `Secure` flag it set itself would be a guess. Three of the config's numbers are asserted against the app by `tests/test_frontend_contract.py`, because a proxy config that has drifted breaks only in the one environment nobody develops in |
+| Plain HTTP, no TLS | SECURITY.md §2 | **Config shipped, app unchanged** | `deploy/nginx/praman.conf` terminates TLS 1.2+, sets HSTS and a CSP, adds `Secure` to the session cookie, rate-limits `/auth/login` at 6r/m, and refuses `/docs`. The application still speaks plain HTTP and will not change: it cannot know whether it is behind TLS, so a `Secure` flag it set itself would be a guess. Three of the config's numbers are asserted against the app by `tests/test_deploy_config.py`, because a proxy config that has drifted breaks only in the one environment nobody develops in |
 | Signing key on the same disk as the DB it signs | SECURITY.md §3 | **Open** | Real non-repudiation needs KMS/HSM or an RFC-3161 timestamp authority. `G.md` §28 P6 flags that **no public TSA URL is verified anywhere in the corpus** — treat the URL as human-supplied input |
 | Reads are not logged at all | SECURITY.md §5 | **Done** | `_access_log_middleware` writes actor, method, path, status and duration for every request including PDF downloads; unauthenticated attempts are logged with an empty actor, so a probe is visible rather than absent. `GET /audit/access` is approver-only, because the log answers "who looked at the core router's findings" and a viewer-readable copy would make the reviewer's work visible to the reviewed. Not tamper-evident — see SECURITY.md §5 for why chaining it was rejected |
 | No rate limiting | SECURITY.md §4 | **Partial** | The login lockout (10 failures / 900 s) covers one route, is in-process and clears on restart — it is a credential-stuffing brake, not a rate limiter. Per-request limiting is the proxy's job and is in the shipped config; the application still has none |
@@ -456,11 +456,115 @@ asks for. Details in [`GAPS.md`](GAPS.md).
   a restatement of a fact the same line already emitted, and re-anchor the
   FortiOS block on `mgmt.local_user.secret`. Vocabulary 331 → 330, corpus 3,445 →
   3,442 facts, zero verdicts changed. Written up in `docs/GAPS.md` §6.
-- **`reports/metrics/ai_abstention.json` is coupled to a running process.** Its
-  `tiers_available.tier3` is `true`, which is only true while a local
-  `llama-server` is up. Stop the server and `test_metrics_are_current.py`
-  correctly fails. That is the intended behaviour and it is still a foot-gun on
-  any machine without a model, and on CI, and on demo day.
+- ~~**`reports/metrics/ai_abstention.json` is coupled to a running process.**~~
+  **Done — and the diagnosis named the wrong culprit.** The coupling is real and
+  cannot be removed: the abstention rate with a llama-server up is a different
+  *true* number from the rate with it down, so a metric that ignored tier state
+  would be the less honest one. What was actually wrong was the gate's verdict.
+  `--check` reported **stale**, which means "the code moved, regenerate" — and
+  regenerating on a demo machine would have overwritten a deliberate publication
+  with an accident of local process state. Tier availability moved out of
+  `results` into a new envelope-level `configuration` key that `check()` compares
+  *first*; a mismatch now reports **not comparable** and returns 0, printing
+  which knob differs. Every substantive figure is still gated whenever the
+  configuration matches, which is the shipped default and therefore the case CI
+  and a grader both hit. Held open by
+  `tests/test_metrics_are_current.py::TestConfigurationIsNotConfusedWithStaleness`,
+  which asserts a mismatch passes, a match still catches a moved number, and
+  `ai_abstention.json` is the only metric declaring a `configuration` at all —
+  one exemption is a decision, five would be a habit.
+- ~~**The file-length debt the job queue added.**~~ **Done — repaid with
+  interest.** §3.5's work grew five files that were already over the 500-line
+  limit, which the `check_deliverable_limits.py` ratchet correctly refused. The
+  budget was not raised. Instead three splits landed, each along a seam that was
+  already there: `backend/app/routes_jobs.py` (the three `/jobs` routes, out of
+  `main.py`, following the `routes_export.py` precedent),
+  `backend/ai/mapping_queue.py` (the queue of templates *awaiting* a decision,
+  out of the store of decisions already made — they shared a database and
+  nothing else), and `backend/ingest/blocks.py` (`BlockScanner` — pass 1, pure
+  lexical block-extent work over `list[str]`, out of the fact-production passes;
+  a bug in the first puts a real finding on the wrong interface, a bug in the
+  second gets the value wrong on the right one, and the two now fail in separate
+  files). `mapping_store.py` fell to 499 lines and lost its budget entry
+  altogether. Net: **7,778 → 7,404 lines of debt, 29 → 28 budgeted files, zero
+  violations**, and 651 parsing tests still green across the moved code.
+
+  Then the fix for the route-inventory blind spot (below) grew two *test* files
+  that were themselves over the limit, and the ratchet refused those too — which
+  is the gate working, not the gate being inconvenient. Two more splits, same
+  rule: `tests/test_api_training.py` (the C2 round trip — teach, list, export,
+  retire — which is one *ordered* workflow and read like a set of independent
+  surface checks while it sat among them) and `tests/test_deploy_config.py` (the
+  nginx CSP hashes, upload limit and port, whose subject is the shipped config
+  rather than the frontend that happens to break when it is wrong). The five
+  `/training` paths joined `EXPORT_ROUTES` and `JOB_ROUTES` in the inventory's
+  named-elsewhere set, so the coverage gate still refuses to let them go
+  untested. Net: **7,404 → 7,208 lines of debt**, still 28 budgeted files, zero
+  violations, 78 route and contract tests green.
+
+  A sixth candidate was considered and declined. `tests/test_published_counts.py`
+  sat at 450 lines and the new benchmark-ratio gate (§2.6) would have pushed it
+  to 548. Trimming the new test to fit under 500 was possible and would have been
+  the wrong move: the ratchet's purpose is to push work toward seams, and there
+  was a real one here. That module's subject is facts about *the repository*,
+  derived by asking pytest and Python about themselves; the new gate's subject is
+  figures produced by *a benchmark run*. They rot for different reasons and are
+  fixed by different commands — edit a document versus re-run
+  `scripts/bench/run_all.py` — and a failure message has to say which. So it
+  landed as `tests/test_published_metrics.py` (160 lines), and
+  `test_published_counts.py` stayed at 450. Debt unchanged at **7,208**, because
+  a new file under the limit is not debt.
+
+### 2.6 A published benchmark ratio had no gate at all
+
+> **Resolved.** Three graded deliverables — `README.md`,
+> `docs/PRESENTATION.md` and `docs/IDEA_ROUND_DECK.md` — stated that the
+> ReportLab-less fallback renderer was **61.6× faster**. The regenerated
+> `reports/metrics/pdf_generation.json` records **72.1×**, computed from the same
+> run that supplies the ReportLab latency it is a ratio against. The metrics file
+> was right; the deliverables were a bench run behind.
+
+The interesting part is not the stale number, it is that **two tests each looked
+like they covered this and neither did**:
+
+- `tests/test_metrics_are_current.py` re-runs every benchmark in a subprocess and
+  diffs the result against `reports/metrics/*.json`. It proves the measurement is
+  current. It never opens the slide deck.
+- `tests/test_published_counts.py` reads the README, both decks, the script and
+  the guide. It proves what those documents claim *about the repository* — test
+  count, endpoint count, canonical-path count. A ratio measured from a run is not
+  in its subject.
+
+Three relationships exist; two were gated. **Measurement → reality** and
+**document → repository** were covered, and **document → measurement** was not,
+so the JSON and the deck could disagree indefinitely with a green suite. That is
+the same shape as the route-inventory bug below — not a test that broke, a test
+that was never there, in a place where the surrounding coverage made it look
+present.
+
+`tests/test_published_metrics.py` closes it, and is built to resist the two ways
+this kind of gate fails quietly:
+
+- **It holds no literal.** The expected value is read out of
+  `pdf_generation.json` at run time. Restating `72.1` in the test would create a
+  second place for the number to go stale, which is the defect being fixed.
+- **An empty scan is a failure.** If the claim is ever dropped from every
+  document, `test_the_claim_still_exists` fails rather than passing on nothing.
+- **A second ratio is a failure.** The pattern matches the phrase `N× faster`; it
+  cannot know *what* was made faster. While the PDF fallback is the only thing
+  these documents describe that way, matching the phrase is sound. A second,
+  unrelated ratio would be silently held to the PDF benchmark's value — and the
+  natural way to make that green is to overwrite a correct figure. So
+  `test_only_one_speedup_claim_exists` fails on a second distinct value and says
+  to give it its own assertion against its own metrics file.
+  `docs/PRODUCTION-ROADMAP.md` is deliberately outside the scan set for exactly
+  this reason: §3.4 records a `6.9x speedup` about an unrelated parse-cache fix.
+
+The gate was verified by putting `61.6×` back into `README.md` and confirming it
+went red naming `praman/README.md:256`, rather than by observing that it passes.
+Cost of the three new tests: the suite moved 1,795 → 1,798, which made
+`test_published_counts.py` red across sixteen figures in six documents until they
+were swept — the gate charging its own price, on schedule.
 
 ---
 
@@ -810,16 +914,63 @@ which is the correct pattern.
 
 ### 3.5 No job queue — the scaling wall
 
-`grep -rn "ProcessPoolExecutor\|job_id" backend/ --include=*.py` returns
+~~`grep -rn "ProcessPoolExecutor\|job_id" backend/ --include=*.py` returns
 nothing. The only pool in the codebase is a `ThreadPoolExecutor(max_workers=1)`
 in `backend/report/sign.py:74`. `/ingest/bulk` is synchronous and returns no
-`job_id`.
+`job_id`.~~
 
-§9.2 and §9.3 specify the in-process job queue plus `ProcessPoolExecutor`, and
+~~§9.2 and §9.3 specify the in-process job queue plus `ProcessPoolExecutor`, and
 explain why: the parse work is CPU-bound and GIL-holding, and on Windows the
 spawn start method means workers must be top-level and picklable. Archive limits
 are already 2,000 members and 512 MB expanded — a synchronous request cannot
-carry that, so today the guard rails are wider than the engine.
+carry that, so today the guard rails are wider than the engine.~~
+
+**Done — the queue is in, the process pool is not, and measuring the second
+question found a much larger defect than the one this section describes.**
+
+The queue ships: `backend/jobs/queue.py`, with `POST /ingest/bulk?background=true`
+returning `202` and a `job_id`, and `GET /jobs`, `GET /jobs/{id}` and
+`POST /jobs/{id}/cancel` beside it. One worker thread, not a pool, because every
+job here writes to the same SQLite file and WAL takes one writer at a time;
+in-memory job state, because a job record is progress reporting while everything
+a job *produces* is committed to SQLite as it goes; cooperative cancellation at
+the item boundary, because that is the only place a partial write question has a
+clean answer. `background` is opt-in so the existing synchronous response shape
+is untouched for current callers. The archive walk moved to `backend/app/bulk.py`
+so both modes provably share one definition of a valid archive —
+`tests/test_job_queue.py` asserts they agree member for member.
+
+**`ProcessPoolExecutor`: measured, and not adopted.** §9.2's rationale is
+inherited from a parser stack PRAMAN does not use — `textfsm`/`ntc-templates`
+were the assumption; these are our own YAML pattern packs — so it was worth
+measuring rather than believing. The first measurement said a warm 4-worker pool
+was *slower* than serial (0.82–1.08x across three runs on 16 logical CPUs), which
+is not how CPU-bound work behaves, so the next step was a profile rather than a
+conclusion. The profile found the real defect:
+
+> **Every config parse opened seven SQLite connections — one per installed
+> pattern pack — and ran the schema DDL on each, to answer seven questions about
+> the same instant.** Detection scores an upload against every pack, and each
+> `_learned_for(vendor)` call reconnected to re-read the learned-mapping
+> freshness fingerprint. 53% of parse time, invisible to the test suite because
+> every individual call was correct.
+
+`LearnedPatterns.load_many()` now answers one sweep through one connection.
+Measured on the 20-fixture corpus, 100 parses: **156 ms → 22.5 ms per config, a
+6.9x speedup**, and the projected time to parse a full 2,000-member archive falls
+from 311 s to 45 s. The cache semantics are unchanged — the fingerprint is still
+read once per sweep, so a mapping taught a moment ago is still in force on the
+next parse, which `tests/test_mapping_store.py` pins.
+
+With the contention gone the pool does show a genuine 2.45x on parsing alone, and
+it is still not worth taking: 45 s of parsing now sits comfortably inside a
+background job, the remaining per-device cost is the SQLite write path that a
+pool cannot parallelise anyway, and a pool would add process spawn (~2.3 s),
+picklability constraints on the parse path, and a second concurrency model to
+reason about. The queue solved the problem this section actually names — an HTTP
+request that cannot be held open — and the pool would optimise the half that is
+no longer the bottleneck. Recorded as a decision, not an omission, in
+`docs/GAPS.md` §6.
 
 ### 3.6 Deliverable gates, and an accurate accounting of what is missing
 
@@ -1354,9 +1505,10 @@ Cross-cutting and cheap: ~~delete the four superseded seed rule packs, decide
 `mgmt.local_user.secret_type`~~ (both done — §2.5), ~~write
 `scripts/collect_unverified.py` (taught about the `extract.py` sentinel) and
 `scripts/check_deliverable_limits.py`~~ (both done — §3.6). What those two turned
-up is now the cross-cutting work: **7,780 lines of file-length debt across 29
-files**, ratcheted so it cannot grow, with `backend/app/main.py` at 1,928 lines
-the obvious first split.
+up is now the cross-cutting work: file-length debt, ratcheted so it cannot grow.
+It stood at **7,778 lines across 29 files** when the ratchet was first enforced;
+five splits later it is **7,208 across 28** (§2.5 carries the chain), with
+`backend/app/main.py` at 1,912 lines still the obvious next one.
 
 **Any heavy step this roadmap implies** — re-training after a vocabulary change,
 acquiring ITSAR content, downloading a KEV/EPSS snapshot — goes into
