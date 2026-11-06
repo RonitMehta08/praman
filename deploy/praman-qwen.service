@@ -1,0 +1,21 @@
+[Unit]
+Description=PRAMAN optional CPU Qwen server
+After=network.target
+
+[Service]
+Type=simple
+User=azureuser
+Group=azureuser
+WorkingDirectory=/opt/praman
+EnvironmentFile=/etc/praman/praman.env
+ExecStart=/bin/sh /opt/praman/deploy/start-qwen-cpu.sh
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+MemoryAccounting=true
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

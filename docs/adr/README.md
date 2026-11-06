@@ -17,10 +17,11 @@ to weigh when the trade shifts.
 | [0003](0003-ai-abstains-human-confirms.md) | The AI tier abstains rather than guessing; a human confirms every mapping | Less impressive demo; coverage depends on operator effort; thresholds are uncalibrated |
 | [0004](0004-no-frontend-build-step.md) | No frontend build step, plain ES modules | No TypeScript, no Monaco, no shadcn — hand-written components across 8,200 lines |
 | [0005](0005-remediation-extracted-not-generated.md) | Remediation CLI is extracted from the publisher, never generated | Coverage bounded by publisher fix text; no dependency ordering |
+| [0006](0006-hosted-demo-on-linux-vm.md) | Model-enabled hosted demo on one Linux VM | Credit consumption, OS administration and unmeasured CPU Qwen latency |
 
 ## The thread connecting them
 
-All five are the same trade in different clothes: **prefer the output that can be
+All six are the same trade in different clothes: **prefer the output that can be
 checked over the output that looks better.**
 
 0002 and 0005 are the sharpest cases — both give up a more impressive number or a
@@ -32,7 +33,7 @@ anything at all. 0001 is the enabling one: the canonical model is what makes
 in a README.
 
 If a future change makes the tool look better while making a claim harder to
-verify, these are the five documents to argue with first.
+verify, these are the six documents to argue with first.
 
 ## Adding one
 

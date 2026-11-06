@@ -111,15 +111,9 @@ TRAINING_ROUTES = {
 #:   can actually break about them — a response model that no longer matches its
 #:   endpoint — without asserting anything about somebody else's HTML.
 ROUTES_COVERED_BY_PATTERN = {
-    "/{asset:path}",
-    "/",
-    "/docs",
-    "/redoc",
-    "/docs/oauth2-redirect",
-} | EXPORT_ROUTES | JOB_ROUTES | TRAINING_ROUTES | {
-    # Real credential, role and first-account flows: tests/test_auth_signup.py.
-    "/auth/signup", "/auth/options",
-}
+    "/{asset:path}", "/", "/docs", "/redoc", "/docs/oauth2-redirect",
+    "/auth/signup", "/auth/options",  # covered in tests/test_auth_signup.py
+} | EXPORT_ROUTES | JOB_ROUTES | TRAINING_ROUTES
 
 
 @pytest.fixture(scope="module")

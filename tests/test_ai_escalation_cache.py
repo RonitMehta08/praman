@@ -321,7 +321,6 @@ class TestTreeSignature:
 
         naive_before = escalation._file_signature(model_dir)
         tree_before = escalation._tree_signature(model_dir)
-
         weights.write_bytes(b"new weights of a different length entirely")
 
         assert escalation._file_signature(model_dir) == naive_before, (

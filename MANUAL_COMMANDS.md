@@ -1701,6 +1701,206 @@ to run deterministic auditing. Set `PRAMAN_SIGNUP_ENABLED=false` to stop new
 registrations. Existing accounts remain usable and can be managed with
 `scripts/manage_users.py`. Do not delete a database to reverse these settings.
 
+## Step 18 — Azure student-credit Linux VM
+
+**Purpose.** Deploy the model-enabled hosted demo on a persistent Ubuntu 22.04
+x64 VM. The app and optional Qwen run as separate systemd services behind nginx
+HTTPS. Provisioning choices, cost handling and workflow checks are in
+`deploy/AZURE.md`. Run the heavy installation/build/transfer commands yourself.
+
+**Command**
+
+### 18a — Install the application inside the VM
+
+Run inside the VM's SSH session as `azureuser`, after creating the VM:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git python3.10-venv curl ca-certificates
+sudo install -d -o azureuser -g azureuser -m 0750 /opt/praman
+git clone https://github.com/RonitMehta08/praman /opt/praman
+cd /opt/praman
+python3.10 -m venv .venv
+. .venv/bin/activate
+sh deploy/build-online.sh
+```
+
+This is a first-install command; do not clone over an existing deployment. The
+build installs the existing pinned base requirements, CPU torch and SetFit
+requirements, and runs actual model-load/prediction checks. No training runs.
+Allow several minutes for this step; allow roughly 2–4 GB for repository,
+dependencies and temporary pip cache as a capacity estimate. No VRAM is used.
+
+If the new VM deployment files are still only in the laptop checkout, run this
+in **Git Bash on the laptop**, replacing the VM IP and key path as needed:
+
+```bash
+scp -i "$HOME/Downloads/praman-demo_key.pem" \
+  /d/TEST1/praman/deploy/start-vm.sh \
+  /d/TEST1/praman/deploy/start-qwen-cpu.sh \
+  /d/TEST1/praman/deploy/praman.service \
+  /d/TEST1/praman/deploy/praman-qwen.service \
+  /d/TEST1/praman/deploy/praman-vm.env.example \
+  azureuser@YOUR_VM_PUBLIC_IP:/opt/praman/deploy/
+```
+
+Then run `deploy/AZURE.md` section 3 to install/start the application service.
+
+### 18b — Install nginx and publish HTTPS
+
+Run inside the VM. Set the full DNS hostname copied from Azure Public IP
+Configuration and your certificate contact email (replace the placeholder values):
+
+```bash
+export PRAMAN_DOMAIN='YOUR_AZURE_DNS_NAME'
+export PRAMAN_EMAIL='YOUR_EMAIL_ADDRESS'
+sudo apt-get install -y gnupg2 lsb-release ubuntu-keyring certbot
+curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor \
+  | sudo tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+gpg --dry-run --quiet --no-keyring --import --import-options import-show \
+  /usr/share/keyrings/nginx-archive-keyring.gpg
+```
+
+Check the fingerprint includes `573BFD6B3D8FBC641079A6ABABF5BD827BD9BF62`, as
+documented on the publisher's Ubuntu installation page. Then:
+
+```bash
+printf 'deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] https://nginx.org/packages/ubuntu %s nginx\n' \
+  "$(lsb_release -cs)" | sudo tee /etc/apt/sources.list.d/nginx.list
+printf 'Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900\n' \
+  | sudo tee /etc/apt/preferences.d/99nginx
+sudo apt-get update
+sudo apt-get install -y nginx
+nginx -v
+sudo certbot certonly --standalone --cert-name praman-demo \
+  -d "$PRAMAN_DOMAIN" --email "$PRAMAN_EMAIL" --agree-tos --non-interactive \
+  --pre-hook 'systemctl stop nginx' --post-hook 'systemctl start nginx'
+```
+
+DNS must resolve to this VM and inbound TCP 80 must be allowed for the ACME
+challenge. The renewal hooks briefly stop/start nginx when renewal is needed.
+Render the existing proxy template to a separate file, then install it:
+
+```bash
+cd /opt/praman
+.venv/bin/python - <<'PY'
+import os
+import re
+from pathlib import Path
+
+domain = os.environ['PRAMAN_DOMAIN']
+assert len(domain) <= 253 and re.fullmatch(
+    r'[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?', domain
+), 'Use the DNS hostname only, without https://, a port or a path'
+config = Path('deploy/nginx/praman.conf').read_text(encoding='utf-8')
+config = config.replace('praman.example.internal', domain)
+config = config.replace('/etc/ssl/praman/', '/etc/letsencrypt/live/praman-demo/')
+Path('/tmp/praman-nginx.conf').write_text(config, encoding='utf-8')
+PY
+sudo install -m 0644 /tmp/praman-nginx.conf /etc/nginx/conf.d/praman.conf
+sudo nginx -t
+sudo systemctl enable --now nginx
+sudo systemctl reload nginx
+sudo systemctl enable --now certbot.timer
+sudo certbot renew --dry-run
+curl --fail --head "https://$PRAMAN_DOMAIN/"
+```
+
+Set the Azure Public IP idle timeout to **10 minutes** so it can accommodate the
+proxy's five-minute report timeout. Only 22, 80 and 443 need inbound access.
+`/health` is restricted at the proxy; use the VM-side loopback URL to inspect AI.
+Allow several minutes for packages/certificate issuance; disk overhead is modest
+relative to the Python runtime. This step uses no GPU or model download.
+
+### 18c — Optional CPU Qwen: build Linux server and transfer existing weights
+
+Inside the VM, build the pinned llama.cpp version using two compilation jobs:
+
+```bash
+sudo apt-get install -y build-essential cmake libssl-dev
+cd /opt/praman
+mkdir -p vendor
+git clone --depth 1 --branch b10610 https://github.com/ggml-org/llama.cpp \
+  vendor/llama-cpp-linux
+git -C vendor/llama-cpp-linux rev-parse HEAD
+cmake -S vendor/llama-cpp-linux -B vendor/llama-cpp-linux/build \
+  -DCMAKE_BUILD_TYPE=Release -DLLAMA_BUILD_UI=OFF
+cmake --build vendor/llama-cpp-linux/build --config Release --target llama-server -j 2
+vendor/llama-cpp-linux/build/bin/llama-server --version
+mkdir -p data/models
+```
+
+The tag checked for these commands resolves to
+`a14dba686aaafba3a2d6b5eb8820b0df5c5d2d92`. Building the server on Ubuntu 22.04
+avoids assuming a newer prebuilt binary's system-library compatibility. The Web
+UI is disabled at build time, so no Node or UI build download is needed.
+
+From **Git Bash on your laptop**, transfer the GGUF already present locally:
+
+```bash
+sha256sum /d/TEST1/praman/data/models/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+scp -i "$HOME/Downloads/praman-demo_key.pem" \
+  /d/TEST1/praman/data/models/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf \
+  azureuser@YOUR_VM_PUBLIC_IP:/opt/praman/data/models/
+```
+
+Inside the VM, compare the printed digest with the laptop's digest and start Qwen:
+
+```bash
+cd /opt/praman
+sha256sum data/models/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+sudo install -m 0644 deploy/praman-qwen.service /etc/systemd/system/praman-qwen.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now praman-qwen
+sudo systemctl status praman-qwen --no-pager
+curl --fail --max-time 30 http://127.0.0.1:8080/health
+curl --fail --max-time 30 -w '\nTotal seconds: %{time_total}\n' \
+  http://127.0.0.1:8080/completion -H 'Content-Type: application/json' \
+  --data '{"prompt":"You are a network configuration classifier. Given a config line, identify which canonical path it belongs to.\n\nValid canonical paths: [mgmt.ssh.version, line.vty.transport_input, logging.remote_syslog]\n\nConfig line: transport input ssh\n\nRespond with JSON: {\"path\": \"<canonical_path>\"}","n_predict":64,"temperature":0.1,"top_p":0.9}'
+```
+
+The health endpoint returns 503 while loading; wait and repeat it. A completion
+must finish within the backend's 30-second timeout and return usable JSON, not
+just a 200 health response. Also exercise the actual Training GUI after enabling
+the full profile: this small direct prompt is a smoke check, not a workload
+benchmark. If the completion times out, retain `classifiers` while investigating
+CPU capacity/latency. Use `free -h` and service logs to check memory after load.
+
+Once it works, change only the AI setting in the environment file:
+
+```bash
+sudo nano /etc/praman/praman.env
+# Set SENTINEL_AI_BACKEND=full, save and exit.
+sudo systemctl restart praman
+curl --fail --max-time 30 http://127.0.0.1:8012/health
+```
+
+**Est. time** — first app/proxy installation: plan 10–20 minutes. Optional native
+server compilation and GGUF transfer: plan another 10–30 minutes, dependent on
+CPU/network. These are planning estimates, not measured deployment timings.
+
+**Est. disk** — reserve roughly 2–4 GB for checkout/Python/pip cache; optional Qwen
+adds the existing approximately 2.4 GB GGUF plus native source/build files (allow
+another 1–2 GB for those). This is a VM-only budget of roughly 8–10 GB working
+space, with no extra laptop model copy/download and **zero VRAM** required. Keep
+database/report growth and OS space separate from this installation estimate.
+
+**Verify.** The classifier build's real inference checks succeed; `praman` is
+active; loopback `/health` reports classifier readiness; the public HTTPS workflow
+completes signup, Simulate examples, sample ingestion, commit and signed PDF
+download. An app restart must retain accounts/ledger and signing keys. For the
+optional model, compare GGUF digests, verify `praman-qwen`, test a completion
+within 30 seconds, then verify the actual GUI path in `full` mode. Collect logs
+for failures using `deploy/AZURE.md` section 6.
+
+**Undo.** Set `SENTINEL_AI_BACKEND=classifiers` and restart `praman`; then
+`sudo systemctl disable --now praman-qwen` returns to classifiers without erasing
+data. `SENTINEL_AI_BACKEND=none` disables all optional AI. To stop hosting, disable
+the app and nginx or deallocate the VM through Azure Portal. Back up the database,
+signing keys and learned files before deleting the resource group: deletion is
+not an application rollback and can permanently erase the managed disk. A stopped
+VM's disk/IP can still consume credit.
+
 ## Artifact → step → failure mode
 
 The contract in one table. If an artifact is absent, the named code path raises `ArtifactMissingError` pointing at its step — it never crashes, never guesses, and never degrades silently.
@@ -1724,7 +1924,7 @@ The contract in one table. If an artifact is absent, the named code path raises 
 | `data\praman.db` | Step 12 | UI, report route, `/audit/verify` | **absent on a fresh clone** — it is gitignored; `/devices` is empty until Step 12 runs. `pytest` is unaffected (isolated fixture DB) |
 | `data\praman.db` ledger rows | Step 12 | `/audit/verify`, `python -m backend.ledger.verify` | every record reports `FAIL`; the verifier is right and the rows are stale |
 | `data\praman.db` operator rows | Step 13 | every route except `/health`, `/auth/login` and the static assets | `401` naming this script and Step 13; `/auth/login` answers `503`. **There is no default account** — absence is the intended state of a deployment nobody has provisioned |
-| `data\schemas\*.json` | Step 14 | `scripts\check_export_conformance.py`, and nothing else | the script exits **2** naming Step 14 and validates nothing. No runtime path reads these files: the exporters never load a schema, so `/devices/{id}/oscal.json`, `/simulate/sarif` and all 1,798 tests are unaffected. A schema present but not the pinned one exits **3**, never a pass |
+| `data\schemas\*.json` | Step 14 | `scripts\check_export_conformance.py`, and nothing else | the script exits **2** naming Step 14 and validates nothing. No runtime path reads these files: the exporters never load a schema, so `/devices/{id}/oscal.json`, `/simulate/sarif` and all 1,822 tests are unaffected. A schema present but not the pinned one exits **3**, never a pass |
 | `docs\ARCHITECTURE.pdf` | Step 15 (`scripts\build_architecture_pdf.py`) | `scripts\check_deliverable_limits.py`; no runtime path | **committed, so normally present.** Deleted, `check_architecture()` returns a violation naming the builder and `tests\test_deliverable_limits.py` fails — R10.3 lists it as a deliverable and "not built" is not a pass. Present but stale against `ARCHITECTURE.md`, a *second* test fails on the text diff |
 | `docs\PRESENTATION.pdf` | Step 15 (**by hand**, from the slide content) | nothing — it is a presentation artifact, not an input | absent by default and **not** gated: the slide limit is checked against `docs\PRESENTATION.md`, where the count actually lives. The visual layout and final export are reviewed by a person |
 | `data\frameworks\oscal\baselines.json` | Step 16 (optional) | `scripts\bench\bench_rule_latency.py` governance reach; no runtime path | **absent by default.** `load_baselines()` returns `{}` and the metric prints the full-catalog reach plus a sentence naming this step. No verdict, rule or `Finding` changes either way — the baseline scopes a denominator, not an audit |

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "components": {
+    "attack": {
+      "display_name": "MITRE ATT&CK enterprise enrichment",
+      "relative_path": "frameworks/attack/ent.json",
+      "description": "Adds offline ATT&CK technique names and descriptions to findings. Compliance verdicts do not depend on it.",
+      "url": "",
+      "sha256": "",
+      "max_bytes": 120000000
+    },
+    "qwen": {
+      "display_name": "Qwen3-4B local AI model",
+      "relative_path": "models/Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+      "description": "Optional Tier 3 local classifier model. It requires a separately installed llama.cpp server and several gigabytes of disk space.",
+      "url": "",
+      "sha256": "",
+      "max_bytes": 4000000000
+    },
+    "llama_server": {
+      "display_name": "llama.cpp Windows server",
+      "relative_path": "bin/llama-server.exe",
+      "description": "Optional local inference server for the Qwen model. Install only a verified Windows build compatible with the target machine.",
+      "url": "",
+      "sha256": "",
+      "max_bytes": 3000000000
+    }
+  }
+}

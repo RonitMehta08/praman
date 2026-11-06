@@ -1,0 +1,20 @@
+[Unit]
+Description=PRAMAN audit application
+After=network.target
+
+[Service]
+Type=simple
+User=azureuser
+Group=azureuser
+WorkingDirectory=/opt/praman
+EnvironmentFile=/etc/praman/praman.env
+ExecStart=/bin/sh /opt/praman/deploy/start-vm.sh
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+MemoryAccounting=true
+
+[Install]
+WantedBy=multi-user.target

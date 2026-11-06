@@ -8,6 +8,9 @@ as the reverse proxy's job; this directory holds the other half of that sentence
 |---|---|
 | [`nginx/praman.conf`](nginx/praman.conf) | A complete server block: TLS 1.2 floor, HSTS, CSP, rate limits, `/docs` refused, `/health` restricted by address |
 | [`ONLINE.md`](ONLINE.md) | Hosted-demo deployment using a managed Python web service, HTTPS termination, and optional persistent storage |
+| [`AZURE.md`](AZURE.md) | Azure student-credit Linux VM, persistent SQLite, HTTPS and optional CPU Qwen |
+| [`WINDOWS.md`](WINDOWS.md) | PyInstaller + Inno Setup offline Windows installer and verified optional components |
+| `praman.service`, `praman-qwen.service` | Independent systemd services for the app and optional model server |
 
 Nothing here is executed by the application or by the test suite's fixtures, so a
 deployment that ignores it still runs. Three of its numbers are not free-floating,
@@ -40,5 +43,6 @@ the bearer token starts crossing a network.
 `ONLINE.md` describes the second, intentionally narrower profile: a managed web
 service can expose the same app at a live HTTPS URL for a demonstration, while the
 offline profile remains the correct place for real sensitive configurations. The
-hosted profile disables optional AI inference, uses the provider's TLS, and can
-use `PRAMAN_DATABASE_PATH` for a mounted SQLite volume.
+managed hosted profile enables the shipped CPU classifiers, uses the provider's
+TLS, and can use `PRAMAN_DATABASE_PATH` for a mounted SQLite volume. `AZURE.md`
+describes a VM deployment with nginx TLS and optional CPU-only Qwen.

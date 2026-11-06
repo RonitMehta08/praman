@@ -127,7 +127,7 @@ Everything on this slide is built and measured — speak in the present tense.
 ## The 20-second answer (say this first)
 
 > FastAPI **is** the product — it's not a wrapper around a script. The entire
-> tool is one FastAPI process: it serves 28 REST endpoints *and* serves the
+> tool is one FastAPI process: it serves 30 REST endpoints *and* serves the
 > frontend itself, so `python scripts/serve.py` is the whole deployment. SQLite
 > is our system of record — devices, facts, findings, the audit ledger and the
 > training queue are all tables in one file, `data/praman.db`. No database
@@ -135,7 +135,7 @@ Everything on this slide is built and measured — speak in the present tense.
 
 ## FastAPI — where exactly (`backend/app/main.py`)
 
-28 endpoints across eight groups. If someone asks "show me", name these:
+30 endpoints across eight groups. If someone asks "show me", name these:
 
 | Group | Endpoints | What it does |
 |---|---|---|
@@ -378,10 +378,10 @@ teams lose credibility in one sentence.
 ## 1. The test count
 
 The slide image says **"pytest – 1,010 tests green"**, but the repo is currently
-at **1,798 tests** (`README.md`, `docs/PRESENTATION.md`).
+at **1,822 tests** (`README.md`, `docs/PRESENTATION.md`).
 
 Pick one:
-- **Best:** update the slide graphic to `1,798`, and say "over seventeen hundred tests".
+- **Best:** update the slide graphic to `1,822`, and say "over eighteen hundred tests".
 - **If the slide is frozen:** say **"over a thousand tests, all green"** — true for
   both numbers, and you never contradict your own slide on stage.
 

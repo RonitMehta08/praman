@@ -1,5 +1,7 @@
 # Virtual environments
 .venv/
+.venv-packaging/
+.pip-cache/
 .venv-remediation/
 .venv-dev-ccp2/
 

@@ -1330,14 +1330,14 @@ One exemption is granted by name rather than by kind: `praman/backend/frameworks
 | `MANUAL_COMMANDS.md` | 1630 | `TODO(verify)` | 1. **Step 2 prints three non-zero counts.** `TODO(verify):` `MASTER_PROMPT.md` §10.1 states the allocation as **LOW 149 / MODERATE 287 / HIGH 370**. That figure |
 | `MANUAL_COMMANDS.md` | 1676 | `UNVERIFIED` | \| `reports\metrics\*.json` \| Step 8a, Step 8c, `scripts\bench\*` \| any metric in docs/slides/PDF \| metric renders as `UNVERIFIED`; CI fails release \| |
 | `MANUAL_COMMANDS.md` | 1730 | `TODO(verify)` | Every byte size, filename, version and count above was probed or parsed during the research phase and recorded under `.research\synth\`, with one exception note |
-| `praman/README.md` | 290 | `TODO(verify)` | both, so this is not load cost. `TODO(verify):` the cause is not established — |
+| `praman/README.md` | 325 | `TODO(verify)` | both, so this is not load cost. `TODO(verify):` the cause is not established — |
 | `praman/backend/frameworks/cis/extract.py` | 495 | `UNVERIFIED` | f"Section recorded as UNVERIFIED.", |
 | `praman/backend/frameworks/cis/extract.py` | 498 | `UNVERIFIED` | section_num = "UNVERIFIED" |
 | `praman/data/ingest/patterns/cisco_nxos.yaml` | 1545 | `ASSUMPTION:` | is a poor fit. `ASSUMPTION:` a device with a non-timer trigger (`event |
 | `praman/docs/GAPS.md` | 744 | `TODO(verify)` | value set) and flag a path whose emitters disagree. `TODO(verify):` no such |
 | `praman/docs/PRODUCTION-ROADMAP.md` | 591 | `TODO(verify)` | > re-export byte-identical. §13.3's `TODO(verify)` on the SARIF field names is |
 | `praman/docs/PRODUCTION-ROADMAP.md` | 636 | `TODO(verify)` | still carrying an explicit `TODO(verify)`. |
-| `praman/docs/PRODUCTION-ROADMAP.md` | 1422 | `TODO(verify)` | No competitor reviewed publishes SARIF. Field names are still `TODO(verify)` in |
+| `praman/docs/PRODUCTION-ROADMAP.md` | 1416 | `TODO(verify)` | No competitor reviewed publishes SARIF. Field names are still `TODO(verify)` in |
 | `praman/rules/mappings/disa_stig/cisco_nx_os_switch_ndm_v3r6.yaml` | 583 | `ASSUMPTION:` | Blowfish, CAST, and CBC-mode AES. `ASSUMPTION:` this list is treated as |
 
 <!-- END GENERATED: unverified-register -->

@@ -226,7 +226,7 @@ record**, so altering any earlier record invalidates every record after it.
 
 **Plus:** whole-estate ZIP intake (**2,000 members / 512 MB**) as a cancellable
 background job · role-based access (`viewer` → `auditor` → `approver`) with the
-operator's name **inside** the signed record · **1,798 tests** passing.
+operator's name **inside** the signed record · **1,822 tests** passing.
 
 **Speaker notes:** "Five features. Ingestion where a vendor is a data file.
 A rule engine spanning four frameworks. The AI training loop — three tiers
@@ -344,7 +344,7 @@ zero-cost, classified configurations never enter anyone's cloud."
 | **AI tier 3** | **Qwen3-4B** + **QLoRA** 4-bit NF4, llama.cpp GGUF | Optional. 4-bit is the only way a 4 B model fits **6 GB** of VRAM |
 | **Interop exports** | **OSCAL 1.2.3**, **SARIF 2.1.0** | Validated against the publishers' own JSON Schemas |
 | **Threat context** | **MITRE ATT&CK** Enterprise bundle | Technique names, descriptions and mitigations read from the bundle's own relationships — **never hand-written** |
-| **Quality gate** | **pytest** (1,798 tests) · **ruff** · benchmark `--check` | Every published number is regenerable; the suite **fails when one goes stale** |
+| **Quality gate** | **pytest** (1,822 tests) · **ruff** · benchmark `--check` | Every published number is regenerable; the suite **fails when one goes stale** |
 | **Deployment** | `python scripts/serve.py`; **nginx** only for TLS | **No Docker, no GPU, no cloud, no network.** Binds loopback by default |
 
 **Deliberately *not* in the stack:** no cloud service, no external API key, no
@@ -395,7 +395,7 @@ the tiers help on the **routing-plane** residue and not only the management plan
 
 ### How we keep ourselves honest — built in from day one
 
-- **1,798 tests** · ruff clean · **one command regenerates every published number**
+- **1,822 tests** · ruff clean · **one command regenerates every published number**
 - `test_every_control_is_exercised_in_both_directions` — every automated control
   must **pass on one config and fail on another**. A control that only ever
   passes is hiding a rule that cannot detect its own violation.

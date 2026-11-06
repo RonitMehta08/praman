@@ -15,6 +15,9 @@ production configuration to the public demo.
 
 ## Fastest path to a live URL
 
+For Azure student credits and a persistent VM with more model memory, follow
+[`AZURE.md`](AZURE.md) and `MANUAL_COMMANDS.md` Step 18.
+
 Use a Python web-service provider that supports a build command, a start command,
 environment variables, HTTPS termination, and preferably a persistent disk. The
 dashboard fields are:

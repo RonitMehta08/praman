@@ -52,12 +52,15 @@ import json
 from functools import lru_cache
 from typing import Any
 
-from backend.app.config import DATA_DIR, FEATURE_THREAT_ENRICHMENT, FILE_ENCODING
+from backend.app.config import DATA_DIR, FEATURE_THREAT_ENRICHMENT, FILE_ENCODING, optional_path
 
 #: Where ``MANUAL_COMMANDS.md`` Step 4a puts the Enterprise bundle. Not a
 #: guess and not configurable: one documented location means one thing to check
 #: when enrichment is empty.
-ATTACK_BUNDLE_PATH = DATA_DIR / "frameworks" / "attack" / "ent.json"
+ATTACK_BUNDLE_PATH = optional_path(
+    "frameworks/attack/ent.json",
+    bundled=DATA_DIR / "frameworks" / "attack" / "ent.json",
+)
 
 #: Longest description carried into a finding. Enough for the technique's opening
 #: sentence; the full text is a click away on the URL, and a finding is not the

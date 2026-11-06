@@ -82,8 +82,6 @@ _PASSWORD = "praman-test-passphrase"
 #:   one, so the operator would see a blank page instead of a password prompt.
 #:
 #: There is no unauthenticated route that reads a device, a finding or the ledger.
-# Signup/options must be reachable before authentication. They disclose no
-# device data and registration can be disabled by deployment configuration.
 _OPEN_ROUTES = {"/health", "/auth/login", "/auth/signup", "/auth/options", "/", "/{asset:path}"}
 
 

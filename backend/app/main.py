@@ -53,7 +53,6 @@ import sqlite3
 import time
 import uuid
 import zipfile
-from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
@@ -96,6 +95,7 @@ from backend.app.config import (
     APP_NAME,
     APP_VERSION,
     MAX_UPLOAD_BYTES,
+    PROJECT_ROOT,
     SIGNING_PFX_PASSPHRASE,
     SIGNING_PFX_PATH,
     SIGNING_TSA_URL,
@@ -337,7 +337,13 @@ def _ai_status() -> dict[str, Any]:
     """
     from backend.ai.escalation import llm_availability
     from backend.ai.readiness import classifier_readiness
-    from backend.app.config import LLM_HOST, LLM_PORT, MODELS_DIR, SENTINEL_AI_BACKEND
+    from backend.app.config import (
+        LLM_HOST,
+        LLM_PORT,
+        MODELS_DIR,
+        OPTIONAL_MODELS_DIR,
+        SENTINEL_AI_BACKEND,
+    )
 
     if SENTINEL_AI_BACKEND == "none":
         return {
@@ -375,7 +381,7 @@ def _ai_status() -> dict[str, Any]:
     # does not write.
     steps = {"tier1_tfidf": "Step 8a", "tier2_setfit": "Step 8c"}
     absent = [f"{name} ({steps[name]})" if name in steps else name for name in absent]
-    weights_present = any(MODELS_DIR.glob("*.gguf"))
+    weights_present = any(p.glob("*.gguf") for p in {MODELS_DIR, OPTIONAL_MODELS_DIR})
     if SENTINEL_AI_BACKEND == "classifiers":
         tier3_note = " Tier 3 is disabled in the CPU classifier profile."
     elif tiers["tier3_llm"]:
@@ -1853,7 +1859,7 @@ app.include_router(signup_router)
 # because a fallback that returns index.html for every unknown path turns an API
 # typo into a silent 200 with HTML in it.
 
-_FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
+_FRONTEND_DIR = PROJECT_ROOT / "frontend"
 _ASSET_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",

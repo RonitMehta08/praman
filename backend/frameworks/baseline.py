@@ -40,13 +40,17 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from backend.app.config import FILE_ENCODING, FRAMEWORKS_DIR
+from backend.app.config import FILE_ENCODING, FRAMEWORKS_DIR, WRITABLE_DATA_DIR
 from backend.frameworks.crosswalk import normalise_control_id
 
 #: Where ``MANUAL_COMMANDS.md`` Step 16 writes the extracted allocation. One
 #: documented location, for the same reason the ATT&CK bundle has one: when the
 #: baseline view is empty there should be exactly one thing to check.
-BASELINE_PATH = FRAMEWORKS_DIR / "oscal" / "baselines.json"
+BASELINE_PATH = (
+    WRITABLE_DATA_DIR / "frameworks" / "oscal" / "baselines.json"
+    if FRAMEWORKS_DIR.parent != WRITABLE_DATA_DIR
+    else FRAMEWORKS_DIR / "oscal" / "baselines.json"
+)
 
 #: The three impact levels SP 800-53B allocates. PRIVACY is published alongside
 #: them by NIST but is not an impact level and is deliberately not accepted here

@@ -31,11 +31,11 @@ import hashlib
 import json
 from typing import Any
 
-from backend.app.config import DATA_DIR
+from backend.app.config import PRIVATE_DIR
 from backend.core_errors import LedgerIntegrityError
 
 # --- Key paths ---
-KEYS_DIR = DATA_DIR / "private"
+KEYS_DIR = PRIVATE_DIR
 SIGNING_KEY_PATH = KEYS_DIR / "ed25519_signing.key"
 VERIFY_KEY_PATH = KEYS_DIR / "ed25519_verify.pub"
 

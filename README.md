@@ -61,6 +61,9 @@ on the assessor's machine. See [`deploy/ONLINE.md`](deploy/ONLINE.md) for the
 provider-agnostic build/start settings, bootstrap account variables, and SQLite
 persistence guidance.
 
+For an Azure student-credit VM with persistent storage and optional CPU Qwen,
+follow [`deploy/AZURE.md`](deploy/AZURE.md) and `MANUAL_COMMANDS.md` Step 18.
+
 For this standalone GitHub repository, leave Render's **Root Directory blank**.
 The root-level `render.yaml` also supports **New → Blueprint** in Render.
 Evaluators create their own accounts from the login screen, so no shared demo
@@ -109,7 +112,9 @@ alone is no longer displayed as a working model.
 
 Tier 3 (Qwen 4B QLoRA, 2.4 GB GGUF) is **not included** because GitHub
 enforces a 100 MB per-file limit and the quantised model is 2.4 GB. It
-requires a separate download and a GPU — see
+requires a separate GGUF and llama.cpp server; CPU-only VM setup is in
+[`deploy/AZURE.md`](deploy/AZURE.md), and local GPU setup is in `MANUAL_COMMANDS.md`
+Step 6 — see
 [What is not in this repository](#what-is-not-in-this-repository) for details.
 
 ## Try it in 60 seconds
@@ -396,7 +401,7 @@ A compliance tool that cannot be audited itself is not worth much, so every
 published number is regenerable and every guarantee is a test.
 
 ```bash
-.venv/Scripts/python.exe -m pytest -q          # 1,798 tests
+.venv/Scripts/python.exe -m pytest -q          # 1,822 tests
 .venv/Scripts/python.exe -m ruff check backend/ scripts/ tests/
 .venv/Scripts/python.exe scripts/bench/run_all.py --check    # every published metric is current
 .venv/Scripts/python.exe scripts/fixture_report.py --check   # published table is current
@@ -458,7 +463,7 @@ docs/          architecture, gaps, security, ADRs
 scripts/       every published number is produced by one of these
   bench/       run_all.py regenerates or --check-verifies reports/metrics/*.json
 reports/metrics/  the measured numbers quoted in this README and the slides
-tests/         1,798 tests
+tests/         1,822 tests
 ```
 
 ## Documentation
@@ -493,7 +498,8 @@ looks missing by accident.
 
 > **Everything the compliance engine needs is in this repository.** The
 > excluded items are either too large for GitHub, generated at runtime, or
-> only needed for the optional Tier 3 LLM — which requires a GPU anyway.
+> only needed for the optional Tier 3 LLM. CPU-only Tier 3 setup is documented in
+> `deploy/AZURE.md`; its VM latency must be checked before demonstration.
 
 ## Licence and provenance
 
